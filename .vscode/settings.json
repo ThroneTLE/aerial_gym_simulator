@@ -1,0 +1,4 @@
+{
+    "ros.distro": "noetic",
+    "python.envFile": "${workspaceFolder}/dev.env"
+}

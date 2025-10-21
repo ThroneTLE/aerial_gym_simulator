@@ -1,53 +1,59 @@
-import torch
+import torch # 导入 PyTorch
 
-from aerial_gym.utils.math import *
+from aerial_gym.utils.math import * # 导入数学工具函数（如四元数、旋转矩阵操作）
 
-from aerial_gym.utils.logging import CustomLogger
+from aerial_gym.utils.logging import CustomLogger # 导入自定义日志工具
 
-logger = CustomLogger("base_lee_controller")
+logger = CustomLogger("base_lee_controller") # 初始化日志记录器
 
-logger.setLevel("DEBUG")
+logger.setLevel("DEBUG") # 设置日志级别为 DEBUG
 
 
-import pytorch3d.transforms as p3d_transforms
+import pytorch3d.transforms as p3d_transforms # 导入 PyTorch3D 的变换库（用于旋转矩阵转四元数）
 
-from aerial_gym.control.controllers.base_controller import *
+from aerial_gym.control.controllers.base_controller import * # 导入控制器基类
 
 
 class BaseLeeController(BaseController):
     """
-    This class will operate as the base class for all controllers.
-    It will be inherited by the specific controller classes.
+    此类将作为所有（Lee）控制器的基类。
+    它将被特定的控制器子类继承。
     """
 
     def __init__(self, control_config, num_envs, device, mode="robot"):
+        # 调用父类构造函数
         super().__init__(control_config, num_envs, device, mode)
-        self.cfg = control_config
+        self.cfg = control_config # 控制器配置
         self.num_envs = num_envs
         self.device = device
 
     def init_tensors(self, global_tensor_dict):
+        """初始化控制器的所有张量，特别是控制增益 (Gains)。"""
         super().init_tensors(global_tensor_dict)
 
-        # Read from config and set the values for controller parameters
+        # 从配置中读取增益（K）的最大值和最小值，并扩展到所有环境
+        # K_pos_tensor: 位置增益 (P 项)
         self.K_pos_tensor_max = torch.tensor(
             self.cfg.K_pos_tensor_max, device=self.device, requires_grad=False
         ).expand(self.num_envs, -1)
         self.K_pos_tensor_min = torch.tensor(
             self.cfg.K_pos_tensor_min, device=self.device, requires_grad=False
         ).expand(self.num_envs, -1)
+        # K_linvel_tensor: 线性速度增益 (D 项)
         self.K_linvel_tensor_max = torch.tensor(
             self.cfg.K_vel_tensor_max, device=self.device, requires_grad=False
         ).expand(self.num_envs, -1)
         self.K_linvel_tensor_min = torch.tensor(
             self.cfg.K_vel_tensor_min, device=self.device, requires_grad=False
         ).expand(self.num_envs, -1)
+        # K_rot_tensor: 旋转/姿态误差增益 (P 项)
         self.K_rot_tensor_max = torch.tensor(
             self.cfg.K_rot_tensor_max, device=self.device, requires_grad=False
         ).expand(self.num_envs, -1)
         self.K_rot_tensor_min = torch.tensor(
             self.cfg.K_rot_tensor_min, device=self.device, requires_grad=False
         ).expand(self.num_envs, -1)
+        # K_angvel_tensor: 角速度增益 (D 项)
         self.K_angvel_tensor_max = torch.tensor(
             self.cfg.K_angvel_tensor_max, device=self.device, requires_grad=False
         ).expand(self.num_envs, -1)
@@ -55,46 +61,74 @@ class BaseLeeController(BaseController):
             self.cfg.K_angvel_tensor_min, device=self.device, requires_grad=False
         ).expand(self.num_envs, -1)
 
-        # Set the current values of the controller parameters
+        # 将当前增益设置为最大值和最小值的平均值（初始值）
         self.K_pos_tensor_current = (self.K_pos_tensor_max + self.K_pos_tensor_min) / 2.0
+
+
+        # --- 积分增益和状态 (Integral Gains and State) ---
+        # K_pos_i_tensor: 位置积分增益 (I 项)
+        self.K_pos_i_tensor_max = torch.tensor(
+            self.cfg.K_pos_i_tensor_max, device=self.device, requires_grad=False
+        ).expand(self.num_envs, -1)
+        self.K_pos_i_tensor_min = torch.tensor(
+            self.cfg.K_pos_i_tensor_min, device=self.device, requires_grad=False
+        ).expand(self.num_envs, -1)
+        self.K_pos_i_tensor_current = (self.K_pos_i_tensor_max + self.K_pos_i_tensor_min) / 2.0
+
+        # 位置积分状态 (用于抗积分饱和/anti-windup)
+        self.pos_integral = torch.zeros((self.num_envs, 3), device=self.device)
+        # 积分限幅值（可选，用于抗积分饱和）
+        self.pos_integral_clamp = 1.0  # 每个轴的限幅幅度 (可调)
+
+
         self.K_linvel_tensor_current = (self.K_linvel_tensor_max + self.K_linvel_tensor_min) / 2.0
         self.K_rot_tensor_current = (self.K_rot_tensor_max + self.K_rot_tensor_min) / 2.0
         self.K_angvel_tensor_current = (self.K_angvel_tensor_max + self.K_angvel_tensor_min) / 2.0
 
-        # tensors that are needed later in the controller are predefined here
-        self.accel = torch.zeros((self.num_envs, 3), device=self.device)
+        # --- 控制器内部张量 (Internal Tensors) ---
+        self.accel = torch.zeros((self.num_envs, 3), device=self.device) # 计算出的加速度指令
+        # 最终的力和力矩指令 [fx, fy, fz, tx, ty, tz]
         self.wrench_command = torch.zeros(
             (self.num_envs, 6), device=self.device
         )  # [fx, fy, fz, tx, ty, tz]
 
-        # tensors that are needed later in the controller are predefined here
+        # 期望的姿态和角速度
         self.desired_quat = torch.zeros_like(self.robot_orientation)
         self.desired_body_angvel = torch.zeros_like(self.robot_body_angvel)
         self.euler_angle_rates = torch.zeros_like(self.robot_body_angvel)
 
-        # buffer tensor to be used by torch.jit functions for various purposes
+        # 缓冲区张量，供 torch.jit 函数用于各种目的
         self.buffer_tensor = torch.zeros((self.num_envs, 3, 3), device=self.device)
 
     def __call__(self, *args, **kwargs):
+        """使控制器对象可调用，等同于调用 update 方法。"""
         return self.update(*args, **kwargs)
 
     def reset_commands(self):
+        """重置力和力矩指令。"""
         self.wrench_command[:] = 0.0
 
     def reset(self):
+        """重置所有环境的控制器状态（参数随机化）。"""
         self.reset_idx(env_ids=None)
 
     def reset_idx(self, env_ids):
+        """重置指定索引环境的控制器状态。"""
         if env_ids is None:
+            # 如果 env_ids 为 None，则重置所有环境
             env_ids = torch.arange(self.K_rot_tensor.shape[0])
-        self.randomize_params(env_ids)
+        self.randomize_params(env_ids) # 随机化控制参数
+        # 注意: 积分状态 self.pos_integral 的重置通常在 EnvManager/Task 的 reset 中处理
 
     def randomize_params(self, env_ids):
+        """
+        随机化指定环境索引的控制器增益参数（领域随机化）。
+        """
         if self.cfg.randomize_params == False:
-            # logger.debug(
-            #     "Randomization of controller parameters is disabled based on config setting."
-            # )
+            # 如果配置禁用参数随机化，则直接返回
             return
+            
+        # 在 min 和 max 范围内随机生成当前增益
         self.K_pos_tensor_current[env_ids] = torch_rand_float_tensor(
             self.K_pos_tensor_min[env_ids], self.K_pos_tensor_max[env_ids]
         )
@@ -109,93 +143,152 @@ class BaseLeeController(BaseController):
         )
 
     def compute_acceleration(self, setpoint_position, setpoint_velocity):
+        """
+        计算实现位置和速度跟踪所需的加速度指令 (PD + I 控制)。
+        """
+        # 计算世界坐标系下的位置误差
         position_error_world_frame = setpoint_position - self.robot_position
-        # logger.debug(
-        #     f"position_error_world_frame: {position_error_world_frame}, setpoint_position: {setpoint_position}, robot_position: {self.robot_position}"
-        # )
-        setpoint_velocity_world_frame = quat_rotate(
-            self.robot_vehicle_orientation, setpoint_velocity
-        )
+        # 将期望速度从相对坐标系（假设是载具坐标系）旋转到世界坐标系
+        setpoint_velocity_world_frame = quat_rotate(self.robot_vehicle_orientation, setpoint_velocity)
+        # 计算速度误差
         velocity_error = setpoint_velocity_world_frame - self.robot_linvel
 
+        # --- 积分项和抗积分饱和 (Integral Term and Anti-Windup) ---
+        dt = 0.01 # 假设仿真步长 dt = 0.01
+        leak = 0.999  # 积分泄漏/衰减因子
+        # 积分项更新：积分 = 衰减 * 积分 + 误差 * dt
+        self.pos_integral = leak * self.pos_integral + position_error_world_frame * dt
+
+        # 抗积分饱和限幅
+        self.pos_integral = torch.clamp(self.pos_integral, -self.pos_integral_clamp, self.pos_integral_clamp)
+
+        # 计算加速度指令 (PID 控制律)
         accel_command = (
-            self.K_pos_tensor_current * position_error_world_frame
-            + self.K_linvel_tensor_current * velocity_error
+            self.K_pos_tensor_current * position_error_world_frame # P 项
+            + self.K_linvel_tensor_current * velocity_error         # D 项
+            + self.K_pos_i_tensor_current * self.pos_integral      # I 项
         )
         return accel_command
 
     def compute_body_torque(self, setpoint_orientation, setpoint_angvel):
+        """
+        根据 Lee 姿态控制律计算所需的本体力矩。
+        """
+        # 对期望的偏航角速度进行限幅
         setpoint_angvel[:, 2] = torch.clamp(
             setpoint_angvel[:, 2], -self.cfg.max_yaw_rate, self.cfg.max_yaw_rate
         )
+        
+        # 计算旋转误差四元数: R^T * R_d (从实际姿态到期望姿态的旋转)
         RT_Rd_quat = quat_mul(quat_inverse(self.robot_orientation), setpoint_orientation)
+        # 转换为旋转矩阵
         RT_Rd = quat_to_rotation_matrix(RT_Rd_quat)
+        
+        # 计算旋转误差向量 (Lee 姿态控制的核心项)
+        # rotation_error = 1/2 * vee_map(R_d^T * R - R^T * R_d)
         rotation_error = 0.5 * compute_vee_map(torch.transpose(RT_Rd, -2, -1) - RT_Rd)
+        
+        # 计算角速度误差
+        # setpoint_angvel 需要被旋转到实际体坐标系：R^T * \omega_d
         angvel_error = self.robot_body_angvel - quat_rotate(RT_Rd_quat, setpoint_angvel)
+        
+        # 计算前馈力矩：角速度 * (惯性矩阵 * 角速度)
         feed_forward_body_rates = torch.cross(
             self.robot_body_angvel,
             torch.bmm(self.robot_inertia, self.robot_body_angvel.unsqueeze(2)).squeeze(2),
             dim=1,
         )
+        
+        # 计算最终力矩
         torque = (
-            -self.K_rot_tensor_current * rotation_error
-            - self.K_angvel_tensor_current * angvel_error
-            + feed_forward_body_rates
+            -self.K_rot_tensor_current * rotation_error # P 项 (姿态误差)
+            - self.K_angvel_tensor_current * angvel_error # D 项 (角速度误差)
+            + feed_forward_body_rates # 前馈项
         )
         return torque
 
 
+# --- JIT 脚本函数 (Torch JIT Scripted Functions) ---
+
 @torch.jit.script
 def calculate_desired_orientation_from_forces_and_yaw(forces_command, yaw_setpoint):
+    """
+    根据力和期望偏航角计算所需的期望姿态（四元数）。
+    这是 Lee 控制器中将推力向量投影到姿态的方法（较简化的版本）。
+    """
+    # 假设 forces_command 是在世界坐标系下，且 \vec{f} = m * (\ddot{x}_d + g)
+    # 且 \vec{f} = R \vec{e}_3 T_c = R b_3 T_c
+    # R b_3 = [c\phi s\theta c\psi + s\phi s\psi, c\phi s\theta s\psi - s\phi c\psi, c\phi c\theta]^T
+    # 实际使用的是推力向量 \vec{f}_c = -m (\ddot{x}_d - g)
     c_phi_s_theta = forces_command[:, 0]
     s_phi = -forces_command[:, 1]
     c_phi_c_theta = forces_command[:, 2]
 
-    # Calculate orientation setpoint
+    # 计算期望的俯仰角和滚转角
     pitch_setpoint = torch.atan2(c_phi_s_theta, c_phi_c_theta)
     roll_setpoint = torch.atan2(s_phi, torch.sqrt(c_phi_c_theta**2 + c_phi_s_theta**2))
+    
+    # 组合滚转、俯仰、期望偏航角为四元数
     quat_desired = quat_from_euler_xyz_tensor(
         torch.stack((roll_setpoint, pitch_setpoint, yaw_setpoint), dim=1)
     )
     return quat_desired
 
 
-# @torch.jit.script
+# @torch.jit.script # 注意：此函数被注释掉 JIT 编译
 def calculate_desired_orientation_for_position_velocity_control(
     forces_command, yaw_setpoint, rotation_matrix_desired
 ):
+    """
+    根据力和期望偏航角计算所需的期望姿态（旋转矩阵 -> 四元数）。
+    更严格的 Lee 控制器方法：构建完整的期望旋转矩阵 R_d。
+    """
+    # 期望的 Z 轴方向 (b3_c): 沿推力方向，单位化
     b3_c = torch.div(forces_command, torch.norm(forces_command, dim=1).unsqueeze(1))
+    
+    # 期望的 X 轴方向 (temp_dir): 由期望偏航角确定
     temp_dir = torch.zeros_like(forces_command)
     temp_dir[:, 0] = torch.cos(yaw_setpoint)
     temp_dir[:, 1] = torch.sin(yaw_setpoint)
 
+    # 期望的 Y 轴方向 (b2_c): 正交于 b3_c 和 temp_dir，然后单位化
     b2_c = torch.cross(b3_c, temp_dir, dim=1)
     b2_c = torch.div(b2_c, torch.norm(b2_c, dim=1).unsqueeze(1))
+    
+    # 期望的 X 轴方向 (b1_c): 正交于 b2_c 和 b3_c
     b1_c = torch.cross(b2_c, b3_c, dim=1)
 
+    # 构造期望旋转矩阵 R_d
     rotation_matrix_desired[:, :, 0] = b1_c
     rotation_matrix_desired[:, :, 1] = b2_c
     rotation_matrix_desired[:, :, 2] = b3_c
+    
+    # 旋转矩阵转换为四元数 (使用 pytorch3d 库)
     q = p3d_transforms.matrix_to_quaternion(rotation_matrix_desired)
+    # 注意: pytorch3d 返回 [w, x, y, z]，此处转换为 [x, y, z, w] 格式
     quat_desired = torch.stack((q[:, 1], q[:, 2], q[:, 3], q[:, 0]), dim=1)
 
+    # 处理四元数符号（可选，确保 w 分量为正）
     sign_qw = torch.sign(quat_desired[:, 3])
-    # quat_desired = quat_desired * sign_qw.unsqueeze(1)
+    # quat_desired = quat_desired * sign_qw.unsqueeze(1) # 此行被注释
 
     return quat_desired
 
 
-# quat_from_rotation_matrix(rotation_matrix_desired)
-
+# quat_from_rotation_matrix(rotation_matrix_desired) # 此行为注释
 
 @torch.jit.script
 def euler_rates_to_body_rates(robot_euler_angles, desired_euler_rates, rotmat_euler_to_body_rates):
-    s_pitch = torch.sin(robot_euler_angles[:, 1])
-    c_pitch = torch.cos(robot_euler_angles[:, 1])
+    """
+    将欧拉角变化率（Roll, Pitch, Yaw Rate）转换为本体角速度（p, q, r）。
+    """
+    s_pitch = torch.sin(robot_euler_angles[:, 1]) # sin(俯仰角)
+    c_pitch = torch.cos(robot_euler_angles[:, 1]) # cos(俯仰角)
 
-    s_roll = torch.sin(robot_euler_angles[:, 0])
-    c_roll = torch.cos(robot_euler_angles[:, 0])
+    s_roll = torch.sin(robot_euler_angles[:, 0]) # sin(滚转角)
+    c_roll = torch.cos(robot_euler_angles[:, 0]) # cos(滚转角)
 
+    # 构造变换矩阵 (M)
     rotmat_euler_to_body_rates[:, 0, 0] = 1.0
     rotmat_euler_to_body_rates[:, 1, 1] = c_roll
     rotmat_euler_to_body_rates[:, 0, 2] = -s_pitch
@@ -203,4 +296,5 @@ def euler_rates_to_body_rates(robot_euler_angles, desired_euler_rates, rotmat_eu
     rotmat_euler_to_body_rates[:, 1, 2] = s_roll * c_pitch
     rotmat_euler_to_body_rates[:, 2, 2] = c_roll * c_pitch
 
+    # 本体角速度 = 变换矩阵 * 欧拉角变化率
     return torch.bmm(rotmat_euler_to_body_rates, desired_euler_rates.unsqueeze(2)).squeeze(2)

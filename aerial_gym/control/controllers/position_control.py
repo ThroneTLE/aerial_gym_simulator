@@ -19,33 +19,42 @@ class LeePositionController(BaseLeeController):
 
     def update(self, command_actions):
         """
-        Lee attitude controller
-        :param robot_state: tensor of shape (num_envs, 13) with state of the robot
-        :param command_actions: tensor of shape (num_envs, 4) with desired thrust, roll, pitch and yaw_rate command in vehicle frame
-        :return: m*g normalized thrust and interial normalized torques
+        改进版 Lee 位置控制器（修正推力缩放错误）
         """
         self.reset_commands()
+        
+        # 期望加速度（PD 控制器）
         self.accel[:] = self.compute_acceleration(
             setpoint_position=command_actions[:, 0:3],
             setpoint_velocity=torch.zeros_like(self.robot_vehicle_linvel),
         )
-        # logger.debug(f"accel: {self.accel}, command_actions: {command_actions}")
-        forces = (self.accel - self.gravity) * self.mass
-        # thrust command is transformed by the body orientation's z component
-        self.wrench_command[:, 2] = torch.sum(
-            forces * quat_to_rotation_matrix(self.robot_orientation)[:, :, 2], dim=1
-        )
 
-        # after calculating forces, we calculate the desired euler angles
+        # 当前姿态旋转矩阵
+        R = quat_to_rotation_matrix(self.robot_orientation)
+        
+        # 当前重力向量（通常 [0, 0, -9.81]）
+        g_vec = self.gravity
+
+        # 计算世界坐标下的总力
+        forces = self.mass * (self.accel - g_vec)
+
+        # 计算推力（Lee 论文公式，沿机体 z 轴）
+        thrust_world_z = torch.sum(forces * R[:, :, 2], dim=1)
+
+        # ✅ 不再归一化，直接输出物理推力
+        self.wrench_command[:, 2] = thrust_world_z
+
+        # 姿态控制部分（保持不变）
         self.desired_quat[:] = calculate_desired_orientation_for_position_velocity_control(
             forces, command_actions[:, 3], self.buffer_tensor
         )
 
         self.euler_angle_rates[:] = 0.0
         self.desired_body_angvel[:] = 0.0
-
         self.wrench_command[:, 3:6] = self.compute_body_torque(
             self.desired_quat, self.desired_body_angvel
         )
-
+        #print("控制器实时质量:", self.mass)
         return self.wrench_command
+
+
