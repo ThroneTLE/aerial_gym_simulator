@@ -71,7 +71,7 @@ class PositionSetpointTask(BaseTask):
             )
         )
 
-        # 使用 SimBuilder 构建模拟环境
+        # 使用 SimBuilder 构建模拟环境 intrinsically use the EnvManager in env_manager.py
         self.sim_env = SimBuilder().build_env(
             sim_name=self.task_config.sim_name,
             env_name=self.task_config.env_name,
@@ -181,6 +181,12 @@ class PositionSetpointTask(BaseTask):
         self.counter += 1
         self.prev_actions[:] = self.actions
         self.actions = actions
+
+    # 自定义力/力矩（示例：对所有环境的 base_link 施加力）
+    #    force = torch.tensor([[0.0, 0.0, 10.0]], device=self.device).expand(self.num_envs, -1)  # [fx, fy, fz]
+    #    torque = torch.tensor([[0.0, 0.0, 0.0]], device=self.device).expand(self.num_envs, -1)  # [tx, ty, tz]
+    #    self.sim_env.global_tensor_dict["robot_force_tensor"][:, 0, :] = force  # base_link 索引为 0
+    #    self.sim_env.global_tensor_dict["robot_torque_tensor"][:, 0, :] = torque  # base_link 索引为 0  
 
         # 执行模拟步（包括应用动作、物理更新、后处理）
         self.sim_env.step(actions=self.actions)

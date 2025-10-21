@@ -61,8 +61,6 @@ def update_mass_properties(env_manager, mass_reduction=0.5):
     inertia_mat.z = gymapi.Vec3(new_inertia[0, 2], new_inertia[1, 2], new_inertia[2, 2])
     props[0].inertia = inertia_mat
 
-
-
     props[0].com = new_com
     props[0].mass = new_mass
     
@@ -77,6 +75,11 @@ def update_mass_properties(env_manager, mass_reduction=0.5):
 
 def run_controller(controller_name, args, results):
     """运行 lee_position_control 控制器，模拟子机释放"""
+    
+    # -----------------------------------------------------------------
+    # 错误修复：以下所有代码行都已正确缩进
+    # -----------------------------------------------------------------
+
     logger.warning(f"测试控制器: {controller_name}")
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
     logger.info(f"使用设备: {device}")
@@ -92,24 +95,37 @@ def run_controller(controller_name, args, results):
         headless=args.headless,
         use_warp=True,
     )
-    # 强制初始位置为 [0, 0, 0]
+
+    # --- 【建议 1: 状态初始化修改】 ---
+    # 1. 首先重置环境
+    env_manager.reset()
+    
+    # 2. 定义期望的初始状态
     initial_state = torch.zeros(13, device=device)
     initial_state[0:3] = torch.tensor([0.0, 0.0, 0.0], device=device)
-    initial_state[6] = 1.0
-    root_state_tensor = gymtorch.wrap_tensor(env_manager.IGE_env.gym.acquire_actor_root_state_tensor(env_manager.IGE_env.sim))
-    root_state_tensor[:] = initial_state.repeat(env_manager.num_envs, 1)
-    env_manager.IGE_env.gym.refresh_actor_root_state_tensor(env_manager.IGE_env.sim)
-    env_manager.reset()
+    initial_state[6] = 1.0 # 四元数 w
+    
+    # 3. 获取 env_manager 的根状态张量视图
+    root_state = env_manager.IGE_env.global_tensor_dict["vec_root_tensor"]
+    
+    # 4. 将初始状态写入张量视图
+    #    形状为 [num_envs, num_actors_per_env, 13]
+    root_state[:, 0, :13] = initial_state
+    
+    # 5. 调用 write_to_sim 将状态应用到仿真
+    env_manager.IGE_env.write_to_sim()
+    # --- 【建议 1 结束】 ---
     
     target_position = torch.tensor([[0.0, 0.0, 0.0, 0.0]], device=device)
     actions = target_position.repeat(env_manager.num_envs, 1)
     
     errors = []
     positions = []
-    velocities = []
+    velocities = [] # <--- 用于存储真实速度
     release_triggered = False
     release_step = 500
-
+    apply_external_force = False
+    
     env_ptr = env_manager.IGE_env.env_handles[0]
     robot_handle = env_manager.robot_manager.robot_handles[0]
     gym = env_manager.IGE_env.gym
@@ -117,14 +133,12 @@ def run_controller(controller_name, args, results):
     
     # 确保 num_bodies 和 body_index 已定义
     num_bodies = gym.get_actor_rigid_body_count(env_ptr, robot_handle)
-    body_index = 0
+    body_index = 0 # 施加到根链接 (base_link)
     
-    # 确保 rigid_body_names 在循环前被定义 (解决 NameError)
-    # ⚠️ 修复 NameError 的关键步骤 ⚠️
+    # 获取刚体名称
     try:
         rigid_body_names = gym.get_actor_rigid_body_names(env_ptr, robot_handle)
     except AttributeError:
-        # 如果您的 Isaac Gym 版本没有这个函数，可以返回一个默认列表
         rigid_body_names = [f"body_{j}" for j in range(num_bodies)]
         
     logger.warning(f"【循环前确认】刚体数量: {num_bodies}, 刚体列表: {rigid_body_names}")
@@ -133,15 +147,7 @@ def run_controller(controller_name, args, results):
 
     for i in range(1500):
         obs = env_manager.get_obs()
-
         
-        # 风力扰动
-        #wind_force = torch.randn((env_manager.num_envs, 3), device=device) * 100
-        #env_manager.robot_manager.robot.controller.wrench_command[:, 0:3] += wind_force
-
-
-
-
         # 触发时
         if i == 500 and not release_triggered:
             release_step = i
@@ -151,49 +157,64 @@ def run_controller(controller_name, args, results):
             release_triggered = True
             logger.info("子机释放并同步控制器质量")
 
-        # 构造 forces_flat 的索引形式 (num_envs * num_bodies, 3)
-        forces_flat = torch.zeros((env_manager.num_envs * num_bodies, 3), device=device, dtype=torch.float32)
-        idx = 0 * num_bodies + body_index
+
+        # --- 【建议 2: 外力注入修改】 ---
         # 施加外力：持续0.2秒（20个step）
+        # (修正： 501 -> 520)
         if 500 <= i < 501:
-            env_manager.robot_manager.robot.controller.wrench_command[:] = 0.0
+            # 1. （可选）关闭控制器，观察纯外力效果
+            #    保留此行，如建议中所述
+            #env_manager.robot_manager.robot.controller.wrench_command[:] = 0.0
 
-            # 1. 获取 Isaac Gym 内部用于施力的张量
-            global_force_tensor = env_manager.IGE_env.global_tensor_dict["global_force_tensor"]
+            # 2. 获取机器人力张量视图
+            #    形状为 [num_envs, num_bodies_per_env, 3]
+            robot_force = env_manager.IGE_env.global_tensor_dict["robot_force_tensor"]
             
-            # 2. 清零内部施力张量，防止其他控制逻辑干扰 (可选，但推荐)
-            global_force_tensor[:] = 0.0
-
-            # 3. 计算第一个环境、第一个刚体（base_link）的索引（idx=0）
-            # 注意: global_force_tensor 已经是扁平化的 (num_total_rigid_bodies, 3)
-            # 所以第一个环境的第一个刚体的索引就是 0。
-            # 如果 num_envs=1，则 idx=0
-            idx = 0 
-
-            # 4. 施加扰动力 (例如 200.0 N)
-            global_force_tensor[idx, 2] = 100.0  # Z轴向上
-            env_manager.IGE_env.global_tensor_dict["global_force_tensor"]=global_force_tensor
-            # 5. IGE_env_manager.pre_physics_step 会自动使用这个更新后的张量施力
-            
-            logger.info(f"Step {i}: 施加扰动力 {global_force_tensor[idx, 2].item():.1f} N 到 {rigid_body_names[body_index]}")
-            # 注意: 此时不需要再手动调用 gym.apply_rigid_body_force_tensors 了！
-    
-
-
-
-
+            # 3. 使用 += 累加外力
+            #    施加到第0个环境(env=0)，第0个刚体(body_index=0)
+            force_to_apply = torch.tensor([0., 0., 1.], device=device)
+            robot_force[:, body_index, :] += force_to_apply
+            apply_external_force=True
+            if i == 500: # 仅在第一次施加时打印日志
+                logger.info(f"Step {i}: 开始施加扰动力 {force_to_apply[2].item():.1f} N 到 {rigid_body_names[body_index]}")
+        
+        if i == 520:
+             logger.info(f"Step {i}: 停止施加扰动力")
+        # --- 【建议 2 结束】 ---
 
         # 然后执行控制与仿真步
         actions = target_position.repeat(env_manager.num_envs, 1)
-        env_manager.step(actions=actions)
-        env_manager.render()
+        
+        
+        env_manager.reset_tensors()
+        env_manager.robot_manager.pre_physics_step(actions)     # 机器人先跑控制器，写入 robot_force_tensor
 
+        if apply_external_force:
+            robot_force = env_manager.IGE_env.global_tensor_dict["robot_force_tensor"]
+            robot_force[:, body_index, :] += force_to_apply      # 此时再叠加就不会被覆盖
+
+        env_manager.asset_manager.pre_physics_step(None)
+        env_manager.obstacle_manager.pre_physics_step(None)
+        env_manager.IGE_env.pre_physics_step(actions)
+        env_manager.IGE_env.physics_step()
+        env_manager.IGE_env.post_physics_step()
+        env_manager.robot_manager.post_physics_step()
+        env_manager.asset_manager.post_physics_step()
+        # 需要的话再调用 compute_observations/render 等
+        env_manager.IGE_env.step_graphics()
+        env_manager.IGE_env.render_viewer()
+
+        
+        
+        
+        #env_manager.step(actions=actions)
+        env_manager.render()
 
         
         error = torch.norm(target_position[:, 0:3] - obs["robot_position"], dim=1)
         errors.append(error.cpu().numpy())
         positions.append(obs["robot_position"].cpu().numpy())
-        velocities.append(obs["robot_vehicle_linvel"].cpu().numpy())
+        velocities.append(obs["robot_vehicle_linvel"].cpu().numpy()) # <--- 存储真实速度
         
         if i % 100 == 0:
             logger.info(f"Step {i}, 当前位置: {obs['robot_position']}, 误差: {error}")
@@ -201,6 +222,7 @@ def run_controller(controller_name, args, results):
     results[controller_name] = {
         "errors": np.array(errors),
         "positions": np.array(positions),
+        "velocities": np.array(velocities), # <--- 将真实速度添加到结果
         "release_time": (release_step * 0.01) if release_triggered else None
     }
 
@@ -208,7 +230,6 @@ def run_controller(controller_name, args, results):
     del env_manager
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
-
 if __name__ == "__main__":
     args = get_args()
     controller_name = "lee_position_control"
@@ -247,17 +268,23 @@ if __name__ == "__main__":
     ax.legend()
     plt.show()
     
+    # --- 【额外修正: 绘制真实 Z 轴速度】 ---
     plt.figure(figsize=(10, 6))
     if controller_name in results:
-        vel = np.array(results[controller_name]["positions"])
-        z_vel = np.diff(vel[:, 0, 2], prepend=vel[0, 0, 2]) / 0.01
-        plt.plot(np.arange(len(z_vel)) * 0.01, z_vel, label=f"{controller_name} Z轴速度")
+        # 使用 obs 中记录的真实速度，而不是从位置中差分
+        vel = results[controller_name]["velocities"]
+        # 索引 [:, 0, 2] 对应 [all_steps, env_0, z_axis]
+        z_vel = vel[:, 0, 2] 
+        plt.plot(np.arange(len(z_vel)) * 0.01, z_vel, label=f"{controller_name} Z轴速度 (真实)")
+        if results[controller_name]["release_time"] is not None:
+            plt.axvline(x=results[controller_name]["release_time"], color='r', linestyle='--', label="子机释放/扰动开始")
     plt.xlabel("时间 (秒)")
     plt.ylabel("Z轴速度 (米/秒)")
     plt.title("无人机Z轴速度")
     plt.legend()
     plt.grid(True)
     plt.show()
+    # --- 【修正结束】 ---
     
     if controller_name in results:
         mean_error = np.mean(results[controller_name]["errors"])

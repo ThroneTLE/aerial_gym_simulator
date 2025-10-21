@@ -20,6 +20,7 @@ logger = CustomLogger("robot_manager")
 
 class RobotManagerIGE(BaseManager):
     def __init__(self, global_sim_dict, robot_name, controller_name, device):
+        # 中文注释：初始化基于 Isaac Gym 的机器人管理器，包括传感器及动力学数据
         logger.debug("Initializing RobotManagerIGE")
         self.gym = global_sim_dict["gym"]
         self.sim = global_sim_dict["sim"]
@@ -51,6 +52,7 @@ class RobotManagerIGE(BaseManager):
 
         self.dof_control_mode = "none"
 
+        # 中文注释：根据是否启用 Warp 渲染，决定加载的传感器类型
         if self.use_warp == False:
             if self.cfg.sensor_config.enable_camera:
                 logger.debug("Initializing Isaac Gym camera sensor")
@@ -107,6 +109,7 @@ class RobotManagerIGE(BaseManager):
 
     def prepare_for_sim(self, global_tensor_dict):
 
+        # 中文注释：准备全局张量字典，注册机器人相关缓冲区
         self.global_tensor_dict = global_tensor_dict
 
         self.global_tensor_dict["robot_mass"] = self.robot_masses
@@ -135,6 +138,7 @@ class RobotManagerIGE(BaseManager):
                 )
 
             if self.cfg.sensor_config.enable_camera:
+                # 中文注释：为 Isaac Gym 相机传感器分配深度和 RGB 张量
                 self.image_tensor = torch.zeros(
                     (
                         self.num_envs,
@@ -256,6 +260,7 @@ class RobotManagerIGE(BaseManager):
         if self.cfg.sensor_config.enable_imu:
             logger.debug("Initializing IMU sensor")
             # acquire force tensors for each of the assets
+            # 中文注释：绑定 Isaac Gym 力传感器张量以驱动 IMU 估计
             self.force_sensor_tensor = gymtorch.wrap_tensor(
                 self.gym.acquire_force_sensor_tensor(self.sim)
             )
@@ -439,6 +444,7 @@ class RobotManagerIGE(BaseManager):
             )
 
         # Set drive mode for the robot for DOF control
+        # 中文注释：根据配置设定关节控制模式及阻尼参数
         props = self.gym.get_actor_dof_properties(env_handle, self.actor_handle)
         try:
             if len(props["driveMode"]) > 0:
@@ -475,6 +481,7 @@ class RobotManagerIGE(BaseManager):
         self.reset_idx(torch.arange(self.cfg.num_envs, device=self.device))
 
     def reset_idx(self, env_ids):
+        # 中文注释：同步重置机器人及关联传感器的内部状态
         self.robot.reset_idx(env_ids)
         if self.warp_sensor is not None:
             self.warp_sensor.reset_idx(env_ids)
