@@ -54,8 +54,8 @@ class BaseQuadCfg:
 
     class disturbance:
         """外部扰动配置。"""
-        enable_disturbance = True # 是否启用外部扰动
-        prob_apply_disturbance = 0.02 # 每一步施加扰动的概率
+        enable_disturbance = False # 是否启用外部扰动
+        prob_apply_disturbance = 0.00 # 每一步施加扰动的概率
         # 最大力和力矩扰动 [fx, fy, fz, tx, ty, tz]
         max_force_and_torque_disturbance = [0.75, 0.75, 0.75, 0.004, 0.004, 0.004]
 

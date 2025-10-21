@@ -4,86 +4,164 @@ from aerial_gym.sim.sim_builder import SimBuilder
 from aerial_gym.utils.helpers import get_args
 import numpy as np
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
+from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 (needed for 3D projection)
 import matplotlib
-from isaacgym import gymapi, gymtorch
+from isaacgym import gymapi
+from aerial_gym.utils.math import quat_rotate_inverse, get_euler_xyz_tensor  # CODEx
+from dataclasses import dataclass
+from typing import Dict, List, Tuple
 
-# 设置支持中文的字体
-matplotlib.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'Arial Unicode MS']
-matplotlib.rcParams['axes.unicode_minus'] = False
+matplotlib.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "Arial Unicode MS"]
+matplotlib.rcParams["axes.unicode_minus"] = False
 
 logger = CustomLogger(__name__)
 
-def add_noise(tensor, noise_std=0.01):
-    """添加高斯噪声"""
-    return tensor + torch.randn_like(tensor, device=tensor.device) * noise_std
 
-def update_mass_properties(env_manager, mass_reduction=0.5):
-    """更新质量、惯性张量和质心，模拟子机释放"""
-    gym = env_manager.IGE_env.gym
-    sim = env_manager.IGE_env.sim
-    robot_handle = env_manager.robot_manager.robot_handles[0]
-    
-    # 获取当前机器人属性
-    env_ptr = env_manager.IGE_env.env_handles[0]
-    props = gym.get_actor_rigid_body_properties(env_ptr, robot_handle)
-    
-    # 初始质量（母机 0.25kg + 子机 0.5kg）
-    initial_mass = 0.75
-    props[0].mass = initial_mass
-    new_mass = max(initial_mass - mass_reduction, 0.25)
-    
-    # URDF 初始惯性张量（base_link）
-    initial_inertia = np.array([
-        [0.0004225, 0.0, 0.0],
-        [0.0, 0.0004225, 0.0],
-        [0.0, 0.0, 0.000845]
-    ])
-    
-    # 子机（0.5kg, z=-0.1m）增加 Ixx, Iyy
-    sub_inertia = 0.5 * 0.1**2  # 0.005 kg·m²
-    initial_inertia[0, 0] += sub_inertia
-    initial_inertia[1, 1] += sub_inertia
-    
-    # 按质量比例缩放（0.25/0.75）
-    mass_ratio = new_mass / initial_mass
-    new_inertia = initial_inertia * mass_ratio
-    
-    # 质心：初始 z = (0.25*0 + 0.5*(-0.1))/0.75 = -0.0667，释放后 z=0
-    props[0].com = gymapi.Vec3(0.0, 0.0, -0.0667)
-    new_com = gymapi.Vec3(0.0, 0.0, 0.0)
-    
-    # 更新 Mat33（使用 Vec3 构造）
-    # 更新惯性矩阵（你的 gym_38.so 版本专用）
-    inertia_mat = gymapi.Mat33()
-    inertia_mat.x = gymapi.Vec3(new_inertia[0, 0], new_inertia[1, 0], new_inertia[2, 0])
-    inertia_mat.y = gymapi.Vec3(new_inertia[0, 1], new_inertia[1, 1], new_inertia[2, 1])
-    inertia_mat.z = gymapi.Vec3(new_inertia[0, 2], new_inertia[1, 2], new_inertia[2, 2])
-    props[0].inertia = inertia_mat
+@dataclass
+class Payload:  # CODEx
+    """定义子无人机（负载）的参数；修改 mass/offset 用于快速调参。"""  # CODEx
+    name: str
+    mass: float
+    offset: torch.Tensor  # 3x tensor in base frame meters
 
-    props[0].com = new_com
-    props[0].mass = new_mass
-    
-    # 应用物理属性
-    gym.set_actor_rigid_body_properties(env_ptr, robot_handle, props)
-    
-    logger.info(f"子机释放, 质量从 {initial_mass:.4f} 减少到 {props[0].mass:.4f}")
-    logger.info(f"惯性张量更新: \n{new_inertia}")
-    logger.info(f"质心更新: ({props[0].com.x:.4f}, {props[0].com.y:.4f}, {props[0].com.z:.4f})")
-    
-    return new_mass, new_inertia
+
+# === 子机布置参数 ===
+# 直接修改下面列表即可调整每个子机的质量和相对于母机（base_link）质心的偏移。
+# offset 为 [x, y, z]，单位米；mass 单位 kg。
+PAYLOAD_LAYOUT: List[Payload] = [  # CODEx
+    Payload("front_left", 0.095, torch.tensor([0.16, 0.16, -0.05])),
+    Payload("front_right", 0.095, torch.tensor([0.16, -0.16, -0.05])),
+    Payload("rear_left", 0.095, torch.tensor([-0.16, 0.16, -0.05])),
+    Payload("rear_right", 0.095, torch.tensor([-0.16, -0.16, -0.05])),
+]
+
+
+class PayloadManager:  # CODEx
+    def __init__(self, env_manager, payloads: List[Payload], device: torch.device):
+        self.env_manager = env_manager
+        self.payloads = {payload.name: payload for payload in payloads}
+        self.attached = {payload.name: True for payload in payloads}
+        self.device = device
+
+        self.gym = env_manager.IGE_env.gym
+        self.env_ptr = env_manager.IGE_env.env_handles[0]
+        self.robot_handle = env_manager.robot_manager.robot_handles[0]
+
+        # Deep copy rigid body properties so we can modify in-place
+        self.body_props = self.gym.get_actor_rigid_body_properties(self.env_ptr, self.robot_handle)
+        base_prop = self.body_props[0]
+
+        # 基础母机质量（来自 URDF）。如需修改母机本体质量，可在资源文件或此处覆写 base_prop.mass。  # CODEx
+        self.base_mass = base_prop.mass
+        self.base_com = torch.tensor([base_prop.com.x, base_prop.com.y, base_prop.com.z], device=device)
+        self.base_inertia = torch.tensor(
+            [
+                [base_prop.inertia.x.x, base_prop.inertia.x.y, base_prop.inertia.x.z],
+                [base_prop.inertia.y.x, base_prop.inertia.y.y, base_prop.inertia.y.z],
+                [base_prop.inertia.z.x, base_prop.inertia.z.y, base_prop.inertia.z.z],
+            ],
+            device=device,
+        )
+
+        self.mass_history: List[float] = []
+        self.com_history: List[torch.Tensor] = []
+
+    def compute_total_properties(self) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Compute total mass and inertia with currently attached payloads."""
+        total_mass = torch.tensor(self.base_mass, device=self.device)
+        numerator_com = self.base_mass * self.base_com.clone()
+
+        for name, payload in self.payloads.items():
+            if not self.attached[name]:
+                continue
+            total_mass += payload.mass
+            numerator_com += payload.mass * payload.offset.to(self.device)
+
+        if total_mass.item() <= 0.0:
+            combined_com = torch.zeros(3, device=self.device)
+        else:
+            combined_com = numerator_com / total_mass
+
+        # Parallel axis theorem adjustments
+        identity = torch.eye(3, device=self.device)
+        d_base = self.base_com - combined_com
+        inertia_total = self.base_inertia + self.base_mass * (
+            torch.dot(d_base, d_base) * identity - torch.outer(d_base, d_base)
+        )
+
+        for name, payload in self.payloads.items():
+            if not self.attached[name]:
+                continue
+            r = payload.offset.to(self.device) - combined_com
+            inertia_total += payload.mass * (torch.dot(r, r) * identity - torch.outer(r, r))
+
+        return total_mass, inertia_total, combined_com
+
+    def apply_to_sim(self):
+        total_mass, inertia_total, combined_com = self.compute_total_properties()
+
+        base_prop = self.body_props[0]
+        base_prop.mass = float(total_mass.item())
+        base_prop.com = gymapi.Vec3(*combined_com.cpu().tolist())
+        inertia_mat = gymapi.Mat33()
+        inertia_cpu = inertia_total.detach().cpu().numpy()
+        inertia_mat.x = gymapi.Vec3(*inertia_cpu[0])
+        inertia_mat.y = gymapi.Vec3(*inertia_cpu[1])
+        inertia_mat.z = gymapi.Vec3(*inertia_cpu[2])
+        base_prop.inertia = inertia_mat
+
+        self.gym.set_actor_rigid_body_properties(
+            self.env_ptr, self.robot_handle, self.body_props, recomputeInertia=False
+        )
+
+        # Synchronize tensors used by controllers and logging
+        env = self.env_manager
+        env.robot_manager.robot_mass = float(total_mass.item())
+        env.robot_manager.robot_masses.fill_(float(total_mass.item()))
+        env.IGE_env.global_tensor_dict["robot_mass"].fill_(float(total_mass.item()))
+
+        inertia_tensor = torch.tensor(inertia_cpu, device=self.device, dtype=torch.float32)
+        env.robot_manager.robot_inertia = inertia_tensor
+        env.robot_manager.robot_inertias[:] = inertia_tensor
+        env.IGE_env.global_tensor_dict["robot_inertia"][:] = inertia_tensor
+
+        controller_mass = torch.full((env.num_envs, 1), float(total_mass.item()), device=self.device)
+        env.robot_manager.robot.controller.mass = controller_mass
+
+        self.mass_history.append(float(total_mass.item()))
+        self.com_history.append(combined_com.detach().cpu())
+
+    def release_payload(self, name: str):
+        if name not in self.payloads:
+            logger.error(f"Payload '{name}' 未定义，忽略释放命令。")
+            return
+        if not self.attached[name]:
+            logger.warning(f"Payload '{name}' 已经释放，忽略重复命令。")
+            return
+        self.attached[name] = False
+        self.apply_to_sim()
+        logger.info(f"释放子无人机 {name}，剩余质量 {self.mass_history[-1]:.3f} kg。")
+
+    def attach_payload(self, name: str):
+        if name not in self.payloads:
+            logger.error(f"Payload '{name}' 未定义，无法重新挂载。")
+            return
+        self.attached[name] = True
+        self.apply_to_sim()
+
+    def current_mass(self) -> float:
+        return self.mass_history[-1] if self.mass_history else self.base_mass
+
+    def current_com(self) -> torch.Tensor:
+        return self.com_history[-1] if self.com_history else self.base_com.cpu()
+
 
 def run_controller(controller_name, args, results):
-    """运行 lee_position_control 控制器，模拟子机释放"""
-    
-    # -----------------------------------------------------------------
-    # 错误修复：以下所有代码行都已正确缩进
-    # -----------------------------------------------------------------
-
+    """运行控制器并在指定时刻施加外力与质量扰动。"""
     logger.warning(f"测试控制器: {controller_name}")
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
     logger.info(f"使用设备: {device}")
-    
+
     env_manager = SimBuilder().build_env(
         sim_name="base_sim",
         env_name="empty_env",
@@ -96,196 +174,214 @@ def run_controller(controller_name, args, results):
         use_warp=True,
     )
 
-    # --- 【建议 1: 状态初始化修改】 ---
-    # 1. 首先重置环境
-    env_manager.reset()
-    
-    # 2. 定义期望的初始状态
+    env_manager.reset()  # CODEx
+
     initial_state = torch.zeros(13, device=device)
-    initial_state[0:3] = torch.tensor([0.0, 0.0, 0.0], device=device)
-    initial_state[6] = 1.0 # 四元数 w
-    
-    # 3. 获取 env_manager 的根状态张量视图
-    root_state = env_manager.IGE_env.global_tensor_dict["vec_root_tensor"]
-    
-    # 4. 将初始状态写入张量视图
-    #    形状为 [num_envs, num_actors_per_env, 13]
-    root_state[:, 0, :13] = initial_state
-    
-    # 5. 调用 write_to_sim 将状态应用到仿真
-    env_manager.IGE_env.write_to_sim()
-    # --- 【建议 1 结束】 ---
-    
+    initial_state[6] = 1.0
+    root_state = env_manager.IGE_env.global_tensor_dict["vec_root_tensor"]  # CODEx
+    root_state[:, 0, :13] = initial_state  # CODEx
+    env_manager.IGE_env.write_to_sim()  # CODEx
+
     target_position = torch.tensor([[0.0, 0.0, 0.0, 0.0]], device=device)
     actions = target_position.repeat(env_manager.num_envs, 1)
-    
-    errors = []
-    positions = []
-    velocities = [] # <--- 用于存储真实速度
-    release_triggered = False
-    release_step = 500
-    apply_external_force = False
-    
+
+    payload_manager = PayloadManager(env_manager, PAYLOAD_LAYOUT, device=device)  # CODEx
+    payload_manager.apply_to_sim()  # CODEx
+
     env_ptr = env_manager.IGE_env.env_handles[0]
     robot_handle = env_manager.robot_manager.robot_handles[0]
     gym = env_manager.IGE_env.gym
-    sim = env_manager.IGE_env.sim
-    
-    # 确保 num_bodies 和 body_index 已定义
+
     num_bodies = gym.get_actor_rigid_body_count(env_ptr, robot_handle)
-    body_index = 0 # 施加到根链接 (base_link)
-    
-    # 获取刚体名称
+    body_index = 0
     try:
         rigid_body_names = gym.get_actor_rigid_body_names(env_ptr, robot_handle)
     except AttributeError:
         rigid_body_names = [f"body_{j}" for j in range(num_bodies)]
-        
-    logger.warning(f"【循环前确认】刚体数量: {num_bodies}, 刚体列表: {rigid_body_names}")
-    logger.warning(f"【循环前确认】施加力目标刚体索引: {body_index}, 名称: {rigid_body_names[body_index]}")
 
+    logger.warning(f"刚体数量: {num_bodies}, 列表: {rigid_body_names}")
+    logger.warning(f"施加力目标刚体索引: {body_index}, 名称: {rigid_body_names[body_index]}")
 
-    for i in range(1500):
-        obs = env_manager.get_obs()
-        
-        # 触发时
-        if i == 500 and not release_triggered:
-            release_step = i
-            new_mass, new_inertia = update_mass_properties(env_manager, mass_reduction=0.5)
-            controller_mass_tensor = torch.full((env_manager.num_envs,), new_mass, device=device, dtype=torch.float32)
-            env_manager.robot_manager.robot.controller.mass = controller_mass_tensor.unsqueeze(1)
-            release_triggered = True
-            logger.info("子机释放并同步控制器质量")
+    NUM_STEPS = 3000
+    # 外力窗口设置：键为 (start_step, end_step)，值为世界坐标系力向量 (N)。  # CODEx
+    # 可按需增删用于模拟风/扰动等情景。
+    FORCE_WINDOWS: Dict[Tuple[int, int], torch.Tensor] = {  # CODEx
+        (400, 410): torch.tensor([0.0, 0.0, 0.0], device=device),
+        (800, 820): torch.tensor([0.0, 0.0, 0.0], device=device),
+    }
+    # 子机释放时间表：列表中的 (time_step, payload_name) 可自由编辑，以控制各子机释放时间及顺序。  # CODEx
+    release_plan = [  # CODEx
+        (500, "rear_right"),
+        (1000, "front_left"),
+        (1500, "front_right"),
+        (2000, "rear_left"),
+    ]
+    release_lookup = {step: name for step, name in release_plan}  # CODEx
 
+    external_force_state: Dict[Tuple[int, int], bool] = {window: False for window in FORCE_WINDOWS}
 
-        # --- 【建议 2: 外力注入修改】 ---
-        # 施加外力：持续0.2秒（20个step）
-        # (修正： 501 -> 520)
-        if 500 <= i < 501:
-            # 1. （可选）关闭控制器，观察纯外力效果
-            #    保留此行，如建议中所述
-            #env_manager.robot_manager.robot.controller.wrench_command[:] = 0.0
+    def external_force_callback(manager):  # CODEx
+        robot_force = manager.IGE_env.global_tensor_dict["robot_force_tensor"]
+        orientations = manager.IGE_env.global_tensor_dict["robot_orientation"]
+        for window, force_vec in FORCE_WINDOWS.items():
+            active = window[0] <= current_step <= window[1]
+            external_force_state[window] = active
+            if not active:
+                continue
+            world_force = force_vec.unsqueeze(0).expand(orientations.shape[0], -1)
+            body_force = quat_rotate_inverse(orientations, world_force)
+            robot_force[:, body_index, :] += body_force
 
-            # 2. 获取机器人力张量视图
-            #    形状为 [num_envs, num_bodies_per_env, 3]
-            robot_force = env_manager.IGE_env.global_tensor_dict["robot_force_tensor"]
-            
-            # 3. 使用 += 累加外力
-            #    施加到第0个环境(env=0)，第0个刚体(body_index=0)
-            force_to_apply = torch.tensor([0., 0., 1.], device=device)
-            robot_force[:, body_index, :] += force_to_apply
-            apply_external_force=True
-            if i == 500: # 仅在第一次施加时打印日志
-                logger.info(f"Step {i}: 开始施加扰动力 {force_to_apply[2].item():.1f} N 到 {rigid_body_names[body_index]}")
-        
-        if i == 520:
-             logger.info(f"Step {i}: 停止施加扰动力")
-        # --- 【建议 2 结束】 ---
+    errors, positions, velocities = [], [], []
+    attitudes, mass_log, com_log = [], [], []
+    motor_force_history, motor_torque_history = [], []
 
-        # 然后执行控制与仿真步
-        actions = target_position.repeat(env_manager.num_envs, 1)
-        
-        
+    for current_step in range(NUM_STEPS):
+        if current_step in release_lookup:
+            payload_manager.release_payload(release_lookup[current_step])  # CODEx
+
         env_manager.reset_tensors()
-        env_manager.robot_manager.pre_physics_step(actions)     # 机器人先跑控制器，写入 robot_force_tensor
+        env_manager.step(actions=actions, external_force_callback=external_force_callback)  # CODEx
+        if not args.headless:
+            env_manager.render()
 
-        if apply_external_force:
-            robot_force = env_manager.IGE_env.global_tensor_dict["robot_force_tensor"]
-            robot_force[:, body_index, :] += force_to_apply      # 此时再叠加就不会被覆盖
-
-        env_manager.asset_manager.pre_physics_step(None)
-        env_manager.obstacle_manager.pre_physics_step(None)
-        env_manager.IGE_env.pre_physics_step(actions)
-        env_manager.IGE_env.physics_step()
-        env_manager.IGE_env.post_physics_step()
-        env_manager.robot_manager.post_physics_step()
-        env_manager.asset_manager.post_physics_step()
-        # 需要的话再调用 compute_observations/render 等
-        env_manager.IGE_env.step_graphics()
-        env_manager.IGE_env.render_viewer()
-
-        
-        
-        
-        #env_manager.step(actions=actions)
-        env_manager.render()
-
-        
+        obs = env_manager.get_obs()
         error = torch.norm(target_position[:, 0:3] - obs["robot_position"], dim=1)
         errors.append(error.cpu().numpy())
         positions.append(obs["robot_position"].cpu().numpy())
-        velocities.append(obs["robot_vehicle_linvel"].cpu().numpy()) # <--- 存储真实速度
-        
-        if i % 100 == 0:
-            logger.info(f"Step {i}, 当前位置: {obs['robot_position']}, 误差: {error}")
-    
+        velocities.append(obs["robot_vehicle_linvel"].cpu().numpy())
+        attitudes.append(get_euler_xyz_tensor(obs["robot_orientation"]).cpu().numpy())  # CODEx
+        mass_log.append(payload_manager.current_mass())  # CODEx
+        com_log.append(payload_manager.current_com().numpy())  # CODEx
+
+        robot_force = env_manager.IGE_env.global_tensor_dict["robot_force_tensor"][0].cpu().numpy()  # CODEx
+        robot_torque = env_manager.IGE_env.global_tensor_dict["robot_torque_tensor"][0].cpu().numpy()  # CODEx
+        motor_force_history.append(robot_force)
+        motor_torque_history.append(robot_torque)
+
+        if current_step % 100 == 0:
+            logger.info(
+                f"Step {current_step}, 位置: {obs['robot_position']}, 误差: {error}, 当前质量: {mass_log[-1]:.3f}"
+            )
+
     results[controller_name] = {
         "errors": np.array(errors),
         "positions": np.array(positions),
-        "velocities": np.array(velocities), # <--- 将真实速度添加到结果
-        "release_time": (release_step * 0.01) if release_triggered else None
+        "velocities": np.array(velocities),
+        "attitudes": np.array(attitudes),
+        "mass": np.array(mass_log),
+        "com": np.array(com_log),
+        "motor_forces": np.array(motor_force_history),
+        "motor_torques": np.array(motor_torque_history),
+        "release_plan": release_plan,
     }
 
-    
     del env_manager
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
+
+
 if __name__ == "__main__":
     args = get_args()
     controller_name = "lee_position_control"
     results = {}
-    release_step = None
-
     run_controller(controller_name, args, results)
-    
-    plt.figure(figsize=(10, 6))
-    if controller_name in results:
-        plt.plot(np.arange(len(results[controller_name]["errors"])) * 0.01, 
-                 results[controller_name]["errors"], 
-                 label=f"{controller_name} 误差")
-        if results[controller_name]["release_time"] is not None:
-            plt.axvline(x=results[controller_name]["release_time"], color='r', linestyle='--', label="子机释放")
-    plt.xlabel("时间 (秒)")
-    plt.ylabel("位置误差 (米)")
-    plt.title("控制器性能")
-    plt.legend()
-    plt.grid(True)
-    plt.show()
 
-    fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(111, projection='3d')
     if controller_name in results:
-        pos = results[controller_name]["positions"]
-        ax.plot(pos[:, 0, 0], pos[:, 0, 1], pos[:, 0, 2], label=f"{controller_name} 轨迹")
-        ax.scatter(pos[0, 0, 0], pos[0, 0, 1], pos[0, 0, 2], color='g', label="起始点")
-        release_idx = int(results[controller_name]["release_time"] / 0.01)
-        ax.scatter(pos[release_idx, 0, 0], pos[release_idx, 0, 1], pos[release_idx, 0, 2], color='r', label="释放点")
-        ax.scatter(pos[-1, 0, 0], pos[-1, 0, 1], pos[-1, 0, 2], color='b', label="结束点")
-    ax.set_xlabel("X (米)")
-    ax.set_ylabel("Y (米)")
-    ax.set_zlabel("Z (米)")
-    ax.set_title("无人机3D轨迹")
-    ax.legend()
-    plt.show()
-    
-    # --- 【额外修正: 绘制真实 Z 轴速度】 ---
-    plt.figure(figsize=(10, 6))
-    if controller_name in results:
-        # 使用 obs 中记录的真实速度，而不是从位置中差分
-        vel = results[controller_name]["velocities"]
-        # 索引 [:, 0, 2] 对应 [all_steps, env_0, z_axis]
-        z_vel = vel[:, 0, 2] 
-        plt.plot(np.arange(len(z_vel)) * 0.01, z_vel, label=f"{controller_name} Z轴速度 (真实)")
-        if results[controller_name]["release_time"] is not None:
-            plt.axvline(x=results[controller_name]["release_time"], color='r', linestyle='--', label="子机释放/扰动开始")
-    plt.xlabel("时间 (秒)")
-    plt.ylabel("Z轴速度 (米/秒)")
-    plt.title("无人机Z轴速度")
-    plt.legend()
-    plt.grid(True)
-    plt.show()
-    # --- 【修正结束】 ---
-    
-    if controller_name in results:
-        mean_error = np.mean(results[controller_name]["errors"])
-        logger.info(f"平均位置误差: {mean_error:.4f} 米")
+        sim_results = results[controller_name]
+        timestep = np.arange(len(sim_results["errors"])) * 0.01
+
+        # 位置误差
+        plt.figure(figsize=(10, 4))
+        plt.plot(timestep, sim_results["errors"], label=f"{controller_name} 误差")
+        plt.xlabel("时间 (秒)")
+        plt.ylabel("位置误差 (米)")
+        plt.title("位置误差曲线")
+        plt.grid(True)
+        plt.legend()
+        plt.tight_layout()
+
+        # 位置 XYZ
+        pos = sim_results["positions"][:, 0, :]
+        fig_pos, axes_pos = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
+        for idx, axis_label in enumerate(["X", "Y", "Z"]):
+            axes_pos[idx].plot(timestep, pos[:, idx], label=f"{axis_label} 位置")
+            axes_pos[idx].set_ylabel(f"{axis_label} (m)")
+            axes_pos[idx].grid(True)
+        axes_pos[-1].set_xlabel("时间 (秒)")
+        fig_pos.suptitle("无人机位置轨迹")
+        fig_pos.tight_layout(rect=[0, 0.03, 1, 0.95])
+
+        # 姿态 (roll/pitch/yaw)
+        attitude = sim_results["attitudes"][:, 0, :] * 180.0 / np.pi
+        fig_att, axes_att = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
+        for idx, axis_label in enumerate(["Roll", "Pitch", "Yaw"]):
+            axes_att[idx].plot(timestep, attitude[:, idx], label=axis_label)
+            axes_att[idx].set_ylabel(f"{axis_label} (deg)")
+            axes_att[idx].grid(True)
+        axes_att[-1].set_xlabel("时间 (秒)")
+        fig_att.suptitle("无人机姿态（欧拉角）")
+        fig_att.tight_layout(rect=[0, 0.03, 1, 0.95])
+
+        # 质量与质心
+        fig_mass, ax_mass = plt.subplots(2, 1, figsize=(10, 6), sharex=True)
+        ax_mass[0].step(timestep, sim_results["mass"], where="post")
+        ax_mass[0].set_ylabel("质量 (kg)")
+        ax_mass[0].grid(True)
+        com = sim_results["com"]
+        for idx, axis_label in enumerate(["X", "Y", "Z"]):
+            ax_mass[1].plot(timestep, com[:, idx], label=f"{axis_label}")
+        ax_mass[1].set_ylabel("质心 (m)")
+        ax_mass[1].set_xlabel("时间 (秒)")
+        ax_mass[1].grid(True)
+        ax_mass[1].legend()
+        fig_mass.suptitle("整体质量与质心演化")
+        fig_mass.tight_layout(rect=[0, 0.03, 1, 0.95])
+
+        # 电机力与扭矩
+        motor_forces = sim_results["motor_forces"]
+        motor_torques = sim_results["motor_torques"]
+        num_links = motor_forces.shape[1]
+        motor_indices = range(1, num_links) if num_links > 1 else range(num_links)
+
+        fig_force, ax_force = plt.subplots(figsize=(10, 5))
+        for idx in motor_indices:
+            ax_force.plot(
+                timestep,
+                motor_forces[:, idx, 2],
+                label=f"Link {idx} Fz",
+            )
+        ax_force.set_xlabel("时间 (秒)")
+        ax_force.set_ylabel("推力 (N)")
+        ax_force.set_title("各电机推力 (Z 轴分量)")
+        ax_force.grid(True)
+        ax_force.legend()
+        fig_force.tight_layout()
+
+        fig_torque, ax_torque = plt.subplots(figsize=(10, 5))
+        for idx in motor_indices:
+            ax_torque.plot(
+                timestep,
+                motor_torques[:, idx, 2],
+                label=f"Link {idx} Tz",
+            )
+        ax_torque.set_xlabel("时间 (秒)")
+        ax_torque.set_ylabel("扭矩 (Nm)")
+        ax_torque.set_title("各电机扭矩 (Z 轴分量)")
+        ax_torque.grid(True)
+        ax_torque.legend()
+        fig_torque.tight_layout()
+
+        # 3D 轨迹
+        fig_traj = plt.figure(figsize=(10, 8))
+        ax = fig_traj.add_subplot(111, projection="3d")
+        ax.plot(pos[:, 0], pos[:, 1], pos[:, 2], label=f"{controller_name} 轨迹")
+        ax.scatter(pos[0, 0], pos[0, 1], pos[0, 2], color="g", label="起始点")
+        ax.scatter(pos[-1, 0], pos[-1, 1], pos[-1, 2], color="b", label="结束点")
+        ax.set_xlabel("X (米)")
+        ax.set_ylabel("Y (米)")
+        ax.set_zlabel("Z (米)")
+        ax.legend()
+        fig_traj.tight_layout()
+
+        plt.show()

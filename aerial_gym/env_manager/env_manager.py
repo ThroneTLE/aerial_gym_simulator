@@ -346,9 +346,12 @@ class EnvManager(BaseManager):
         # 重置所有环境
         self.reset_idx(env_ids=torch.arange(self.cfg.env.num_envs))
 
-    def pre_physics_step(self, actions, env_actions):
+    def pre_physics_step(self, actions, env_actions, external_force_callback=None):  # CODEx
         # 1. 首先让机器人计算动作
         self.robot_manager.pre_physics_step(actions)
+        # 1.a 在机器人写输入力之后、模拟器读取之前执行外部回调
+        if external_force_callback is not None:  # CODEx
+            external_force_callback(self)
         # 2. 资产管理器在此处应用环境动作
         self.asset_manager.pre_physics_step(env_actions)
         # 3. 对障碍物管理器应用环境动作
@@ -365,9 +368,9 @@ class EnvManager(BaseManager):
         self.collision_tensor[:] = 0
         self.truncation_tensor[:] = 0
 
-    def simulate(self, actions, env_actions):
+    def simulate(self, actions, env_actions, external_force_callback=None):  # CODEx
         # 物理步前的准备工作
-        self.pre_physics_step(actions, env_actions)
+        self.pre_physics_step(actions, env_actions, external_force_callback)  # CODEx
         # 执行物理模拟步
         self.IGE_env.physics_step()
         # 物理步后的处理
@@ -432,13 +435,14 @@ class EnvManager(BaseManager):
         self.render(render_components="sensors")
         return envs_to_reset
 
-    def step(self, actions, env_actions=None):
+    def step(self, actions, env_actions=None, external_force_callback=None):  # CODEx
         """
         该函数执行环境的模拟步。
         actions: 发送给机器人的动作。
         env_actions: 发送给环境实体的动作。
+        external_force_callback: 可选回调，在机器人写入力/扭矩张量后执行。  # CODEx
         """
-        self.reset_tensors() # 重置碰撞和截断张量
+        self.reset_tensors() # 重置碰撞和截断张量,需要在脚本中调用
         
         # 处理环境动作
         if env_actions is not None:
@@ -468,7 +472,7 @@ class EnvManager(BaseManager):
         
         # 执行多次物理模拟步
         for timestep in range(num_physics_step_per_env_step):
-            self.simulate(actions, env_actions)
+            self.simulate(actions, env_actions, external_force_callback)  # CODEx
             self.compute_observations() # 在每一步后计算观测
 
         self.sim_steps[:] = self.sim_steps[:] + 1 # 更新模拟步数

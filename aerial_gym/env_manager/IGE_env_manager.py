@@ -518,7 +518,7 @@ class IsaacGymEnv(BaseManager):
             self.sim,
             gymtorch.unwrap_tensor(self.global_tensor_dict["global_force_tensor"]),
             gymtorch.unwrap_tensor(self.global_tensor_dict["global_torque_tensor"]),
-            gymapi.LOCAL_SPACE, # 在局部坐标系 (Actor/刚体坐标系) 中施加力
+            gymapi.LOCAL_SPACE, # 在局部坐标系 (Actor/刚体坐标系) 中施加力LOCAL_SPACE改为了GLOBAL_SPACE
         )
         
         # 处理自由度 (DoF) 控制

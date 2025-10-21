@@ -78,7 +78,7 @@ class BaseLeeController(BaseController):
         # 位置积分状态 (用于抗积分饱和/anti-windup)
         self.pos_integral = torch.zeros((self.num_envs, 3), device=self.device)
         # 积分限幅值（可选，用于抗积分饱和）
-        self.pos_integral_clamp = 1.0  # 每个轴的限幅幅度 (可调)
+        self.pos_integral_clamp = 5.0  # 每个轴的限幅幅度 (可调)
 
 
         self.K_linvel_tensor_current = (self.K_linvel_tensor_max + self.K_linvel_tensor_min) / 2.0
