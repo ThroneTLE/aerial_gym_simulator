@@ -20,18 +20,18 @@ class control:
 
     #K_pos_tensor_max = [3.0, 3.0, 2.0]  # used for lee_position_control only
     #K_pos_tensor_min = [2.0, 2.0, 1.0]  # used for lee_position_control only
-    K_pos_tensor_max = [3.0, 3.0, 6.0]
-    K_pos_tensor_min = [2.0, 2.0, 4.0]
+    K_pos_tensor_max = [3.0, 3.0, 5.0]
+    K_pos_tensor_min = [1.0, 1.0, 1.5]
 
-    K_vel_tensor_max = [3.0, 3.0, 5.0]
-    K_vel_tensor_min = [2.0, 2.0, 3.0]
+    K_vel_tensor_max = [1.5, 1.5, 3.0]
+    K_vel_tensor_min = [1.0, 1.0, 2.0]
 
     #K_vel_tensor_max = [    3.0,    3.0,    3.0,  ]  # used for lee_position_control, lee_velocity_control only
     #K_vel_tensor_min = [2.0, 2.0, 2.0]
 
     # 新增：位置积分增益（用于消除稳态误差）
-    K_pos_i_tensor_max = [0.0, 0.0, 5.6]
-    K_pos_i_tensor_min = [0.0, 0.0, 0.01]
+    K_pos_i_tensor_max = [3.0, 3.0, 5.6]
+    K_pos_i_tensor_min = [0.1, 0.1, 0.01]
 
 
 

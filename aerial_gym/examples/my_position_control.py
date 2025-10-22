@@ -17,7 +17,7 @@ matplotlib.rcParams["axes.unicode_minus"] = False
 
 logger = CustomLogger(__name__)
 
-DEFAULT_THRUST_MARGIN = 1.9  # CODEx: 推力裕度，可调，用于适应更大总质量。
+DEFAULT_THRUST_MARGIN = 3.0  # CODEx: 推力裕度，可调，用于适应更大总质量。
 
 
 def adjust_motor_thrust_limits(env_manager, margin: float = DEFAULT_THRUST_MARGIN):  # CODEx
@@ -58,10 +58,10 @@ class Payload:  # CODEx
 # 直接修改下面列表即可调整每个子机的质量和相对于母机（base_link）质心的偏移。
 # offset 为 [x, y, z]，单位米；mass 单位 kg。
 PAYLOAD_LAYOUT: List[Payload] = [  # CODEx
-    Payload("front_left", 0.1, torch.tensor([0.16, 0.16, -0.05]), radius=0.045),
-    Payload("front_right", 0.1, torch.tensor([0.16, -0.16, -0.05]), radius=0.045),
-    Payload("rear_left", 0.1, torch.tensor([-0.16, 0.16, -0.05]), radius=0.045),
-    Payload("rear_right", 0.1, torch.tensor([-0.16, -0.16, -0.05]), radius=0.045),
+    Payload("front_left", 1, torch.tensor([0.16, 0.16, -0.05]), radius=0.045),
+    Payload("front_right",1, torch.tensor([0.16, -0.16, -0.05]), radius=0.045),
+    Payload("rear_left", 1, torch.tensor([-0.16, 0.16, -0.05]), radius=0.045),
+    Payload("rear_right", 1, torch.tensor([-0.16, -0.16, -0.05]), radius=0.045),
 ]
 
 
@@ -189,10 +189,13 @@ class PayloadManager:  # CODEx
 
         # 使用释放载荷的位置与重力产生扭矩脉冲，任何子机释放都触发横向响应  # CODEx
         gravity_vec = self.env_manager.IGE_env.global_tensor_dict["gravity"][0].to(self.device)
-        attached_before = sum(1 for attached in self.attached.values() if attached)
-        total_payloads = len(self.payloads)
-        scale = attached_before / total_payloads if total_payloads > 0 else 1.0
-        torque_impulse = -payload_cfg.mass * torch.cross(removed_offset, gravity_vec) * scale
+        
+        # [已删除] attached_before = ...
+        # [已删除] total_payloads = ...
+        # [已删除] scale = ...
+
+        # torque_impulse 现在是恒定的，不再乘以 scale
+        torque_impulse = -payload_cfg.mass * torch.cross(removed_offset, gravity_vec)
         if torch.linalg.norm(torque_impulse).item() > 1e-6:
             self.pending_torque_impulses.append(
                 {"torque": torque_impulse, "steps": torch.tensor(30, device=self.device)}
