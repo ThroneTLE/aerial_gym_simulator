@@ -30,8 +30,8 @@ class control:
     #K_vel_tensor_min = [2.0, 2.0, 2.0]
 
     # 新增：位置积分增益（用于消除稳态误差）
-    K_pos_i_tensor_max = [0.0, 0.0, 1.6]
-    K_pos_i_tensor_min = [0.0, 0.0, 0.2]
+    K_pos_i_tensor_max = [0.0, 0.0, 5.6]
+    K_pos_i_tensor_min = [0.0, 0.0, 0.01]
 
 
 

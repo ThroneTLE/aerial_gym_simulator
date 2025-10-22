@@ -5,9 +5,10 @@ from aerial_gym.utils.helpers import get_args
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 (needed for 3D projection)
+from matplotlib import animation  # CODEx: 用于三维动画重放
 import matplotlib
 from isaacgym import gymapi
-from aerial_gym.utils.math import quat_rotate_inverse, get_euler_xyz_tensor  # CODEx
+from aerial_gym.utils.math import quat_rotate_inverse, get_euler_xyz_tensor, ssa, quat_rotate  # CODEx
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
 
@@ -16,6 +17,33 @@ matplotlib.rcParams["axes.unicode_minus"] = False
 
 logger = CustomLogger(__name__)
 
+DEFAULT_THRUST_MARGIN = 1.9  # CODEx: 推力裕度，可调，用于适应更大总质量。
+
+
+def adjust_motor_thrust_limits(env_manager, margin: float = DEFAULT_THRUST_MARGIN):  # CODEx
+    """根据当前总质量调高电机推力上限，避免增重后推力不足导致坠落。
+    margin（建议 1.5~2.0）越大，允许的最大推力越高。"""
+    robot = env_manager.robot_manager.robot
+    allocator = robot.control_allocator
+    motor_model = allocator.motor_model
+    num_motors = allocator.cfg.num_motors
+
+    total_mass = env_manager.robot_manager.robot_mass
+    gravity_vec = env_manager.IGE_env.global_tensor_dict["gravity"][0]
+    gravity_mag = float(torch.linalg.norm(gravity_vec))
+    if gravity_mag == 0.0:
+        return
+
+    hover_thrust_per_motor = (total_mass * gravity_mag) / num_motors
+    max_thrust = hover_thrust_per_motor * margin
+
+    motor_model.max_thrust[:] = max_thrust
+    motor_model.min_thrust[:] = 0.0
+    logger.info(
+        f"[Thrust Tuning] mass={total_mass:.3f}kg, hover≈{hover_thrust_per_motor:.2f}N/电机, "
+        f"max_thrust=>{max_thrust:.2f}N (margin={margin:.2f})"
+    )
+
 
 @dataclass
 class Payload:  # CODEx
@@ -23,16 +51,17 @@ class Payload:  # CODEx
     name: str
     mass: float
     offset: torch.Tensor  # 3x tensor in base frame meters
+    radius: float = 0.05  # CODEx: 可单独调节每个子机可视化球体的半径。
 
 
 # === 子机布置参数 ===
 # 直接修改下面列表即可调整每个子机的质量和相对于母机（base_link）质心的偏移。
 # offset 为 [x, y, z]，单位米；mass 单位 kg。
 PAYLOAD_LAYOUT: List[Payload] = [  # CODEx
-    Payload("front_left", 0.095, torch.tensor([0.16, 0.16, -0.05])),
-    Payload("front_right", 0.095, torch.tensor([0.16, -0.16, -0.05])),
-    Payload("rear_left", 0.095, torch.tensor([-0.16, 0.16, -0.05])),
-    Payload("rear_right", 0.095, torch.tensor([-0.16, -0.16, -0.05])),
+    Payload("front_left", 0.1, torch.tensor([0.16, 0.16, -0.05]), radius=0.045),
+    Payload("front_right", 0.1, torch.tensor([0.16, -0.16, -0.05]), radius=0.045),
+    Payload("rear_left", 0.1, torch.tensor([-0.16, 0.16, -0.05]), radius=0.045),
+    Payload("rear_right", 0.1, torch.tensor([-0.16, -0.16, -0.05]), radius=0.045),
 ]
 
 
@@ -42,10 +71,12 @@ class PayloadManager:  # CODEx
         self.payloads = {payload.name: payload for payload in payloads}
         self.attached = {payload.name: True for payload in payloads}
         self.device = device
+        self.thrust_margin = DEFAULT_THRUST_MARGIN  # CODEx: 推力裕度调节点，后续可自行修改。
 
         self.gym = env_manager.IGE_env.gym
         self.env_ptr = env_manager.IGE_env.env_handles[0]
         self.robot_handle = env_manager.robot_manager.robot_handles[0]
+        self.sim = env_manager.IGE_env.sim
 
         # Deep copy rigid body properties so we can modify in-place
         self.body_props = self.gym.get_actor_rigid_body_properties(self.env_ptr, self.robot_handle)
@@ -65,8 +96,10 @@ class PayloadManager:  # CODEx
 
         self.mass_history: List[float] = []
         self.com_history: List[torch.Tensor] = []
+        self.pending_torque_impulses: List[Dict[str, torch.Tensor]] = []  # CODEx
+        self.base_state_view = env_manager.IGE_env.vec_root_tensor
 
-    def compute_total_properties(self) -> Tuple[torch.Tensor, torch.Tensor]:
+    def compute_total_properties(self) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Compute total mass and inertia with currently attached payloads."""
         total_mass = torch.tensor(self.base_mass, device=self.device)
         numerator_com = self.base_mass * self.base_com.clone()
@@ -128,6 +161,8 @@ class PayloadManager:  # CODEx
         controller_mass = torch.full((env.num_envs, 1), float(total_mass.item()), device=self.device)
         env.robot_manager.robot.controller.mass = controller_mass
 
+        adjust_motor_thrust_limits(self.env_manager, margin=self.thrust_margin)  # CODEx
+
         self.mass_history.append(float(total_mass.item()))
         self.com_history.append(combined_com.detach().cpu())
 
@@ -138,8 +173,34 @@ class PayloadManager:  # CODEx
         if not self.attached[name]:
             logger.warning(f"Payload '{name}' 已经释放，忽略重复命令。")
             return
+        prev_mass = self.current_mass()
+        payload_cfg = self.payloads[name]
+        removed_offset = payload_cfg.offset.to(self.device)
         self.attached[name] = False
         self.apply_to_sim()
+        new_mass = self.current_mass()
+
+        # 线速度动量补偿：保持线动量不变  # CODEx
+        root_state = self.env_manager.IGE_env.global_tensor_dict["vec_root_tensor"]
+        base_state = root_state[0, 0]
+        if new_mass > 1e-5:
+            velocity_scale = prev_mass / new_mass
+            base_state[7:10] *= velocity_scale
+
+        # 使用释放载荷的位置与重力产生扭矩脉冲，任何子机释放都触发横向响应  # CODEx
+        gravity_vec = self.env_manager.IGE_env.global_tensor_dict["gravity"][0].to(self.device)
+        attached_before = sum(1 for attached in self.attached.values() if attached)
+        total_payloads = len(self.payloads)
+        scale = attached_before / total_payloads if total_payloads > 0 else 1.0
+        torque_impulse = -payload_cfg.mass * torch.cross(removed_offset, gravity_vec) * scale
+        if torch.linalg.norm(torque_impulse).item() > 1e-6:
+            self.pending_torque_impulses.append(
+                {"torque": torque_impulse, "steps": torch.tensor(30, device=self.device)}
+            )
+
+        # 写回仿真器以确保刚更新的状态立即生效  # CODEx
+        self.env_manager.IGE_env.write_to_sim()
+
         logger.info(f"释放子无人机 {name}，剩余质量 {self.mass_history[-1]:.3f} kg。")
 
     def attach_payload(self, name: str):
@@ -148,12 +209,69 @@ class PayloadManager:  # CODEx
             return
         self.attached[name] = True
         self.apply_to_sim()
+        self.env_manager.IGE_env.write_to_sim()
 
     def current_mass(self) -> float:
         return self.mass_history[-1] if self.mass_history else self.base_mass
 
     def current_com(self) -> torch.Tensor:
         return self.com_history[-1] if self.com_history else self.base_com.cpu()
+
+    def consume_torque_impulse(self) -> torch.Tensor:
+        """返回当前需要施加的总扭矩（世界坐标），并更新剩余步数。"""  # CODEx
+        if not self.pending_torque_impulses:
+            return torch.zeros(3, device=self.device)
+        total = torch.zeros(3, device=self.device)
+        remaining: List[Dict[str, torch.Tensor]] = []
+        for item in self.pending_torque_impulses:
+            total += item["torque"]
+            steps_left = item["steps"] - 1
+            if steps_left.item() > 0:
+                item["steps"] = steps_left
+                remaining.append(item)
+        self.pending_torque_impulses = remaining
+        return total
+
+    def update_payload_visuals(self):
+        """保持仍挂载的子机球体与母机同步。"""  # CODEx
+        viewer_ctrl = self.env_manager.IGE_env.viewer
+        if viewer_ctrl is None or viewer_ctrl.viewer is None:
+            return
+
+        viewer = viewer_ctrl.viewer
+
+        if hasattr(self.gym, "clear_lines"):
+            self.gym.clear_lines(viewer)
+
+        base_state = self.base_state_view[0, 0]
+        base_pos = base_state[0:3]
+        base_quat = base_state[3:7]
+
+        for name, payload in self.payloads.items():
+            if not self.attached[name]:
+                continue
+            offset_world = quat_rotate(
+                base_quat.unsqueeze(0), payload.offset.unsqueeze(0).to(self.device)
+            ).squeeze(0)
+            payload_pos = base_pos + offset_world
+
+            axes = [
+                torch.tensor([payload.radius, 0.0, 0.0], device=self.device),
+                torch.tensor([0.0, payload.radius, 0.0], device=self.device),
+                torch.tensor([0.0, 0.0, payload.radius], device=self.device),
+            ]
+
+            verts = []
+            for axis in axes:
+                p1 = payload_pos - axis
+                p2 = payload_pos + axis
+                verts.append(p1.cpu().numpy())
+                verts.append(p2.cpu().numpy())
+
+            if verts:
+                verts_np = np.asarray(verts, dtype=np.float32)
+                colors_np = np.asarray([[0.2, 0.6, 1.0]] * len(verts), dtype=np.float32)
+                self.gym.add_lines(viewer, self.env_ptr, len(verts) // 2, verts_np, colors_np)
 
 
 def run_controller(controller_name, args, results):
@@ -175,6 +293,17 @@ def run_controller(controller_name, args, results):
     )
 
     env_manager.reset()  # CODEx
+
+    # 调整控制器积分增益（特别是 X/Y 方向），并提升积分限幅以减少稳态偏差。  # CODEx
+    controller = env_manager.robot_manager.robot.controller
+    xy_i_max = torch.tensor([0.6, 0.6], device=device)
+    xy_i_min = torch.tensor([0.2, 0.2], device=device)
+    xy_i_cur = torch.tensor([0.4, 0.4], device=device)
+    controller.K_pos_i_tensor_max[:, :2] = xy_i_max
+    controller.K_pos_i_tensor_min[:, :2] = xy_i_min
+    controller.K_pos_i_tensor_current[:, :2] = xy_i_cur
+    controller.pos_integral_clamp = 5.0
+    controller.pos_integral[:] = 0.0
 
     initial_state = torch.zeros(13, device=device)
     initial_state[6] = 1.0
@@ -231,6 +360,11 @@ def run_controller(controller_name, args, results):
             world_force = force_vec.unsqueeze(0).expand(orientations.shape[0], -1)
             body_force = quat_rotate_inverse(orientations, world_force)
             robot_force[:, body_index, :] += body_force
+        torque_world = payload_manager.consume_torque_impulse()
+        if torch.linalg.norm(torque_world).item() > 0.0:
+            robot_torque = manager.IGE_env.global_tensor_dict["robot_torque_tensor"]
+            torque_body = quat_rotate_inverse(orientations, torque_world.unsqueeze(0).expand(orientations.shape[0], -1))
+            robot_torque[:, body_index, :] += torque_body
 
     errors, positions, velocities = [], [], []
     attitudes, mass_log, com_log = [], [], []
@@ -240,6 +374,7 @@ def run_controller(controller_name, args, results):
         if current_step in release_lookup:
             payload_manager.release_payload(release_lookup[current_step])  # CODEx
 
+        payload_manager.update_payload_visuals()  # CODEx
         env_manager.reset_tensors()
         env_manager.step(actions=actions, external_force_callback=external_force_callback)  # CODEx
         if not args.headless:
@@ -250,7 +385,7 @@ def run_controller(controller_name, args, results):
         errors.append(error.cpu().numpy())
         positions.append(obs["robot_position"].cpu().numpy())
         velocities.append(obs["robot_vehicle_linvel"].cpu().numpy())
-        attitudes.append(get_euler_xyz_tensor(obs["robot_orientation"]).cpu().numpy())  # CODEx
+        attitudes.append(ssa(get_euler_xyz_tensor(obs["robot_orientation"])).cpu().numpy())  # CODEx
         mass_log.append(payload_manager.current_mass())  # CODEx
         com_log.append(payload_manager.current_com().numpy())  # CODEx
 
@@ -383,5 +518,79 @@ if __name__ == "__main__":
         ax.set_zlabel("Z (米)")
         ax.legend()
         fig_traj.tight_layout()
+
+        # --- 三维动画重放（含简易飞机模型） ---  # CODEx
+        pos_anim = sim_results["positions"][:, 0, :]
+        att_anim = sim_results["attitudes"][:, 0, :]
+
+        def rpy_to_rot(rpy):
+            roll, pitch, yaw = rpy
+            cr, sr = np.cos(roll), np.sin(roll)
+            cp, sp = np.cos(pitch), np.sin(pitch)
+            cy, sy = np.cos(yaw), np.sin(yaw)
+            rot = np.array(
+                [
+                    [cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr],
+                    [sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr],
+                    [-sp, cp * sr, cp * cr],
+                ]
+            )
+            return rot
+
+        fig_anim = plt.figure(figsize=(8, 6))
+        ax_anim = fig_anim.add_subplot(111, projection="3d")
+        ax_anim.set_title("无人机姿态与轨迹动画")
+        ax_anim.set_xlabel("X (米)")
+        ax_anim.set_ylabel("Y (米)")
+        ax_anim.set_zlabel("Z (米)")
+
+        padding = 0.2
+        ax_anim.set_xlim(pos_anim[:, 0].min() - padding, pos_anim[:, 0].max() + padding)
+        ax_anim.set_ylim(pos_anim[:, 1].min() - padding, pos_anim[:, 1].max() + padding)
+        ax_anim.set_zlim(pos_anim[:, 2].min() - padding, pos_anim[:, 2].max() + padding)
+
+        path_line, = ax_anim.plot([], [], [], "k--", alpha=0.4)
+        arm_colors = ["r", "g", "b"]
+        arm_lines = [ax_anim.plot([], [], [], color=col, lw=2)[0] for col in arm_colors]
+
+        arm_length = 0.25  # CODEx: 飞机臂长度，可根据模型调整
+        arm_vectors = np.array(
+            [
+                [[-arm_length, 0.0, 0.0], [arm_length, 0.0, 0.0]],
+                [[0.0, -arm_length, 0.0], [0.0, arm_length, 0.0]],
+                [[0.0, 0.0, -0.08], [0.0, 0.0, 0.08]],
+            ]
+        )
+
+        def init_anim():
+            path_line.set_data([], [])
+            path_line.set_3d_properties([])
+            for line in arm_lines:
+                line.set_data([], [])
+                line.set_3d_properties([])
+            return [path_line, *arm_lines]
+
+        def update_anim(frame):
+            pos = pos_anim[frame]
+            rot = rpy_to_rot(att_anim[frame])
+
+            path_line.set_data(pos_anim[: frame + 1, 0], pos_anim[: frame + 1, 1])
+            path_line.set_3d_properties(pos_anim[: frame + 1, 2])
+
+            for idx, line in enumerate(arm_lines):
+                endpoints = arm_vectors[idx] @ rot.T + pos
+                line.set_data(endpoints[:, 0], endpoints[:, 1])
+                line.set_3d_properties(endpoints[:, 2])
+            return [path_line, *arm_lines]
+
+        anim = animation.FuncAnimation(
+            fig_anim,
+            update_anim,
+            init_func=init_anim,
+            frames=len(pos_anim),
+            interval=40,
+            blit=True,
+            repeat=True,
+        )
 
         plt.show()
