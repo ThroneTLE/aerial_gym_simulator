@@ -11,31 +11,41 @@ adjust_lee_control.py
    pip install stable-baselines3[extra]
 3. 如果在 GPU 上训练，请确认 CUDA 可用并设置好 `CUDA_VISIBLE_DEVICES`。
 4. 本脚本默认使用 12 维连续动作（Kp/Kv/Kr/Ko 的 xyz 分量），
-   可根据需要在 PARAM_SPECS 中调整上下界或添加新的待优化参数。
+   可根据需要在 TrainingSettings.param_specs 中调整上下界或添加新的待优化参数。
+5. 如需观察画面，可启动脚本时附加 `--viewer` 关闭 headless 并打开 Isaac Gym viewer。
 
 注意事项
 --------
 - 训练本质上仍然是黑盒优化，时间开销取决于仿真耗时与并行环境数量。
-- 为了方便复现，我们使用 DummyVecEnv（单环境）；若要并行，可把 `NUM_ENV_WORKERS` 改成 >1 并使用 SubprocVecEnv。
+- 为了方便复现，我们使用 DummyVecEnv（单环境）；若要并行，可在 TrainingSettings.num_env_workers 中调大并使用 SubprocVecEnv。
 - 每次评估都会重新构建仿真环境，避免状态污染，但也意味着训练较耗时。
 """
 
 import argparse
-import os
+import json
 import math
-from dataclasses import dataclass
+import os
+import time
+from dataclasses import dataclass, field
 from typing import Dict, List, Tuple
+
+import numpy as np
+if not hasattr(np, "int"):
+    np.int = int
+if not hasattr(np, "float"):
+    np.float = float
 
 # NOTE: 为避免 “PyTorch 先于 Isaac Gym 导入” 的报错，先导入 isaacgym 模块，再导入 torch。  # CODEx
 from isaacgym import gymapi  # noqa: F401  (仅为触发正确的导入顺序)
 
 import gym
-import numpy as np
 import torch
 from gym import spaces
+import matplotlib.pyplot as plt
 
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv
+from stable_baselines3.common.callbacks import BaseCallback
 
 from aerial_gym.sim.sim_builder import SimBuilder
 from aerial_gym.examples.my_position_control import adjust_motor_thrust_limits  # CODEx
@@ -53,42 +63,135 @@ ENV_NAME = "empty_env"
 ROBOT_NAME = "base_quadrotor"
 CONTROLLER_NAME = "lee_position_control"
 
-# 评估时的仿真步数（越大越准确，越耗时）
-EVAL_HORIZON = 2500
 
-# 子机释放时间表（仿真步）
-RELEASE_PLAN = [
-    (500, "rear_right"),
-    (1000, "front_left"),
-    (1500, "front_right"),
-    (2000, "rear_left"),
-]
+@dataclass
+class TrainingSettings:
+    """集中管理主要训练超参数，修改此处即可批量调整实验设置。
 
-# RL 训练总步数（越大效果越好，但耗时更久）
-TOTAL_TIMESTEPS = 400
+    - eval_horizon: 单次评估的仿真步数，越大越稳，耗时越久。
+    - total_timesteps: PPO 训练的总步数，决定训练时长。
+    - num_env_workers: DummyVecEnv 并行环境数量，增大可加速但占显存。
+    - thrust_margin: 调整电机最大推力的裕量，匹配质量变化需求。
+    - best_result_path: 保存最优增益结果的文件路径。
+    - release_plan: 子机释放时间表，单位为仿真步。
+    - param_specs: 各增益的搜索上下界。
+    - loss_weights: 损失函数中各指标的权重。
+    """
 
-# 并行环境数量（由于评估较重，默认单环境；如要并行可改成更大的值）
-NUM_ENV_WORKERS = 8
+    eval_horizon: int = 600
+    total_timesteps: int = 320
+    num_env_workers: int = 16
+    thrust_margin: float = 2.5
+    best_result_path: str = "best_lee_gains.json"
+    release_plan: List[Tuple[int, str]] = field(
+        default_factory=lambda: [
+            (500, "rear_right"),
+            (1000, "front_left"),
+            (1500, "front_right"),
+            (2000, "rear_left"),
+        ]
+    )
+    param_specs: List[Tuple[str, int, List[float]]] = field(
+        default_factory=lambda: [
+            ("K_pos_xyz", 3, [0.5, 3.0]),
+            ("K_vel_xyz", 3, [0.3, 4.0]),
+            ("K_rot_xyz", 3, [0.2, 1.0]),
+            ("K_angvel_xyz", 3, [0.05, 0.5]),
+        ]
+    )
+    loss_weights: Dict[str, float] = field(
+        default_factory=lambda: {
+            "pos_rmse": 1.0,
+            "att_rmse": 0.6,
+            "force_mean": 0.2,
+            "final_error": 1.5,
+        }
+    )
+    ppo_n_steps: int = 64  # 每次 rollout 的步数，越大越平滑
+    ppo_batch_size: int = 256  # PPO 训练 batch 大小
+    ppo_verbose: int = 1  # Stable-Baselines3 的日志打印级别
+    tensorboard_log: str = None  # 若需要写 TensorBoard 日志，可设置目录路径
+    metrics_plot_path: str = "ppo_metrics.png"  # 训练结束后保存误差曲线图的路径
 
-# 推力裕度（与 my_position_control.py 中保持一致）
-DEFAULT_THRUST_MARGIN = 2.5
 
-# 待优化的参数范围定义（收窄范围以避免不稳定的仿真爆炸） # CODEx
-PARAM_SPECS = [
-    ("K_pos_xyz", 3, [0.5, 3.0]),
-    ("K_vel_xyz", 3, [0.3, 4.0]),
-    ("K_rot_xyz", 3, [0.2, 1.0]),
-    ("K_angvel_xyz", 3, [0.05, 0.5]),
-]
+CONFIG = TrainingSettings()
 
 
-# 评价指标的权重
-LOSS_WEIGHTS = {
-    "pos_rmse": 1.0,
-    "att_rmse": 0.6,
-    "force_mean": 0.2,
-    "final_error": 1.5,
-}
+class ResultsTracker:
+    """记录并保存当前最佳增益与指标。"""
+
+    def __init__(self, path: str):
+        self.path = path
+        self.best_payload = None
+
+    def update(self, gains: np.ndarray, metrics: Dict[str, float]):
+        reward = -metrics["loss"]
+        if self.best_payload is None or reward > self.best_payload.get("reward", -np.inf):
+            payload = {
+                "reward": float(reward),
+                "gains": gains.astype(float).tolist(),
+                "timestamp": time.time(),
+                **{k: float(v) for k, v in metrics.items()},
+            }
+            self.best_payload = payload
+            try:
+                with open(CONFIG.best_result_path, "w", encoding="utf-8") as f:
+                    json.dump(payload, f, indent=2)
+            except OSError as err:
+                print(f"[adjust_lee_control] 写入 {CONFIG.best_result_path} 失败: {err}")
+
+
+class MetricsRecorder(BaseCallback):
+    """Record metrics during PPO training and save convergence plots."""
+
+    def __init__(self, plot_path: str):
+        super().__init__()
+        self.plot_path = plot_path
+        self.history = {
+            "pos_rmse": {"x": [], "y": []},
+            "att_rmse": {"x": [], "y": []},
+            "force_mean": {"x": [], "y": []},
+            "final_error": {"x": [], "y": []},
+            "loss": {"x": [], "y": []},
+        }
+
+    def _on_step(self) -> bool:
+        infos = self.locals.get("infos", [])
+        if not infos:
+            return True
+        for info in infos:
+            if not info:
+                continue
+            for key, store in self.history.items():
+                val = info.get(key)
+                if val is None or not isinstance(val, (int, float)):
+                    continue
+                if np.isfinite(val):
+                    store["x"].append(self.num_timesteps)
+                    store["y"].append(float(val))
+                    self.logger.record(f"metrics/{key}", float(val))
+        return True
+
+    def _on_training_end(self) -> None:
+        if not any(store["y"] for store in self.history.values()):
+            return
+        plt.figure(figsize=(8, 5))
+        for key, store in self.history.items():
+            if store["y"]:
+                plt.plot(store["x"], store["y"], label=key)
+        plt.xlabel("Timesteps")
+        plt.ylabel("Metric value")
+        plt.title("PPO Evaluation Metrics")
+        plt.grid(True, alpha=0.3)
+        plt.legend()
+        try:
+            plt.savefig(self.plot_path, dpi=150)
+            print(f"[adjust_lee_control] metrics plot saved to {self.plot_path}")
+        except OSError as err:
+            print(f"[adjust_lee_control] failed to save metrics plot: {err}")
+        finally:
+            plt.close()
+
 
 # 子机布置（质量/偏移/半径，仅用于动态更新惯量；若在 URDF 中已有模型，可保持一致）
 PAYLOAD_LAYOUT = [
@@ -204,7 +307,7 @@ class SimplePayloadManager:
         controller_mass = torch.full((env.num_envs, 1), float(total_mass.item()), device=self.device)
         env.robot_manager.robot.controller.mass = controller_mass
 
-        adjust_motor_thrust_limits(env_manager=self.env_manager, margin=DEFAULT_THRUST_MARGIN)
+        adjust_motor_thrust_limits(env_manager=self.env_manager, margin=CONFIG.thrust_margin)
 
         self.mass_history.append(float(total_mass.item()))
         self.com_history.append(combined_com.detach().cpu())
@@ -228,12 +331,8 @@ class SimplePayloadManager:
             scale = prev_mass / new_mass
             base_state[7:10] *= scale
 
-        # 衰减扭矩冲击强度，避免最后一次释放过度
-        attached_before = sum(v for v in self.attached.values()) + 1  # 包含当前已释放的这一只
-        total_payloads = len(self.payloads)
-        torque_scale = max(attached_before / total_payloads, 0.25)
-        gravity_vec = self.env_manager.IGE_env.global_tensor_dict["gravity"][0].to(self.device)
-        torque_impulse = -payload.mass * torch.cross(offset, gravity_vec) * torque_scale
+        gravitational = self.env_manager.IGE_env.global_tensor_dict["gravity"][0].to(self.device)
+        torque_impulse = -payload.mass * torch.cross(offset, gravitational)
         if torch.linalg.norm(torque_impulse).item() > 1e-6:
             self.pending_impulses.append(
                 {"torque": torque_impulse, "steps": torch.tensor(45, device=self.device)}
@@ -281,7 +380,7 @@ def tensor33_to_mat33(m: np.ndarray) -> gymapi.Mat33:
 class LeeGainTuningEnv(gym.Env):
     metadata = {"render.modes": []}
 
-    def __init__(self, device: str = None, eval_horizon: int = EVAL_HORIZON):
+    def __init__(self, device: str = None, eval_horizon: int = None, headless: bool = True):
         super().__init__()
         device_str = device or ("cuda:0" if torch.cuda.is_available() else "cpu")
         if isinstance(device_str, torch.device):
@@ -290,9 +389,12 @@ class LeeGainTuningEnv(gym.Env):
             )
         self.device_str = device_str
         self.device = torch.device(device_str)
-        self.eval_horizon = eval_horizon
+        self.eval_horizon = eval_horizon if eval_horizon is not None else CONFIG.eval_horizon
+        self.headless = headless
 
-        self.param_specs = PARAM_SPECS
+        self.param_specs = CONFIG.param_specs
+        self.loss_weights = CONFIG.loss_weights
+        self.release_plan = CONFIG.release_plan
         self.param_count = sum(spec[1] for spec in self.param_specs)
 
         self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(self.param_count,), dtype=np.float32)
@@ -333,7 +435,20 @@ class LeeGainTuningEnv(gym.Env):
         info = metrics
 
         if reward > self.best_result.get("reward", -np.inf):
-            self.best_result = {"reward": reward, "gains": gains, **metrics}
+            payload = {
+                "reward": float(reward),
+                "gains": gains.astype(float).tolist(),
+                "timestamp": time.time(),
+                **{k: float(v) for k, v in metrics.items()},
+            }
+            self.best_result = payload
+            try:
+                with open(CONFIG.best_result_path, "w", encoding="utf-8") as f:
+                    json.dump(payload, f, indent=2)
+            except OSError as err:
+                print(
+                    f"[adjust_lee_control] 写入 {CONFIG.best_result_path} 失败: {err}"
+                )
 
         return self.current_obs.copy(), reward, done, info
 
@@ -352,7 +467,7 @@ class LeeGainTuningEnv(gym.Env):
                 args=None,
                 device=self.device_str,
                 num_envs=1,
-                headless=True,
+                headless=self.headless,
                 use_warp=True,
             )
 
@@ -409,7 +524,7 @@ class LeeGainTuningEnv(gym.Env):
         env_manager.reset()
 
         target = torch.tensor([[0.0, 0.0, 0.0, 0.0]], device=self.device)
-        release_lookup = {step: name for step, name in RELEASE_PLAN}
+        release_lookup = {step: name for step, name in self.release_plan}
 
         pos_errors = []
         att_errors = []
@@ -461,11 +576,12 @@ class LeeGainTuningEnv(gym.Env):
         force_mean = torch.stack(control_effort).mean().item()
         final_error = pos_errors[-1].item()
 
+        lw = self.loss_weights
         loss = (
-            LOSS_WEIGHTS["pos_rmse"] * pos_rmse
-            + LOSS_WEIGHTS["att_rmse"] * att_rmse
-            + LOSS_WEIGHTS["force_mean"] * force_mean
-            + LOSS_WEIGHTS["final_error"] * final_error
+            lw["pos_rmse"] * pos_rmse
+            + lw["att_rmse"] * att_rmse
+            + lw["force_mean"] * force_mean
+            + lw["final_error"] * final_error
         )
 
         return {
@@ -482,9 +598,9 @@ class LeeGainTuningEnv(gym.Env):
         return action
 
 
-def make_env(device: str):
+def make_env(device: str, headless: bool = True):
     def _init():
-        return LeeGainTuningEnv(device=device)
+        return LeeGainTuningEnv(device=device, headless=headless)
 
     return _init
 
@@ -492,30 +608,38 @@ def make_env(device: str):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--device", default=None, help="用于仿真和训练的设备，如 cuda:0 或 cpu")
-    parser.add_argument("--timesteps", type=int, default=TOTAL_TIMESTEPS, help="训练步数")
+    parser.add_argument("--timesteps", type=int, default=CONFIG.total_timesteps, help="训练步数")
+    parser.add_argument("--ppo-n-steps", type=int, default=CONFIG.ppo_n_steps, help="PPO 每次 rollout 的步数 n_steps")
+    parser.add_argument("--ppo-batch-size", type=int, default=CONFIG.ppo_batch_size, help="PPO 训练 batch_size")
+    parser.add_argument("--ppo-verbose", type=int, default=CONFIG.ppo_verbose, help="PPO verbose 日志等级")
+    parser.add_argument("--tensorboard-log", default=CONFIG.tensorboard_log, help="TensorBoard 日志目录 (可选)")
+    parser.add_argument("--metrics-plot", default=CONFIG.metrics_plot_path, help="保存误差曲线图的路径")
+    parser.add_argument("--viewer", action="store_true", help="关闭 headless，打开 Isaac Gym viewer")
     args = parser.parse_args()
 
-    env_fns = [make_env(args.device) for _ in range(NUM_ENV_WORKERS)]
+    headless = not args.viewer
+    env_fns = [make_env(args.device, headless=headless) for _ in range(CONFIG.num_env_workers)]
     vec_env = DummyVecEnv(env_fns)
 
     model = PPO(
         "MlpPolicy",
         vec_env,
-        n_steps=256,
-        batch_size=64,
-        verbose=1,
-        tensorboard_log=None,
+        n_steps=args.ppo_n_steps,
+        batch_size=args.ppo_batch_size,
+        verbose=args.ppo_verbose,
+        tensorboard_log=args.tensorboard_log,
         device=args.device or ("cuda" if torch.cuda.is_available() else "cpu"),
     )
 
     total_timesteps = args.timesteps
-    model.learn(total_timesteps=total_timesteps, progress_bar=True)
+    metrics_callback = MetricsRecorder(args.metrics_plot)
+    model.learn(total_timesteps=total_timesteps, callback=metrics_callback, progress_bar=True)
 
     best = vec_env.envs[0].best_result
     print("\n================ 最优结果 ================")
     print(f"Reward: {best['reward']:.4f}")
     print(
-        "Gains vector (按 PARAM_SPECS 顺序识别):",
+        "Gains vector (按 TrainingSettings.param_specs 顺序识别):",
         np.asarray(best["gains"], dtype=np.float32),
     )
     print(
