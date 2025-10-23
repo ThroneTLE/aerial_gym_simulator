@@ -6,6 +6,7 @@ import os
 import time
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
+import sys
 
 # 确保 PyTorch 在 Isaac Gym 之后导入，避免 gymdeps 检查失败
 from isaacgym import gymapi  # noqa: F401
@@ -74,9 +75,9 @@ RELEASE_PLAN = [
 ]
 
 PARAM_SPECS = [
-    ("K_pos_xyz", 3, [0.5, 3.0]),
-    ("K_vel_xyz", 3, [0.3, 4.0]),
-    ("K_rot_xyz", 3, [0.2, 1.0]),
+    ("K_pos_xyz", 3, [0.5, 5.0]),
+    ("K_vel_xyz", 3, [0.3, 5.0]),
+    ("K_rot_xyz", 3, [0.2, 3.0]),
     ("K_angvel_xyz", 3, [0.05, 0.5]),
 ]
 
@@ -95,10 +96,10 @@ LOSS_WEIGHTS = {
 
 # 子机参数（质量 / 偏移）
 PAYLOAD_LAYOUT = [
-    ("front_left", 1.0, torch.tensor([0.16, 0.16, -0.05])),
-    ("front_right", 1.0, torch.tensor([0.16, -0.16, -0.05])),
-    ("rear_left", 1.0, torch.tensor([-0.16, 0.16, -0.05])),
-    ("rear_right", 1.0, torch.tensor([-0.16, -0.16, -0.05])),
+    ("front_left", 0.5, torch.tensor([0.16, 0.16, -0.05])),
+    ("front_right", 0.5, torch.tensor([0.16, -0.16, -0.05])),
+    ("rear_left", 0.5, torch.tensor([-0.16, 0.16, -0.05])),
+    ("rear_right", 0.5, torch.tensor([-0.16, -0.16, -0.05])),
 ]
 
 
@@ -866,6 +867,59 @@ def plot_loss_curves(loss_history: Dict[str, List[Tuple[int, float]]]):
         print(f"无法直接显示图像，已将曲线保存到 {output_path}: {exc}")
 
 
+def plot_eval_history(history_path: Optional[str]):
+    if not history_path or not os.path.exists(history_path):
+        return
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print("未检测到 matplotlib，无法绘制评估历史。")
+        return
+
+    records = []
+    try:
+        with open(history_path, "r", encoding="utf-8") as fp:
+            for line in fp:
+                entry = line.strip()
+                if not entry:
+                    continue
+                try:
+                    records.append(json.loads(entry))
+                except json.JSONDecodeError:
+                    continue
+    except OSError as exc:
+        print(f"读取评估历史失败: {exc}")
+        return
+
+    if not records:
+        print("评估历史为空，跳过绘图。")
+        return
+
+    indices = list(range(1, len(records) + 1))
+    metric_keys = ["reward", "pos_rmse", "att_rmse", "force_mean", "final_error"]
+    metric_keys = [k for k in metric_keys if all(k in r for r in records)]
+    if not metric_keys:
+        return
+
+    fig, axes = plt.subplots(len(metric_keys), 1, figsize=(8, 2.5 * len(metric_keys)), sharex=True)
+    if len(metric_keys) == 1:
+        axes = [axes]
+    for ax, key in zip(axes, metric_keys):
+        values = [float(r[key]) for r in records]
+        ax.plot(indices, values, marker="o", label=key)
+        ax.set_ylabel(key)
+        ax.grid(alpha=0.3)
+        ax.legend()
+    axes[-1].set_xlabel("Evaluation index")
+    fig.tight_layout()
+    try:
+        plt.show()
+    except Exception as exc:
+        output_path = "rl_games_eval_history.png"
+        fig.savefig(output_path)
+        print(f"无法直接显示评估曲线，已保存到 {output_path}: {exc}")
+
+
 # ---------------------------- RL Games 配置 ---------------------------- #
 
 def create_config(num_workers: int, max_epochs: int) -> Dict:
@@ -931,6 +985,7 @@ def create_config(num_workers: int, max_epochs: int) -> Dict:
                 "score_to_win": 1e9,
                 "player": {"render": False, "deterministic": True},
                 "reward_shaper": {"scale_value": 1.0},
+                "print_stats": False,
             },
         }
     }
@@ -1019,7 +1074,25 @@ def main():
         run_args = {"train": True}
         if args.load_checkpoint:
             run_args["checkpoint"] = args.load_checkpoint
-        runner.run(run_args)
+        # --- 开始重定向 ---
+        # 保存原始的 stdout
+        original_stdout = sys.stdout 
+        try:
+            # 打开 "空设备" (在 Windows 上是 'nul', 
+            # 在 Linux/macOS 上是 '/dev/null')
+            f = open(os.devnull, 'w')
+            # 将 stdout 重定向到 "空设备"
+            sys.stdout = f
+            
+            # 运行训练，此时所有 print() 都被丢弃
+            runner.run(run_args)
+            
+        finally:
+            # 恢复 stdout，以便后续的 print() (如 '最佳增益') 可以正常工作
+            sys.stdout = original_stdout
+            f.close()
+        # --- 结束重定向 ---
+
     finally:
         observer.close()
 
@@ -1031,6 +1104,7 @@ def main():
 
     loss_history = observer.get_loss_history()
     plot_loss_curves(loss_history)
+    plot_eval_history(args.history_path)
 
 
 if __name__ == "__main__":
