@@ -1,38 +1,11 @@
-"""
-adjust_lee_rl_gamer_control.py
-===============================
-
-使用 `rl_games` 框架对 Lee 控制器的增益进行黑盒优化，相比单环境 + SB3 的方案，
-这里借助 rl-games 的高吞吐 PPO 实现更高效的并行评估。
-
-脚本要点
---------
-* 复用 `adjust_lee_control.py` 里同样的仿真评估逻辑，但将其包装为单步 Gym 环境。
-* 通过自定义 `vecenv` 将多个评估环境并行运行，充分利用 GPU（RTX 4060）。
-* 使用 rl-games 的 Runner 直接加载配置字典并启动训练，训练过程中不断把最佳增益写入 JSON。
-
-运行方式
---------
-```bash
-python -m aerial_gym.examples.adjust_lee_rl_gamer_control \
-    --device cuda:0 \
-    --num-envs 4 \
-    --total-timesteps 256 \
-    --eval-horizon 600 \
-    --max-epochs 128 \
-    --best-path best_lee_gains_rlg.json
-```
-
-训练完成后可在 `best_lee_gains_rlg.json` 中查看当前最优增益以及各项指标。
-"""
+"""Tune Lee controller gains with rl-games PPO and multi-env Isaac Gym."""
 
 import argparse
 import json
-import math
 import os
 import time
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 # 确保 PyTorch 在 Isaac Gym 之后导入，避免 gymdeps 检查失败
 from isaacgym import gymapi  # noqa: F401
@@ -42,7 +15,14 @@ from gym import spaces
 import numpy as np
 import torch
 
+# 兼容旧版依赖（如 networkx）仍引用 NumPy 早期别名的情况
+if not hasattr(np, "int"):  # pragma: no cover - 仅针对旧依赖补丁
+    np.int = int  # type: ignore[attr-defined]
+if not hasattr(np, "float"):
+    np.float = float  # type: ignore[attr-defined]
+
 from rl_games.common import env_configurations, vecenv
+from rl_games.common.algo_observer import AlgoObserver
 from rl_games.torch_runner import Runner
 
 from aerial_gym.sim.sim_builder import SimBuilder
@@ -54,22 +34,38 @@ from aerial_gym.utils.math import (
     ssa,
 )
 
+from tqdm import tqdm
+
+gym.logger.set_level(gym.logger.ERROR)
+
 
 # ---------------------------- 常量与配置 ---------------------------- #
 
+# -- 基础环境配置 --
 SIM_NAME = "base_sim"
 ENV_NAME = "empty_env"
 ROBOT_NAME = "base_quadrotor"
 CONTROLLER_NAME = "lee_position_control"
 
-# 默认评估步数 / RL 总步数，可通过命令行覆盖
-DEFAULT_EVAL_HORIZON = 600
-DEFAULT_TOTAL_TIMESTEPS = 160
-DEFAULT_NUM_ENV_WORKERS = 4
+# -- 强化学习训练默认值 --
+DEFAULT_EVAL_HORIZON = 500     # rollout 步数，越大评估越长
+DEFAULT_TOTAL_TIMESTEPS = 320   # 估算训练总步数，用于推断 max_epochs
+DEFAULT_NUM_WORKERS = 1        # rl-games 并行 actor 数量
+DEFAULT_SIM_NUM_ENVS = 2048       # Isaac Gym 中的并行无人机数量
+DEFAULT_MAX_EPOCHS = 128        # rl-games 训练的最大 epoch 数
 
-DEFAULT_THRUST_MARGIN = 2.5
+# -- 仿真物理/控制参数 --
+DEFAULT_THRUST_MARGIN = 2.5     # 推力裕度，决定最大推力倍数
+DEFAULT_HEADLESS = False         # True=关闭查看器，False=开启可视化
+DEFAULT_USE_WARP = True         # Warp 物理加速开关
 
-# 子机释放时间表（仿真步） # CODEx
+# -- 训练日志与检查点 --
+DEFAULT_EXPERIMENT_NAME = "lee_gain_tune"
+DEFAULT_HISTORY_PATH = "rlg_eval_history.jsonl"
+DEFAULT_METRIC_LOG_PATH = "rlg_metric_log.jsonl"
+DEFAULT_CHECKPOINT_DIR = "rlg_checkpoints"
+
+# -- 任务场景配置 --
 RELEASE_PLAN = [
     (500, "rear_right"),
     (1000, "front_left"),
@@ -77,7 +73,6 @@ RELEASE_PLAN = [
     (2000, "rear_left"),
 ]
 
-# 增益范围（与 adjust_lee_control 中保持一致，但适当收窄）
 PARAM_SPECS = [
     ("K_pos_xyz", 3, [0.5, 3.0]),
     ("K_vel_xyz", 3, [0.3, 4.0]),
@@ -92,6 +87,12 @@ LOSS_WEIGHTS = {
     "final_error": 1.5,
 }
 
+# 训练监控提示：
+# - Policy 表现：reward = -loss，best_payload 会记录 pos/att RMSE、力均值、最终误差，趋势向好代表收敛。
+# - 损失曲线：losses/a_loss、losses/c_loss、losses/entropy 写入 metric_log，可配合 plot_loss_curves() 评估训练。
+# - 方差与稳定性：history_path 记录每次评估指标，可离线分析 reward 波动或绘制箱线图。
+# - 策略评估：best_lee_gains_rlg.json 与 checkpoint_dir 中的权重可用于重放、恢复意外中断的训练。
+
 # 子机参数（质量 / 偏移）
 PAYLOAD_LAYOUT = [
     ("front_left", 1.0, torch.tensor([0.16, 0.16, -0.05])),
@@ -99,6 +100,14 @@ PAYLOAD_LAYOUT = [
     ("rear_left", 1.0, torch.tensor([-0.16, 0.16, -0.05])),
     ("rear_right", 1.0, torch.tensor([-0.16, -0.16, -0.05])),
 ]
+
+
+def _ensure_parent_dir(path: Optional[str]) -> None:
+    if not path:
+        return
+    directory = os.path.dirname(path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
 
 
 # ---------------------------- 数据结构 ---------------------------- #
@@ -110,30 +119,227 @@ class Payload:
     offset: torch.Tensor
 
 
-class ResultsTracker:
-    """
-    记录并保存当前最佳增益与指标。
-    """
+class MetricRecorder:
+    """Append scalar metrics to a JSONL file for post-run analysis."""
 
-    def __init__(self, path: str):
+    def __init__(self, path: Optional[str]):
         self.path = path
-        self.best_payload = None
+        if self.path:
+            _ensure_parent_dir(self.path)
+            # 创建/清空文件头部，防止旧内容混淆
+            with open(self.path, "w", encoding="utf-8") as f:
+                f.write("")
+
+    def log(self, tag: str, value: float, step: Optional[int] = None, walltime: Optional[float] = None):
+        if self.path is None or value is None:
+            return
+        entry = {
+            "tag": tag,
+            "value": float(value),
+            "step": int(step) if step is not None else None,
+            "walltime": float(walltime) if walltime is not None else None,
+            "timestamp": time.time(),
+        }
+        with open(self.path, "a", encoding="utf-8") as fp:
+            fp.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+class ResultsTracker:
+    """记录评估指标，并在出现更优策略时保存。"""
+
+    def __init__(self, best_path: str, history_path: Optional[str] = None):
+        self.best_path = best_path
+        self.history_path = history_path
+        _ensure_parent_dir(self.best_path)
+        if self.history_path:
+            _ensure_parent_dir(self.history_path)
+        self.best_payload: Optional[Dict[str, object]] = None
 
     def update(self, gains: np.ndarray, metrics: Dict[str, float]):
-        reward = -metrics["loss"]
-        if self.best_payload is None or reward > self.best_payload["reward"]:
-            payload = {
-                "reward": float(reward),
-                "gains": gains.astype(float).tolist(),
-                "timestamp": time.time(),
-                **{k: float(v) for k, v in metrics.items()},
-            }
-            self.best_payload = payload
+        entry = {
+            "reward": float(-metrics["loss"]),
+            "gains": gains.astype(float).tolist(),
+            "timestamp": time.time(),
+            **{k: float(v) for k, v in metrics.items()},
+        }
+        is_best = self.best_payload is None or entry["reward"] > self.best_payload["reward"]
+        entry["is_best"] = is_best
+        self._append_history(entry)
+        if is_best:
+            self.best_payload = entry
             try:
-                with open(self.path, "w", encoding="utf-8") as f:
-                    json.dump(payload, f, indent=2)
+                with open(self.best_path, "w", encoding="utf-8") as fp:
+                    json.dump(entry, fp, indent=2, ensure_ascii=False)
             except OSError as exc:
-                print(f"[adjust_lee_rl_gamer_control] 写入 {self.path} 失败: {exc}")
+                print(f"[adjust_lee_rl_gamer_control] 写入 {self.best_path} 失败: {exc}")
+
+    def _append_history(self, payload: Dict[str, object]):
+        if not self.history_path:
+            return
+        try:
+            with open(self.history_path, "a", encoding="utf-8") as fp:
+                fp.write(json.dumps(payload, ensure_ascii=False) + "\n")
+        except OSError as exc:
+            print(f"[adjust_lee_rl_gamer_control] 写入 {self.history_path} 失败: {exc}")
+
+
+class ProgressObserver(AlgoObserver):
+    """
+    自定义 observer：使用 tqdm 展示训练进度，并记录损失曲线以便会后绘图。
+    """
+
+    def __init__(self, total_epochs: int, tracker: ResultsTracker, metric_recorder: Optional[MetricRecorder] = None):
+        super().__init__()
+        self.requested_total = int(total_epochs) if total_epochs and total_epochs > 0 else None
+        self.tracker = tracker
+        self.metric_recorder = metric_recorder
+        self.pbar = None
+        self.algo = None
+        self.loss_history = {}
+        self._wrapped_writer = False
+        self._original_add_scalar = None
+        self._last_epoch = 0
+        self._last_logged_best_epoch = 0
+
+    def before_init(self, base_name, config, experiment_name):
+        if self.requested_total is None:
+            max_epochs = config.get("max_epochs", -1)
+            if isinstance(max_epochs, int) and max_epochs > 0:
+                self.requested_total = max_epochs
+
+    def after_init(self, algo):
+        self.algo = algo
+        algo_max_epochs = getattr(algo, "max_epochs", -1)
+        total = None
+        if isinstance(algo_max_epochs, int) and algo_max_epochs > 0:
+            total = algo_max_epochs
+        elif self.requested_total:
+            total = self.requested_total
+
+        self.pbar = tqdm(total=total, desc="rl-games training", unit="epoch")
+        self._wrap_writer()
+
+    def _wrap_writer(self):
+        if self._wrapped_writer or self.algo is None:
+            return
+        writer = getattr(self.algo, "writer", None)
+        if writer is None or not hasattr(writer, "add_scalar"):
+            return
+
+        original_add_scalar = writer.add_scalar
+
+        def add_scalar(tag, scalar_value, *args, **kwargs):
+            global_step = None
+            walltime = None
+            if args:
+                global_step = args[0]
+            if len(args) > 1:
+                walltime = args[1]
+            global_step = kwargs.pop("global_step", global_step)
+            walltime = kwargs.pop("walltime", walltime)
+            kwargs.pop("new_style", None)
+            kwargs.pop("double_precision", None)
+            value = scalar_value
+            if hasattr(value, "item"):
+                try:
+                    value = value.item()
+                except Exception:
+                    pass
+            try:
+                value_f = float(value)
+            except Exception:
+                value_f = None
+
+            if value_f is not None and tag in ("losses/a_loss", "losses/c_loss", "losses/entropy"):
+                epoch = getattr(self.algo, "epoch_num", 0)
+                self.loss_history.setdefault(tag, []).append((epoch, value_f))
+
+            call_kwargs = {}
+            if global_step is not None:
+                call_kwargs["global_step"] = global_step
+            if walltime is not None:
+                call_kwargs["walltime"] = walltime
+            call_kwargs.update(kwargs)
+
+            try:
+                result = original_add_scalar(tag, value, **call_kwargs)
+            except TypeError:
+                result = original_add_scalar(tag, value)
+
+            if self.metric_recorder and value_f is not None:
+                step_int = None
+                if global_step is not None:
+                    try:
+                        step_int = int(global_step)
+                    except Exception:
+                        step_int = None
+                self.metric_recorder.log(tag, value_f, step_int, walltime)
+            return result
+
+        writer.add_scalar = add_scalar
+        self._original_add_scalar = original_add_scalar
+        self._wrapped_writer = True
+
+    def after_steps(self):
+        pass
+
+    def after_print_stats(self, frame, epoch_num, total_time):
+        if self.pbar is None:
+            return
+        if epoch_num <= self._last_epoch:
+            return
+
+        delta = epoch_num - self._last_epoch
+        self.pbar.update(delta)
+        self._last_epoch = epoch_num
+
+        postfix = {}
+        if self.loss_history.get("losses/a_loss"):
+            postfix["actor_loss"] = f"{self.loss_history['losses/a_loss'][-1][1]:.4f}"
+        if self.loss_history.get("losses/c_loss"):
+            postfix["critic_loss"] = f"{self.loss_history['losses/c_loss'][-1][1]:.4f}"
+        if self.loss_history.get("losses/entropy"):
+            postfix["entropy"] = f"{self.loss_history['losses/entropy'][-1][1]:.4f}"
+
+        if self.tracker and self.tracker.best_payload:
+            postfix["best_reward"] = f"{self.tracker.best_payload['reward']:.4f}"
+            self._log_best_metrics(epoch_num)
+
+        if postfix:
+            self.pbar.set_postfix(postfix)
+
+    def close(self):
+        if getattr(self, "pbar", None) is not None:
+            self.pbar.close()
+            self.pbar = None
+        if self._wrapped_writer and self.algo and getattr(self.algo, "writer", None):
+            self.algo.writer.add_scalar = self._original_add_scalar
+            self._wrapped_writer = False
+            self._original_add_scalar = None
+
+    def _log_best_metrics(self, epoch_num: int):
+        if not self.tracker or not self.tracker.best_payload:
+            return
+        if epoch_num <= self._last_logged_best_epoch:
+            return
+        writer = getattr(self.algo, "writer", None)
+        if writer is None:
+            return
+        best = self.tracker.best_payload
+        writer.add_scalar("custom/best_reward", best["reward"], epoch_num)
+        writer.add_scalar("custom/best_pos_rmse", best["pos_rmse"], epoch_num)
+        writer.add_scalar("custom/best_final_error", best["final_error"], epoch_num)
+        if self.metric_recorder:
+            self.metric_recorder.log("custom/best_reward", best["reward"], epoch_num, None)
+            self.metric_recorder.log("custom/best_pos_rmse", best["pos_rmse"], epoch_num, None)
+            self.metric_recorder.log("custom/best_final_error", best["final_error"], epoch_num, None)
+        self._last_logged_best_epoch = epoch_num
+
+    def get_loss_history(self) -> Dict[str, List[Tuple[int, float]]]:
+        return {tag: list(values) for tag, values in self.loss_history.items()}
+
+    def __del__(self):
+        self.close()
 
 
 # ---------------------------- 负载管理器 ---------------------------- #
@@ -151,11 +357,15 @@ class SimplePayloadManager:
 
         self.gym = env_manager.IGE_env.gym
         self.sim = env_manager.IGE_env.sim
-        self.env_handle = env_manager.IGE_env.env_handles[0]
-        self.robot_handle = env_manager.robot_manager.robot_handles[0]
+        self.env_handles = list(env_manager.IGE_env.env_handles)
+        self.robot_handles = list(env_manager.robot_manager.robot_handles)
 
-        props = self.gym.get_actor_rigid_body_properties(self.env_handle, self.robot_handle)
-        base_prop = props[0]
+        self.body_props_per_env = [
+            self.gym.get_actor_rigid_body_properties(env_handle, robot_handle)
+            for env_handle, robot_handle in zip(self.env_handles, self.robot_handles)
+        ]
+
+        base_prop = self.body_props_per_env[0][0]
         self.base_mass = base_prop.mass
         self.base_com = torch.tensor(
             [base_prop.com.x, base_prop.com.y, base_prop.com.z],
@@ -172,7 +382,6 @@ class SimplePayloadManager:
             dtype=torch.float32,
         )
 
-        self.body_props = props
         self.pending_impulses: List[Dict[str, torch.Tensor]] = []
         self.apply_to_sim()
 
@@ -208,15 +417,17 @@ class SimplePayloadManager:
     def apply_to_sim(self):
         total_mass, inertia_total, combined_com = self._compute_total_properties()
 
-        base_prop = self.body_props[0]
-        base_prop.mass = float(total_mass.item())
-        base_prop.com = torch_to_vec3(combined_com)
         inertia_np = inertia_total.detach().cpu().numpy()
-        base_prop.inertia = tensor33_to_mat33(inertia_np)
-
-        self.gym.set_actor_rigid_body_properties(
-            self.env_handle, self.robot_handle, self.body_props, recomputeInertia=False
-        )
+        for env_handle, robot_handle, props in zip(
+            self.env_handles, self.robot_handles, self.body_props_per_env
+        ):
+            base_prop = props[0]
+            base_prop.mass = float(total_mass.item())
+            base_prop.com = torch_to_vec3(combined_com)
+            base_prop.inertia = tensor33_to_mat33(inertia_np)
+            self.gym.set_actor_rigid_body_properties(
+                env_handle, robot_handle, props, recomputeInertia=False
+            )
 
         env = self.env_manager
         env.robot_manager.robot_mass = float(total_mass.item())
@@ -245,10 +456,11 @@ class SimplePayloadManager:
 
         new_mass = self.current_mass()
         root_state = self.env_manager.IGE_env.global_tensor_dict["vec_root_tensor"]
-        base_state = root_state[0, 0]
+        base_states = root_state[:, 0] if root_state.ndim == 3 else root_state
         if new_mass > 1e-5:
             scale = prev_mass / new_mass
-            base_state[7:10] *= scale
+            base_states[:, 7:10] *= scale
+        self.env_manager.IGE_env.write_to_sim()
 
         gravity_vec = self.env_manager.IGE_env.global_tensor_dict["gravity"][0].to(self.device)
         torque_impulse = -payload.mass * torch.cross(offset, gravity_vec)
@@ -311,6 +523,12 @@ class LeeGainTuningEnv(gym.Env):
     ):
         super().__init__()
         device_override = kwargs.pop("device", None)
+        self.headless = bool(kwargs.pop("headless", DEFAULT_HEADLESS))
+        self.use_warp = bool(kwargs.pop("use_warp", DEFAULT_USE_WARP))
+        sim_num_envs = kwargs.pop("sim_num_envs", None)
+        if sim_num_envs is None:
+            sim_num_envs = kwargs.pop("num_envs", 1)
+        self.sim_num_envs = max(1, int(sim_num_envs))
         if device_override is not None:
             device = device_override
         if device is None:
@@ -331,8 +549,32 @@ class LeeGainTuningEnv(gym.Env):
         )
 
         self.sim_builder = SimBuilder()
+        self.env_manager = self.sim_builder.build_env(
+            sim_name=SIM_NAME,
+            env_name=ENV_NAME,
+            robot_name=ROBOT_NAME,
+            controller_name=CONTROLLER_NAME,
+            args=None,
+            device=self.device_str,
+            num_envs=self.sim_num_envs,
+            headless=self.headless,
+            use_warp=self.use_warp,
+        )
+        payloads = [Payload(name=n, mass=m, offset=offset) for n, m, offset in PAYLOAD_LAYOUT]
+        self.payload_manager = SimplePayloadManager(self.env_manager, payloads, self.device)
+        self.controller = self.env_manager.robot_manager.robot.controller
+        num_actions = self.env_manager.robot_manager.robot.num_actions
+        self.target_actions = torch.zeros(
+            (self.env_manager.num_envs, num_actions), device=self.device, dtype=torch.float32
+        )
+        self.release_lookup = {step: name for step, name in self.release_plan}
+        self._closed = False
 
     def reset(self):
+        self.env_manager.reset()
+        self.payload_manager.reset()
+        self.env_manager.reset_tensors()
+        self.target_actions.zero_()
         return np.zeros(1, dtype=np.float32)
 
     def step(self, action):
@@ -352,7 +594,8 @@ class LeeGainTuningEnv(gym.Env):
                 "loss": 1e6,
             }
 
-        self.tracker.update(gains, metrics)
+        if self.tracker is not None:
+            self.tracker.update(gains, metrics)
         reward = -metrics["loss"]
         obs = np.zeros(1, dtype=np.float32)
         done = True
@@ -361,73 +604,48 @@ class LeeGainTuningEnv(gym.Env):
     # -------------------- 评估逻辑（复用 adjust_lee_control） -------------------- #
 
     def _evaluate(self, gains: np.ndarray) -> Dict[str, float]:
-        env_manager = None
-        try:
-            env_manager = self.sim_builder.build_env(
-                sim_name=SIM_NAME,
-                env_name=ENV_NAME,
-                robot_name=ROBOT_NAME,
-                controller_name=CONTROLLER_NAME,
-                args=None,
-                device=self.device_str,
-                num_envs=1,
-                headless=True,
-                use_warp=True,
-            )
-
-            controller = env_manager.robot_manager.robot.controller
-            self._apply_gains(controller, gains)
-
-            payloads = [
-                Payload(name=n, mass=m, offset=offset) for n, m, offset in PAYLOAD_LAYOUT
-            ]
-            payload_manager = SimplePayloadManager(env_manager, payloads, self.device)
-
-            metrics = self._rollout(env_manager, payload_manager)
-            self._close_env(env_manager)
-            env_manager = None
-            return metrics
-        finally:
-            if env_manager is not None:
-                self._close_env(env_manager)
-            torch.cuda.empty_cache()
-
-    def _close_env(self, env_manager):
-        try:
-            env_manager.IGE_env.gym.destroy_sim(env_manager.IGE_env.sim)
-        except Exception:
-            pass
+        self._apply_gains(self.controller, gains)
+        self.env_manager.reset()
+        self.payload_manager.reset()
+        self.env_manager.reset_tensors()
+        self.target_actions.zero_()
+        return self._rollout()
 
     def _apply_gains(self, controller, gains: np.ndarray):
         ptr = 0
+        def _assign(dst, value_row):
+            rows = dst.shape[0]
+            copied = value_row.expand(rows, -1).clone()
+            dst.copy_(copied)
+
         for name, dim, bounds in PARAM_SPECS:
             segment = gains[ptr : ptr + dim]
             ptr += dim
             low, high = bounds
             actual = ((segment + 1.0) * 0.5) * (high - low) + low
-            tensor = torch.tensor(actual, device=self.device, dtype=torch.float32).unsqueeze(0)
+            tensor = torch.tensor(actual, device=self.device, dtype=torch.float32).view(1, -1)
             if name.startswith("K_pos"):
-                controller.K_pos_tensor_current[:] = tensor
-                controller.K_pos_tensor_min[:] = tensor
-                controller.K_pos_tensor_max[:] = tensor
+                _assign(controller.K_pos_tensor_current, tensor)
+                _assign(controller.K_pos_tensor_min, tensor)
+                _assign(controller.K_pos_tensor_max, tensor)
             elif name.startswith("K_vel"):
-                controller.K_linvel_tensor_current[:] = tensor
-                controller.K_linvel_tensor_min[:] = tensor
-                controller.K_linvel_tensor_max[:] = tensor
+                _assign(controller.K_linvel_tensor_current, tensor)
+                _assign(controller.K_linvel_tensor_min, tensor)
+                _assign(controller.K_linvel_tensor_max, tensor)
             elif name.startswith("K_rot"):
-                controller.K_rot_tensor_current[:] = tensor
-                controller.K_rot_tensor_min[:] = tensor
-                controller.K_rot_tensor_max[:] = tensor
+                _assign(controller.K_rot_tensor_current, tensor)
+                _assign(controller.K_rot_tensor_min, tensor)
+                _assign(controller.K_rot_tensor_max, tensor)
             elif name.startswith("K_angvel"):
-                controller.K_angvel_tensor_current[:] = tensor
-                controller.K_angvel_tensor_min[:] = tensor
-                controller.K_angvel_tensor_max[:] = tensor
+                _assign(controller.K_angvel_tensor_current, tensor)
+                _assign(controller.K_angvel_tensor_min, tensor)
+                _assign(controller.K_angvel_tensor_max, tensor)
 
-    def _rollout(self, env_manager, payload_manager: SimplePayloadManager) -> Dict[str, float]:
-        env_manager.reset()
-
-        target = torch.tensor([[0.0, 0.0, 0.0, 0.0]], device=self.device)
-        release_lookup = {step: name for step, name in self.release_plan}
+    def _rollout(self) -> Dict[str, float]:
+        env_manager = self.env_manager
+        payload_manager = self.payload_manager
+        release_lookup = self.release_lookup
+        crash_detected = False
 
         pos_errors = []
         att_errors = []
@@ -450,7 +668,12 @@ class LeeGainTuningEnv(gym.Env):
                 )
                 env_manager.IGE_env.global_tensor_dict["robot_torque_tensor"][:, 0, :] += torque_body
 
-            env_manager.step(actions=target)
+            env_manager.step(actions=self.target_actions)
+            reset_envs = env_manager.post_reward_calculation_step()
+            reset_count = int(reset_envs.numel()) if isinstance(reset_envs, torch.Tensor) else len(reset_envs)
+            if reset_count > 0:
+                crash_detected = True
+                break
 
             obs_after = env_manager.get_obs()
             pos = obs_after["robot_position"]
@@ -462,17 +685,21 @@ class LeeGainTuningEnv(gym.Env):
                 or not torch.isfinite(att).all()
                 or not torch.isfinite(forces).all()
             ):
-                return {
-                    "pos_rmse": 1e3,
-                    "att_rmse": 1e3,
-                    "force_mean": 1e3,
-                    "final_error": 1e3,
-                    "loss": 1e6,
-                }
+                crash_detected = True
+                break
 
             pos_errors.append(torch.norm(pos, dim=1).mean())
             att_errors.append(torch.norm(att, dim=1).mean())
             control_effort.append(torch.norm(forces, dim=-1).mean())
+
+        if crash_detected or not pos_errors:
+            return {
+                "pos_rmse": 1e3,
+                "att_rmse": 1e3,
+                "force_mean": 1e3,
+                "final_error": 1e3,
+                "loss": 1e6,
+            }
 
         pos_rmse = torch.stack(pos_errors).mean().item()
         att_rmse = torch.stack(att_errors).mean().item()
@@ -503,6 +730,20 @@ class LeeGainTuningEnv(gym.Env):
             low, high = bounds
             gains.append(((segment + 1.0) * 0.5) * (high - low) + low)
         return np.concatenate(gains, dtype=np.float32)
+
+    def close(self):
+        if getattr(self, "_closed", False):
+            return
+        self._closed = True
+        try:
+            self.sim_builder.delete_env()
+        except Exception:
+            pass
+        self.env_manager = None
+        self.payload_manager = None
+
+    def __del__(self):
+        self.close()
 
 
 # ---------------------------- 自定义 VecEnv ---------------------------- #
@@ -553,6 +794,14 @@ class LeeGainVecEnv(vecenv.IVecEnv):
     def get_env_info(self):
         return {"action_space": self.action_space, "observation_space": self.observation_space}
 
+    def close(self):
+        for env in self.envs:
+            if hasattr(env, "close"):
+                env.close()
+
+    def __del__(self):
+        self.close()
+
 
 # 注册环境
 def register_env(tracker: ResultsTracker, eval_horizon: int, release_plan):
@@ -575,10 +824,52 @@ def register_env(tracker: ResultsTracker, eval_horizon: int, release_plan):
     )
 
 
+# ---------------------------- 可视化 ---------------------------- #
+
+def plot_loss_curves(loss_history: Dict[str, List[Tuple[int, float]]]):
+    if not loss_history:
+        print("训练未产生可用损失记录，跳过绘图。")
+        return
+
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print("未检测到 matplotlib，无法绘制损失曲线。可运行 `pip install matplotlib` 安装后重试。")
+        return
+
+    tag_to_label = {
+        "losses/a_loss": "actor loss",
+        "losses/c_loss": "critic loss",
+        "losses/entropy": "entropy",
+    }
+
+    plt.figure(figsize=(8, 5))
+    for tag, series in sorted(loss_history.items()):
+        if not series:
+            continue
+        epochs = [epoch for epoch, _ in series]
+        values = [value for _, value in series]
+        plt.plot(epochs, values, label=tag_to_label.get(tag, tag))
+
+    plt.xlabel("Epoch")
+    plt.ylabel("Value")
+    plt.title("rl-games Training Loss Curves")
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+    plt.tight_layout()
+
+    try:
+        plt.show()
+    except Exception as exc:
+        output_path = "rl_games_loss_curve.png"
+        plt.savefig(output_path)
+        print(f"无法直接显示图像，已将曲线保存到 {output_path}: {exc}")
+
+
 # ---------------------------- RL Games 配置 ---------------------------- #
 
-def create_config(num_envs: int, max_epochs: int) -> Dict:
-    num_actors = max(num_envs, 1)
+def create_config(num_workers: int, max_epochs: int) -> Dict:
+    num_actors = max(num_workers, 1)
     horizon = max(32, num_actors * 8)  # 保证足够的 rollout 长度
     batch_size = num_actors * horizon
     minibatch = max(32, batch_size // 4)
@@ -651,11 +942,33 @@ def create_config(num_envs: int, max_epochs: int) -> Dict:
 def parse_args():
     parser = argparse.ArgumentParser(description="使用 rl-games 调优 Lee 控制器增益")
     parser.add_argument("--device", default=None, help="设备字符串，如 cuda:0 或 cpu")
-    parser.add_argument("--num-envs", type=int, default=DEFAULT_NUM_ENV_WORKERS, help="并行环境数量")
+    parser.add_argument("--num-workers", type=int, default=DEFAULT_NUM_WORKERS, help="rl-games 并行 actor 数量")
+    parser.add_argument("--num-envs", type=int, default=None, help=argparse.SUPPRESS)  # 兼容旧脚本参数
+    parser.add_argument("--sim-envs", type=int, default=DEFAULT_SIM_NUM_ENVS, help="Isaac Gym 并行无人机数量")
     parser.add_argument("--total-timesteps", type=int, default=DEFAULT_TOTAL_TIMESTEPS, help="训练总步数（用于估算 max_epochs）")
     parser.add_argument("--eval-horizon", type=int, default=DEFAULT_EVAL_HORIZON, help="单次评估的仿真步数")
-    parser.add_argument("--max-epochs", type=int, default=128, help="rl-games 的最大 epoch 数（覆盖 total-timesteps 推算）")
+    parser.add_argument(
+        "--max-epochs",
+        type=int,
+        default=DEFAULT_MAX_EPOCHS,
+        help="rl-games 的最大 epoch 数（覆盖 total-timesteps 推算）",
+    )
     parser.add_argument("--best-path", default="best_lee_gains_rlg.json", help="最佳结果保存路径")
+    parser.add_argument(
+        "--no-headless",
+        action="store_true",
+        help=f"取消 headless 以打开查看器窗口（默认{'开启 headless' if DEFAULT_HEADLESS else '关闭 headless'}）",
+    )
+    parser.add_argument(
+        "--disable-warp",
+        action="store_true",
+        help=f"禁用 Warp 加速（默认{'启用' if DEFAULT_USE_WARP else '禁用'}）",
+    )
+    parser.add_argument("--history-path", default=DEFAULT_HISTORY_PATH, help="评估指标历史输出 (JSONL)")
+    parser.add_argument("--metric-log", default=DEFAULT_METRIC_LOG_PATH, help="训练损失/指标日志 (JSONL)")
+    parser.add_argument("--checkpoint-dir", default=DEFAULT_CHECKPOINT_DIR, help="rl-games 检查点保存目录")
+    parser.add_argument("--experiment-name", default=DEFAULT_EXPERIMENT_NAME, help="rl-games experiment_name")
+    parser.add_argument("--load-checkpoint", default=None, help="恢复训练时载入的 checkpoint 路径")
     return parser.parse_args()
 
 
@@ -663,25 +976,61 @@ def main():
     args = parse_args()
 
     device_str = args.device or ("cuda:0" if torch.cuda.is_available() else "cpu")
-    tracker = ResultsTracker(args.best_path)
+    tracker = ResultsTracker(args.best_path, history_path=args.history_path)
+    metric_recorder = MetricRecorder(args.metric_log)
+    os.makedirs(args.checkpoint_dir, exist_ok=True)
+
+    num_workers = args.num_workers
+    if args.num_envs is not None:
+        num_workers = args.num_envs
+    num_workers = max(1, int(num_workers))
+    sim_envs = max(1, int(args.sim_envs))
+    headless = DEFAULT_HEADLESS
+    if args.no_headless:
+        headless = False
+    use_warp = DEFAULT_USE_WARP and not args.disable_warp
+
+    experiment_name = args.experiment_name or DEFAULT_EXPERIMENT_NAME
 
     register_env(tracker, args.eval_horizon, RELEASE_PLAN)
 
-    max_epochs = args.max_epochs or max(32, args.total_timesteps // max(args.num_envs, 1))
-    config = create_config(args.num_envs, max_epochs)
-    config["params"]["config"]["env_config"]["device"] = device_str
+    derived_epochs = max(32, args.total_timesteps // num_workers)
+    if args.max_epochs and args.max_epochs > 0:
+        max_epochs = args.max_epochs
+    else:
+        max_epochs = max(DEFAULT_MAX_EPOCHS, derived_epochs)
+    config = create_config(num_workers, max_epochs)
+    env_cfg = config["params"]["config"]["env_config"]
+    env_cfg["device"] = device_str
+    env_cfg["sim_num_envs"] = sim_envs
+    env_cfg["headless"] = headless
+    env_cfg["use_warp"] = use_warp
+    cfg = config["params"]["config"]
+    cfg["experiment_name"] = experiment_name
+    cfg["full_experiment_name"] = experiment_name
+    cfg["train_dir"] = args.checkpoint_dir
 
-    runner = Runner()
-    runner.load(config)
-    runner.reset()
+    observer = ProgressObserver(max_epochs, tracker, metric_recorder=metric_recorder)
+    runner = Runner(algo_observer=observer)
 
-    runner.run({"train": True})
+    try:
+        runner.load(config)
+        runner.reset()
+        run_args = {"train": True}
+        if args.load_checkpoint:
+            run_args["checkpoint"] = args.load_checkpoint
+        runner.run(run_args)
+    finally:
+        observer.close()
 
     if tracker.best_payload:
         print("\n========== 最佳增益（rl-games） ==========")
         print(json.dumps(tracker.best_payload, indent=2))
     else:
         print("\n未找到有效的增益结果，请检查训练是否成功。")
+
+    loss_history = observer.get_loss_history()
+    plot_loss_curves(loss_history)
 
 
 if __name__ == "__main__":

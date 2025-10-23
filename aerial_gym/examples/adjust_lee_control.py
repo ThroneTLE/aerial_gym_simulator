@@ -78,9 +78,9 @@ class TrainingSettings:
     - loss_weights: 损失函数中各指标的权重。
     """
 
-    eval_horizon: int = 600
+    eval_horizon: int = 2500  # 单次评估的仿真步数
     total_timesteps: int = 320
-    num_env_workers: int = 16
+    num_env_workers: int = 1024
     thrust_margin: float = 2.5
     best_result_path: str = "best_lee_gains.json"
     release_plan: List[Tuple[int, str]] = field(

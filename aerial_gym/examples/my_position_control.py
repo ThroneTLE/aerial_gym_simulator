@@ -17,7 +17,7 @@ matplotlib.rcParams["axes.unicode_minus"] = False
 
 logger = CustomLogger(__name__)
 
-DEFAULT_THRUST_MARGIN = 3.0  # CODEx: 推力裕度，可调，用于适应更大总质量。
+DEFAULT_THRUST_MARGIN = 3.5  # CODEx: 推力裕度，可调，用于适应更大总质量。
 
 
 def adjust_motor_thrust_limits(env_manager, margin: float = DEFAULT_THRUST_MARGIN):  # CODEx

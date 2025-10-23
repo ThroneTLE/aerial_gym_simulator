@@ -35,31 +35,31 @@ class BaseLeeController(BaseController):
         # K_pos_tensor: 位置增益 (P 项)
         self.K_pos_tensor_max = torch.tensor(
             self.cfg.K_pos_tensor_max, device=self.device, requires_grad=False
-        ).expand(self.num_envs, -1)
+        ).repeat(self.num_envs, 1).contiguous()
         self.K_pos_tensor_min = torch.tensor(
             self.cfg.K_pos_tensor_min, device=self.device, requires_grad=False
-        ).expand(self.num_envs, -1)
+        ).repeat(self.num_envs, 1).contiguous()
         # K_linvel_tensor: 线性速度增益 (D 项)
         self.K_linvel_tensor_max = torch.tensor(
             self.cfg.K_vel_tensor_max, device=self.device, requires_grad=False
-        ).expand(self.num_envs, -1)
+        ).repeat(self.num_envs, 1).contiguous()
         self.K_linvel_tensor_min = torch.tensor(
             self.cfg.K_vel_tensor_min, device=self.device, requires_grad=False
-        ).expand(self.num_envs, -1)
+        ).repeat(self.num_envs, 1).contiguous()
         # K_rot_tensor: 旋转/姿态误差增益 (P 项)
         self.K_rot_tensor_max = torch.tensor(
             self.cfg.K_rot_tensor_max, device=self.device, requires_grad=False
-        ).expand(self.num_envs, -1)
+        ).repeat(self.num_envs, 1).contiguous()
         self.K_rot_tensor_min = torch.tensor(
             self.cfg.K_rot_tensor_min, device=self.device, requires_grad=False
-        ).expand(self.num_envs, -1)
+        ).repeat(self.num_envs, 1).contiguous()
         # K_angvel_tensor: 角速度增益 (D 项)
         self.K_angvel_tensor_max = torch.tensor(
             self.cfg.K_angvel_tensor_max, device=self.device, requires_grad=False
-        ).expand(self.num_envs, -1)
+        ).repeat(self.num_envs, 1).contiguous()
         self.K_angvel_tensor_min = torch.tensor(
             self.cfg.K_angvel_tensor_min, device=self.device, requires_grad=False
-        ).expand(self.num_envs, -1)
+        ).repeat(self.num_envs, 1).contiguous()
 
         # 将当前增益设置为最大值和最小值的平均值（初始值）
         self.K_pos_tensor_current = (self.K_pos_tensor_max + self.K_pos_tensor_min) / 2.0
@@ -69,10 +69,10 @@ class BaseLeeController(BaseController):
         # K_pos_i_tensor: 位置积分增益 (I 项)
         self.K_pos_i_tensor_max = torch.tensor(
             self.cfg.K_pos_i_tensor_max, device=self.device, requires_grad=False
-        ).expand(self.num_envs, -1)
+        ).repeat(self.num_envs, 1).contiguous()
         self.K_pos_i_tensor_min = torch.tensor(
             self.cfg.K_pos_i_tensor_min, device=self.device, requires_grad=False
-        ).expand(self.num_envs, -1)
+        ).repeat(self.num_envs, 1).contiguous()
         self.K_pos_i_tensor_current = (self.K_pos_i_tensor_max + self.K_pos_i_tensor_min) / 2.0
 
         # 位置积分状态 (用于抗积分饱和/anti-windup)

@@ -1,5 +1,17 @@
-from urdfpy import URDF
 import numpy as np
+
+# Compatibility shim for deprecated NumPy scalar aliases referenced by legacy deps.
+if not hasattr(np, "int"):
+    np.int = int  # type: ignore[attr-defined]
+if not hasattr(np, "float"):
+    np.float = float  # type: ignore[attr-defined]
+if not hasattr(np, "bool"):
+    np.bool = bool  # type: ignore[attr-defined]
+
+# Pre-import networkx after shimming to avoid partial initialization downstream.
+import networkx  # noqa: F401
+
+from urdfpy import URDF
 
 import trimesh as tm
 
