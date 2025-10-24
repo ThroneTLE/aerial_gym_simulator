@@ -41,7 +41,18 @@ gym.logger.set_level(gym.logger.ERROR)
 
 
 # ---------------------------- 常量与配置 ---------------------------- #
-
+'''
+CUDA_VISIBLE_DEVICES=0 python -m aerial_gym.examples.adjust_lee_rl_gamer_control \
+  --device cuda:0 \
+  --sim-envs 8192 \
+  --num-workers 1 \
+  --eval-horizon 900 \
+  --max-epochs 200 \
+  --metric-log logs/stage2_1.0kg_metrics.jsonl \
+  --history-path logs/stage2_1.0kg_eval.jsonl \
+  --checkpoint-dir checkpoints/stage2_1.0kg \
+  --load-checkpoint "checkpoints/stage1_0.5kg/lee_gain_tune/nn/lee_gain_tune_run.pth"
+'''
 # -- 基础环境配置 --
 SIM_NAME = "base_sim"
 ENV_NAME = "empty_env"
@@ -49,16 +60,17 @@ ROBOT_NAME = "base_quadrotor"
 CONTROLLER_NAME = "lee_position_control"
 
 # -- 强化学习训练默认值 --
-DEFAULT_EVAL_HORIZON = 500     # rollout 步数，越大评估越长
-DEFAULT_TOTAL_TIMESTEPS = 320   # 估算训练总步数，用于推断 max_epochs
+DEFAULT_EVAL_HORIZON = 1500     # rollout 步数，越大评估越长
+DEFAULT_TOTAL_TIMESTEPS = 3200   # 估算训练总步数，用于推断 max_epochs
 DEFAULT_NUM_WORKERS = 1        # rl-games 并行 actor 数量
-DEFAULT_SIM_NUM_ENVS = 2048       # Isaac Gym 中的并行无人机数量
-DEFAULT_MAX_EPOCHS = 256        # rl-games 训练的最大 epoch 数
+DEFAULT_SIM_NUM_ENVS = 512     # Isaac Gym 中的并行无人机数量
+DEFAULT_MAX_EPOCHS = 100       # rl-games 训练的最大 epoch 数
 
 # -- 仿真物理/控制参数 --
 DEFAULT_THRUST_MARGIN = 2.5     # 推力裕度，决定最大推力倍数
 DEFAULT_HEADLESS = False         # True=关闭查看器，False=开启可视化
 DEFAULT_USE_WARP = True         # Warp 物理加速开关
+DEFAULT_THRUST_LOG = False      # 是否打印推力调节日志
 
 # -- 训练日志与检查点 --
 DEFAULT_EXPERIMENT_NAME = "lee_gain_tune"
@@ -68,25 +80,28 @@ DEFAULT_CHECKPOINT_DIR = "rlg_checkpoints"
 
 # -- 任务场景配置 --
 RELEASE_PLAN = [
-    (500, "rear_right"),
-    (1000, "front_left"),
-    (1500, "front_right"),
-    (2000, "rear_left"),
+    (int(0.27 * DEFAULT_EVAL_HORIZON), 'release_payload_half'),
+    (int(0.55  * DEFAULT_EVAL_HORIZON), 'release_payload_three_quarters'),
+    (int(0.71 * DEFAULT_EVAL_HORIZON), 'release_payload_full'),
+    (int(0.93  * DEFAULT_EVAL_HORIZON), 'finish')
 ]
+
 
 PARAM_SPECS = [
     ("K_pos_xyz", 3, [0.5, 5.0]),
-    ("K_vel_xyz", 3, [0.3, 5.0]),
-    ("K_rot_xyz", 3, [0.2, 3.0]),
-    ("K_angvel_xyz", 3, [0.05, 0.5]),
+    ("K_vel_xyz", 3, [0.5, 5.0]),
+    ("K_rot_xyz", 3, [0.5, 5.0]),
+    ("K_angvel_xyz", 3, [0.05, 5.0]),
 ]
 
 LOSS_WEIGHTS = {
-    "pos_rmse": 1.0,
+    "pos_rmse": 1.2,
     "att_rmse": 0.6,
     "force_mean": 0.2,
-    "final_error": 1.5,
+    "final_error": 1.3,
 }
+# 若 custom/best_reward 连续上升、pos/att rmse 明显降后：
+# 再切回 final_error=1.2~1.5 做精调
 
 # 训练监控提示：
 # - Policy 表现：reward = -loss，best_payload 会记录 pos/att RMSE、力均值、最终误差，趋势向好代表收敛。
@@ -350,11 +365,12 @@ class SimplePayloadManager:
     与 adjust_lee_control 中一致：负责更新总质量 / 惯量，并在释放时施加冲击。
     """
 
-    def __init__(self, env_manager, payloads: List[Payload], device: torch.device):
+    def __init__(self, env_manager, payloads: List[Payload], device: torch.device, thrust_logging: bool):
         self.env_manager = env_manager
         self.device = device
         self.payloads: Dict[str, Payload] = {p.name: p for p in payloads}
         self.attached = {p.name: True for p in payloads}
+        self.thrust_logging = thrust_logging
 
         self.gym = env_manager.IGE_env.gym
         self.sim = env_manager.IGE_env.sim
@@ -443,7 +459,11 @@ class SimplePayloadManager:
         controller_mass = torch.full((env.num_envs, 1), float(total_mass.item()), device=self.device)
         env.robot_manager.robot.controller.mass = controller_mass
 
-        adjust_motor_thrust_limits(env_manager=self.env_manager, margin=DEFAULT_THRUST_MARGIN)
+        adjust_motor_thrust_limits(
+            env_manager=self.env_manager,
+            margin=DEFAULT_THRUST_MARGIN,
+            log=self.thrust_logging,
+        )
 
     def release(self, name: str):
         if name not in self.payloads or not self.attached[name]:
@@ -562,7 +582,12 @@ class LeeGainTuningEnv(gym.Env):
             use_warp=self.use_warp,
         )
         payloads = [Payload(name=n, mass=m, offset=offset) for n, m, offset in PAYLOAD_LAYOUT]
-        self.payload_manager = SimplePayloadManager(self.env_manager, payloads, self.device)
+        self.payload_manager = SimplePayloadManager(
+            self.env_manager, 
+            payloads, 
+            self.device, 
+            thrust_logging=DEFAULT_THRUST_LOG  # <-- 传入您新添加的第 4 个参数
+        )
         self.controller = self.env_manager.robot_manager.robot.controller
         num_actions = self.env_manager.robot_manager.robot.num_actions
         self.target_actions = torch.zeros(
@@ -922,11 +947,11 @@ def plot_eval_history(history_path: Optional[str]):
 
 # ---------------------------- RL Games 配置 ---------------------------- #
 
-def create_config(num_workers: int, max_epochs: int) -> Dict:
-    num_actors = max(num_workers, 1)
-    horizon = max(32, num_actors * 8)  # 保证足够的 rollout 长度
+def create_config(num_workers: int, max_epochs: int, sim_envs: int) -> Dict:
+    num_actors =1
+    horizon = max(256, sim_envs // 4)
     batch_size = num_actors * horizon
-    minibatch = max(32, batch_size // 4)
+    minibatch = max(32, batch_size // 8)
     minibatch = min(minibatch, batch_size)
     while batch_size % minibatch != 0 and minibatch > num_actors:
         minibatch -= num_actors
@@ -946,7 +971,7 @@ def create_config(num_workers: int, max_epochs: int) -> Dict:
                         "mu_activation": "None",
                         "sigma_activation": "None",
                         "mu_init": {"name": "default"},
-                        "sigma_init": {"name": "const_initializer", "val": -0.5},
+                        "sigma_init": {"name": "const_initializer", "val": -0.7},
                         "fixed_sigma": False,
                     }
                 },
@@ -964,7 +989,7 @@ def create_config(num_workers: int, max_epochs: int) -> Dict:
                 "horizon_length": horizon,
                 "batch_size": batch_size,
                 "minibatch_size": minibatch,
-                "mini_epochs": 4,
+                "mini_epochs": 6,
                 "ppo": True,
                 "gamma": 0.99,
                 "tau": 0.95,
@@ -1054,7 +1079,7 @@ def main():
         max_epochs = args.max_epochs
     else:
         max_epochs = max(DEFAULT_MAX_EPOCHS, derived_epochs)
-    config = create_config(num_workers, max_epochs)
+    config = create_config(num_workers, max_epochs, sim_envs)
     env_cfg = config["params"]["config"]["env_config"]
     env_cfg["device"] = device_str
     env_cfg["sim_num_envs"] = sim_envs

@@ -20,7 +20,11 @@ logger = CustomLogger(__name__)
 DEFAULT_THRUST_MARGIN = 3.5  # CODEx: 推力裕度，可调，用于适应更大总质量。
 
 
-def adjust_motor_thrust_limits(env_manager, margin: float = DEFAULT_THRUST_MARGIN):  # CODEx
+def adjust_motor_thrust_limits(  # CODEx
+    env_manager,
+    margin: float = DEFAULT_THRUST_MARGIN,
+    log: bool = True,
+):
     """根据当前总质量调高电机推力上限，避免增重后推力不足导致坠落。
     margin（建议 1.5~2.0）越大，允许的最大推力越高。"""
     robot = env_manager.robot_manager.robot
@@ -39,10 +43,11 @@ def adjust_motor_thrust_limits(env_manager, margin: float = DEFAULT_THRUST_MARGI
 
     motor_model.max_thrust[:] = max_thrust
     motor_model.min_thrust[:] = 0.0
-    logger.info(
-        f"[Thrust Tuning] mass={total_mass:.3f}kg, hover≈{hover_thrust_per_motor:.2f}N/电机, "
-        f"max_thrust=>{max_thrust:.2f}N (margin={margin:.2f})"
-    )
+    if log:
+        logger.info(
+            f"[Thrust Tuning] mass={total_mass:.3f}kg, hover≈{hover_thrust_per_motor:.2f}N/电机, "
+            f"max_thrust=>{max_thrust:.2f}N (margin={margin:.2f})"
+        )
 
 
 @dataclass
