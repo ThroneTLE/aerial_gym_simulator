@@ -53,7 +53,7 @@ DEFAULT_EVAL_HORIZON = 500     # rollout 步数，越大评估越长
 DEFAULT_TOTAL_TIMESTEPS = 320   # 估算训练总步数，用于推断 max_epochs
 DEFAULT_NUM_WORKERS = 1        # rl-games 并行 actor 数量
 DEFAULT_SIM_NUM_ENVS = 2048       # Isaac Gym 中的并行无人机数量
-DEFAULT_MAX_EPOCHS = 128        # rl-games 训练的最大 epoch 数
+DEFAULT_MAX_EPOCHS = 256        # rl-games 训练的最大 epoch 数
 
 # -- 仿真物理/控制参数 --
 DEFAULT_THRUST_MARGIN = 2.5     # 推力裕度，决定最大推力倍数
@@ -96,10 +96,10 @@ LOSS_WEIGHTS = {
 
 # 子机参数（质量 / 偏移）
 PAYLOAD_LAYOUT = [
-    ("front_left", 0.5, torch.tensor([0.16, 0.16, -0.05])),
-    ("front_right", 0.5, torch.tensor([0.16, -0.16, -0.05])),
-    ("rear_left", 0.5, torch.tensor([-0.16, 0.16, -0.05])),
-    ("rear_right", 0.5, torch.tensor([-0.16, -0.16, -0.05])),
+    ("front_left", 1.0, torch.tensor([0.16, 0.16, -0.05])),
+    ("front_right", 1.0, torch.tensor([0.16, -0.16, -0.05])),
+    ("rear_left", 1.0, torch.tensor([-0.16, 0.16, -0.05])),
+    ("rear_right", 1.0, torch.tensor([-0.16, -0.16, -0.05])),
 ]
 
 
@@ -946,7 +946,7 @@ def create_config(num_workers: int, max_epochs: int) -> Dict:
                         "mu_activation": "None",
                         "sigma_activation": "None",
                         "mu_init": {"name": "default"},
-                        "sigma_init": {"name": "const_initializer", "val": -2.0},
+                        "sigma_init": {"name": "const_initializer", "val": -0.5},
                         "fixed_sigma": False,
                     }
                 },
@@ -971,14 +971,14 @@ def create_config(num_workers: int, max_epochs: int) -> Dict:
                 "learning_rate": 1e-4,
                 "lr_schedule": None,
                 "grad_norm": 1.0,
-                "entropy_coef": 0.0,
+                "entropy_coef": 0.001,
                 "critic_coef": 2.0,
                 "clip_value": False,
                 "e_clip": 0.2,
                 "truncate_grads": True,
                 "normalize_advantage": True,
                 "normalize_input": False,
-                "normalize_value": False,
+                "normalize_value": True,
                 "bounds_loss_coef": 0.0001,
                 "max_epochs": max_epochs,
                 "save_best_after": 10,
