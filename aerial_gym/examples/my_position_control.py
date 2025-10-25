@@ -64,10 +64,10 @@ class Payload:  # CODEx
 # 直接修改下面列表即可调整每个子机的质量和相对于母机（base_link）质心的偏移。
 # offset 为 [x, y, z]，单位米；mass 单位 kg。
 PAYLOAD_LAYOUT: List[Payload] = [  # CODEx
-    Payload("front_left", 1, torch.tensor([0.16, 0.16, -0.05]), radius=0.045),
-    Payload("front_right", 1, torch.tensor([0.16, -0.16, -0.05]), radius=0.045),
-    Payload("rear_left", 1, torch.tensor([-0.16, 0.16, -0.05]), radius=0.045),
-    Payload("rear_right", 1, torch.tensor([-0.16, -0.16, -0.05]), radius=0.045),
+    Payload("front_left", 1, torch.tensor([0.32, 0.32, -0.05]), radius=0.045),
+    Payload("front_right", 1, torch.tensor([0.32, -0.32, -0.05]), radius=0.045),
+    Payload("rear_left", 1, torch.tensor([-0.32, 0.32, -0.05]), radius=0.045),
+    Payload("rear_right", 1, torch.tensor([-0.32, -0.32, -0.05]), radius=0.045),
 ]
 
 def torch_to_vec3(t: torch.Tensor) -> gymapi.Vec3:
@@ -190,13 +190,13 @@ class PayloadManager:  # CODEx
             adjust_motor_thrust_limits(self.env_manager, margin=self.thrust_margin)  # CODEx
             self.initial_setup_done = True
             base_prop.inertia = tensor33_to_mat33(inertia_cpu_np)
-            
+            self.gym.set_actor_rigid_body_properties(
+        self.env_ptr, self.robot_handle, self.body_props, recomputeInertia=False
+        )
 
             
             
-        self.gym.set_actor_rigid_body_properties(
-        self.env_ptr, self.robot_handle, self.body_props, recomputeInertia=True
-        )
+
     
     
     
