@@ -26,6 +26,12 @@ class BaseLeeController(BaseController):
         self.cfg = control_config # 控制器配置
         self.num_envs = num_envs
         self.device = device
+        # 初始化滤波后的惯量矩阵（与当前 robot_inertia 同形）
+        self.I_filt = None
+        self.inertia_alpha = 0.2  # 0.0~1.0, 数值越小过渡越慢，按需要调
+        self.J_sim_const = None  # 首次捕获的物理惯量(常值)
+        self.use_inertia_virtualization = True  # 开关，必要时可设为 False
+
 
     def init_tensors(self, global_tensor_dict):
         """初始化控制器的所有张量，特别是控制增益 (Gains)。"""
@@ -35,51 +41,36 @@ class BaseLeeController(BaseController):
         # K_pos_tensor: 位置增益 (P 项)
         self.K_pos_tensor_max = torch.tensor(
             self.cfg.K_pos_tensor_max, device=self.device, requires_grad=False
-        ).repeat(self.num_envs, 1).contiguous()
+        ).expand(self.num_envs, -1)
         self.K_pos_tensor_min = torch.tensor(
             self.cfg.K_pos_tensor_min, device=self.device, requires_grad=False
-        ).repeat(self.num_envs, 1).contiguous()
+        ).expand(self.num_envs, -1)
         # K_linvel_tensor: 线性速度增益 (D 项)
         self.K_linvel_tensor_max = torch.tensor(
             self.cfg.K_vel_tensor_max, device=self.device, requires_grad=False
-        ).repeat(self.num_envs, 1).contiguous()
+        ).expand(self.num_envs, -1)
         self.K_linvel_tensor_min = torch.tensor(
             self.cfg.K_vel_tensor_min, device=self.device, requires_grad=False
-        ).repeat(self.num_envs, 1).contiguous()
+        ).expand(self.num_envs, -1)
         # K_rot_tensor: 旋转/姿态误差增益 (P 项)
         self.K_rot_tensor_max = torch.tensor(
             self.cfg.K_rot_tensor_max, device=self.device, requires_grad=False
-        ).repeat(self.num_envs, 1).contiguous()
+        ).expand(self.num_envs, -1)
         self.K_rot_tensor_min = torch.tensor(
             self.cfg.K_rot_tensor_min, device=self.device, requires_grad=False
-        ).repeat(self.num_envs, 1).contiguous()
+        ).expand(self.num_envs, -1)
         # K_angvel_tensor: 角速度增益 (D 项)
         self.K_angvel_tensor_max = torch.tensor(
             self.cfg.K_angvel_tensor_max, device=self.device, requires_grad=False
-        ).repeat(self.num_envs, 1).contiguous()
+        ).expand(self.num_envs, -1)
         self.K_angvel_tensor_min = torch.tensor(
             self.cfg.K_angvel_tensor_min, device=self.device, requires_grad=False
-        ).repeat(self.num_envs, 1).contiguous()
+        ).expand(self.num_envs, -1)
 
         # 将当前增益设置为最大值和最小值的平均值（初始值）
         self.K_pos_tensor_current = (self.K_pos_tensor_max + self.K_pos_tensor_min) / 2.0
-
-
-        # --- 积分增益和状态 (Integral Gains and State) ---
-        # K_pos_i_tensor: 位置积分增益 (I 项)
-        self.K_pos_i_tensor_max = torch.tensor(
-            self.cfg.K_pos_i_tensor_max, device=self.device, requires_grad=False
-        ).repeat(self.num_envs, 1).contiguous()
-        self.K_pos_i_tensor_min = torch.tensor(
-            self.cfg.K_pos_i_tensor_min, device=self.device, requires_grad=False
-        ).repeat(self.num_envs, 1).contiguous()
-        self.K_pos_i_tensor_current = (self.K_pos_i_tensor_max + self.K_pos_i_tensor_min) / 2.0
-
-        # 位置积分状态 (用于抗积分饱和/anti-windup)
-        self.pos_integral = torch.zeros((self.num_envs, 3), device=self.device)
-        # 积分限幅值（可选，用于抗积分饱和）
-        self.pos_integral_clamp = 5.0  # 每个轴的限幅幅度 (可调)
-
+        
+        # --- [ I 控制代码已移除 ] ---
 
         self.K_linvel_tensor_current = (self.K_linvel_tensor_max + self.K_linvel_tensor_min) / 2.0
         self.K_rot_tensor_current = (self.K_rot_tensor_max + self.K_rot_tensor_min) / 2.0
@@ -116,7 +107,7 @@ class BaseLeeController(BaseController):
         """重置指定索引环境的控制器状态。"""
         if env_ids is None:
             # 如果 env_ids 为 None，则重置所有环境
-            env_ids = torch.arange(self.K_rot_tensor.shape[0])
+            env_ids = torch.arange(self.K_rot_tensor_max.shape[0]) # 匹配 .expand() 后的 shape
         self.randomize_params(env_ids) # 随机化控制参数
         # 注意: 积分状态 self.pos_integral 的重置通常在 EnvManager/Task 的 reset 中处理
 
@@ -144,7 +135,7 @@ class BaseLeeController(BaseController):
 
     def compute_acceleration(self, setpoint_position, setpoint_velocity):
         """
-        计算实现位置和速度跟踪所需的加速度指令 (PD + I 控制)。
+        计算实现位置和速度跟踪所需的加速度指令 (PD 控制)。
         """
         # 计算世界坐标系下的位置误差
         position_error_world_frame = setpoint_position - self.robot_position
@@ -153,20 +144,12 @@ class BaseLeeController(BaseController):
         # 计算速度误差
         velocity_error = setpoint_velocity_world_frame - self.robot_linvel
 
-        # --- 积分项和抗积分饱和 (Integral Term and Anti-Windup) ---
-        dt = 0.01 # 假设仿真步长 dt = 0.01
-        leak = 0.999  # 积分泄漏/衰减因子
-        # 积分项更新：积分 = 衰减 * 积分 + 误差 * dt
-        self.pos_integral = leak * self.pos_integral + position_error_world_frame * dt
+        # --- [ I 控制代码已移除 ] ---
 
-        # 抗积分饱和限幅
-        self.pos_integral = torch.clamp(self.pos_integral, -self.pos_integral_clamp, self.pos_integral_clamp)
-
-        # 计算加速度指令 (PID 控制律)
+        # 计算加速度指令 (PD 控制律)
         accel_command = (
             self.K_pos_tensor_current * position_error_world_frame # P 项
             + self.K_linvel_tensor_current * velocity_error         # D 项
-            + self.K_pos_i_tensor_current * self.pos_integral      # I 项
         )
         return accel_command
 
@@ -174,6 +157,13 @@ class BaseLeeController(BaseController):
         """
         根据 Lee 姿态控制律计算所需的本体力矩。
         """
+        # 低通惯量：I_filt = alpha * I_new + (1-alpha) * I_filt_prev
+        I_cur = self.robot_inertia  # 来自外部同步的新惯量 3x3 或 [B,3,3]
+        if self.I_filt is None:
+            self.I_filt = I_cur.clone()
+        else:
+            self.I_filt = self.inertia_alpha * I_cur + (1.0 - self.inertia_alpha) * self.I_filt
+
         # 对期望的偏航角速度进行限幅
         setpoint_angvel[:, 2] = torch.clamp(
             setpoint_angvel[:, 2], -self.cfg.max_yaw_rate, self.cfg.max_yaw_rate
@@ -191,11 +181,24 @@ class BaseLeeController(BaseController):
         # 计算角速度误差
         # setpoint_angvel 需要被旋转到实际体坐标系：R^T * \omega_d
         angvel_error = self.robot_body_angvel - quat_rotate(RT_Rd_quat, setpoint_angvel)
-        
-        # 计算前馈力矩：角速度 * (惯性矩阵 * 角速度)
+        if self.I_filt is None:
+            self.I_filt = self.robot_inertia.clone()
+        else:
+            # 简单 EMA；可把 alpha 绑定到 cfg，例如 alpha = self.cfg.inertia_filter_alpha
+            alpha = 0.2
+            self.I_filt = alpha * self.robot_inertia + (1 - alpha) * self.I_filt
+
+        I_use = self.I_filt  # 用滤后的惯量做前馈
+        # 原来的前馈行：
+        # feed_forward_body_rates = torch.cross(
+        #     self.robot_body_angvel,
+        #     torch.bmm(self.robot_inertia, self.robot_body_angvel.unsqueeze(2)).squeeze(2),
+        #     dim=1,
+        # )
+        # 改成：
         feed_forward_body_rates = torch.cross(
             self.robot_body_angvel,
-            torch.bmm(self.robot_inertia, self.robot_body_angvel.unsqueeze(2)).squeeze(2),
+            torch.bmm(I_use, self.robot_body_angvel.unsqueeze(2)).squeeze(2),
             dim=1,
         )
         

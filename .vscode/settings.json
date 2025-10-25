@@ -1,5 +1,6 @@
 {
     "ros.distro": "noetic",
     "python.envFile": "${workspaceFolder}/dev.env",
-    "Codegeex.RepoIndex": true
+    "Codegeex.RepoIndex": true,
+    "chatgpt.openOnStartup": true
 }

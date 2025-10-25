@@ -121,17 +121,17 @@ class control:
     max_yaw_rate = np.pi / 3.0
 
     # --- Ganancias PPO (K_pos) ---
-    K_pos_tensor_max = [6.762563705444336, 7.672436237335205, 13.746875762939453]
-    K_pos_tensor_min = [6.762563705444336, 7.672436237335205, 13.746875762939453]
+    K_pos_tensor_max = [9.762563705444336, 9.672436237335205, 13.746875762939453]
+    K_pos_tensor_min = [3.762563705444336, 3.672436237335205, 13.746875762939453]
 
     # --- Ganancias PPO (K_vel) ---
-    K_vel_tensor_max = [7.846602439880371, 7.9705023765563965, 11.299003601074219]
-    K_vel_tensor_min = [7.846602439880371, 7.9705023765563965, 11.299003601074219]
+    K_vel_tensor_max = [8.846602439880371, 8.9705023765563965, 11.299003601074219]
+    K_vel_tensor_min = [6.846602439880371, 6.9705023765563965, 11.299003601074219]
 
     # --- Ganancias Integrales (K_pos_i) - No optimizadas, valores por defecto ---
     # Se mantienen los valores del archivo original
-    K_pos_i_tensor_max = [0.0, 0.0, 5.6]
-    K_pos_i_tensor_min = [0.0, 0.0, 0.01]
+    K_pos_i_tensor_max = [0.0, 0.0, 0]
+    K_pos_i_tensor_min = [0.0, 0.0, 0]
 
     # --- Ganancias PPO (K_rot) ---
     K_rot_tensor_max = [13.746875762939453, 13.746875762939453, 8.456195831298828]
