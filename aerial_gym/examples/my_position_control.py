@@ -18,8 +18,8 @@ matplotlib.rcParams["axes.unicode_minus"] = False
 logger = CustomLogger(__name__)
 
 DEFAULT_THRUST_MARGIN = 2.5  # CODEx: 推力裕度，可调，用于适应更大总质量。
-
-
+global n
+n=0
 def adjust_motor_thrust_limits(  # CODEx
     env_manager,
     margin: float = DEFAULT_THRUST_MARGIN,
@@ -30,6 +30,7 @@ def adjust_motor_thrust_limits(  # CODEx
     robot = env_manager.robot_manager.robot
     allocator = robot.control_allocator
     motor_model = allocator.motor_model
+    
     num_motors = allocator.cfg.num_motors
 
     total_mass = env_manager.robot_manager.robot_mass
@@ -56,7 +57,7 @@ class Payload:  # CODEx
     name: str
     mass: float
     offset: torch.Tensor  # 3x tensor in base frame meters
-    radius: float = 0.5  # CODEx: 可单独调节每个子机可视化球体的半径。
+    radius: float = 0.05  # CODEx: 可单独调节每个子机可视化球体的半径。
 
 
 # === 子机布置参数 ===
@@ -64,12 +65,21 @@ class Payload:  # CODEx
 # offset 为 [x, y, z]，单位米；mass 单位 kg。
 PAYLOAD_LAYOUT: List[Payload] = [  # CODEx
     Payload("front_left", 1, torch.tensor([0.16, 0.16, -0.05]), radius=0.045),
-    Payload("front_right",1, torch.tensor([0.16, -0.16, -0.05]), radius=0.045),
+    Payload("front_right", 1, torch.tensor([0.16, -0.16, -0.05]), radius=0.045),
     Payload("rear_left", 1, torch.tensor([-0.16, 0.16, -0.05]), radius=0.045),
     Payload("rear_right", 1, torch.tensor([-0.16, -0.16, -0.05]), radius=0.045),
 ]
 
+def torch_to_vec3(t: torch.Tensor) -> gymapi.Vec3:
+    return gymapi.Vec3(float(t[0].item()), float(t[1].item()), float(t[2].item()))
 
+
+def tensor33_to_mat33(m: np.ndarray) -> gymapi.Mat33:
+    mat = gymapi.Mat33()
+    mat.x = gymapi.Vec3(*m[0])
+    mat.y = gymapi.Vec3(*m[1])
+    mat.z = gymapi.Vec3(*m[2])
+    return mat
 class PayloadManager:  # CODEx
     def __init__(self, env_manager, payloads: List[Payload], device: torch.device):
         self.env_manager = env_manager
@@ -103,7 +113,10 @@ class PayloadManager:  # CODEx
         self.com_history: List[torch.Tensor] = []
         self.pending_torque_impulses: List[Dict[str, torch.Tensor]] = []  # CODEx
         self.base_state_view = env_manager.IGE_env.vec_root_tensor
-
+        # === 在这里添加新行 ===
+        self.initial_setup_done = False
+        # =======================
+    
     def compute_total_properties(self) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Compute total mass and inertia with currently attached payloads."""
         total_mass = torch.tensor(self.base_mass, device=self.device)
@@ -134,43 +147,84 @@ class PayloadManager:  # CODEx
             inertia_total += payload.mass * (torch.dot(r, r) * identity - torch.outer(r, r))
 
         return total_mass, inertia_total, combined_com
-
+    
     def apply_to_sim(self):
         total_mass, inertia_total, combined_com = self.compute_total_properties()
 
-        base_prop = self.body_props[0]
-        base_prop.mass = float(total_mass.item())
-        base_prop.com = gymapi.Vec3(*combined_com.cpu().tolist())
-        inertia_mat = gymapi.Mat33()
-        inertia_cpu = inertia_total.detach().cpu().numpy()
-        inertia_mat.x = gymapi.Vec3(*inertia_cpu[0])
-        inertia_mat.y = gymapi.Vec3(*inertia_cpu[1])
-        inertia_mat.z = gymapi.Vec3(*inertia_cpu[2])
-        base_prop.inertia = inertia_mat
+        # --- 关键修改：提前计算值并添加日志 ---
+        # 为了日志和后续使用，提前计算 cpu/float 值
+        mass_float = float(total_mass.item())
+        com_cpu_list = combined_com.cpu().tolist()
+        inertia_cpu_np = inertia_total.detach().cpu().numpy()
 
-        self.gym.set_actor_rigid_body_properties(
-            self.env_ptr, self.robot_handle, self.body_props, recomputeInertia=False
+        # 使用 logger 打印，\n 是换行符
+        logger.info(
+            f"\n--- [Apply to Sim] 更新物理属性 ---\n"
+            f"  - Total Mass: {mass_float:.4f} kg\n"
+            f"  - Combined COM: {com_cpu_list}\n"
+            f"  - Total Inertia:\n{tensor33_to_mat33(inertia_cpu_np)}\n"
+            f"  - Total Inertia——CPT:\n{inertia_cpu_np}\n"
+            f"------------------------------------"
         )
 
-        # Synchronize tensors used by controllers and logging
-        env = self.env_manager
-        env.robot_manager.robot_mass = float(total_mass.item())
-        env.robot_manager.robot_masses.fill_(float(total_mass.item()))
-        env.IGE_env.global_tensor_dict["robot_mass"].fill_(float(total_mass.item()))
+        
 
-        inertia_tensor = torch.tensor(inertia_cpu, device=self.device, dtype=torch.float32)
+        base_prop = self.body_props[0]
+        base_prop.mass = float(total_mass.item())
+        base_prop.com = torch_to_vec3(combined_com)
+        
+        #base_prop = self.body_props[0]
+        #base_prop.mass = mass_float  # <-- 复用变量
+        #base_prop.com = gymapi.Vec3(*com_cpu_list) # <-- 复用变量
+        #inertia_mat = gymapi.Mat33()
+        #inertia_mat.x = gymapi.Vec3(*inertia_cpu_np[0]) # <-- 复用变量
+        #inertia_mat.y = gymapi.Vec3(*inertia_cpu_np[1]) # <-- 复用变量
+        #inertia_mat.z = gymapi.Vec3(*inertia_cpu_np[2]) # <-- 复用变量
+        #base_prop.inertia = inertia_mat
+        # === [CATEGORY 1] 物理引擎更新 ===
+        # (这部分更新了物理模拟的“地面实况”)
+        # ==================================
+        
+        if not self.initial_setup_done:
+            logger.warning(f"[PayloadManager] 正在根据最大质量 ({self.current_mass():.3f}kg) 设置初始推力限制...")
+            adjust_motor_thrust_limits(self.env_manager, margin=self.thrust_margin)  # CODEx
+            self.initial_setup_done = True
+            base_prop.inertia = tensor33_to_mat33(inertia_cpu_np)
+            
+
+            
+            
+        self.gym.set_actor_rigid_body_properties(
+        self.env_ptr, self.robot_handle, self.body_props, recomputeInertia=True
+        )
+    
+    
+    
+        # --- 打印日志结束 ---
+        # === [CATEGORY 2] 框架张量更新 ===
+        # (这部分通知“框架”的其他部分物理属性已改变)
+        env = self.env_manager
+        env.robot_manager.robot_mass = mass_float # <-- 复用变量
+        env.robot_manager.robot_masses.fill_(mass_float) # <-- 复用变量
+        env.IGE_env.global_tensor_dict["robot_mass"].fill_(mass_float) # <-- 复用变量
+
+        inertia_tensor = torch.tensor(inertia_cpu_np, device=self.device, dtype=torch.float32) # <-- 复用变量
         env.robot_manager.robot_inertia = inertia_tensor
         env.robot_manager.robot_inertias[:] = inertia_tensor
         env.IGE_env.global_tensor_dict["robot_inertia"][:] = inertia_tensor
-
-        controller_mass = torch.full((env.num_envs, 1), float(total_mass.item()), device=self.device)
+        # ==================================
+        # === [CATEGORY 3] 控制器模型更新 ===
+        # (这部分“专门”通知“控制器”质量已改变)
+        controller_mass = torch.full((env.num_envs, 1), mass_float, device=self.device) # <-- 复用变量
         env.robot_manager.robot.controller.mass = controller_mass
-
+        # ================================== 
+        # === 关键修复：注释掉这一行 ===
+        # 这一行是导致你飞机坠毁的根本原因
         adjust_motor_thrust_limits(self.env_manager, margin=self.thrust_margin)  # CODEx
 
-        self.mass_history.append(float(total_mass.item()))
+        self.mass_history.append(mass_float) # <-- 复用变量
         self.com_history.append(combined_com.detach().cpu())
-
+    
     def release_payload(self, name: str):
         if name not in self.payloads:
             logger.error(f"Payload '{name}' 未定义，忽略释放命令。")
@@ -185,27 +239,34 @@ class PayloadManager:  # CODEx
         self.apply_to_sim()
         new_mass = self.current_mass()
 
-        # 线速度动量补偿：保持线动量不变  # CODEx
-        root_state = self.env_manager.IGE_env.global_tensor_dict["vec_root_tensor"]
-        base_state = root_state[0, 0]
-        if new_mass > 1e-5:
-            velocity_scale = prev_mass / new_mass
-            base_state[7:10] *= velocity_scale
+        # [已修复]
+        # 下面的线速度补偿逻辑是错误的，它模拟的是“弹射”而非“释放”。
+        # 对于简单的释放，母机线速度在释放瞬间保持不变。
+        # 错误的代码会不断放大微小的速度漂移，导致后续释放时失控。
+        # root_state = self.env_manager.IGE_env.global_tensor_dict["vec_root_tensor"]
+        # base_state = root_state[0, 0]
+        # if new_mass > 1e-5:
+        #     velocity_scale = prev_mass / new_mass
+        #     base_state[7:10] *= velocity_scale
 
         # 使用释放载荷的位置与重力产生扭矩脉冲，任何子机释放都触发横向响应  # CODEx
-        gravity_vec = self.env_manager.IGE_env.global_tensor_dict["gravity"][0].to(self.device)
-        
-        # [已删除] attached_before = ...
-        # [已删除] total_payloads = ...
-        # [已删除] scale = ...
+        # === 关键修复：注释掉所有人工施加的扭矩 ===
+        # “apply_to_sim()” 已经改变了无人机的物理属性 (尤其是COM)，
+        # 这个模型失配 *本身* 就是PID控制器需要对抗的扰动。
+        # 额外施加一个扭矩脉冲是在施加“双重扰动”，会导致系统崩溃。
 
-        # torque_impulse 现在是恒定的，不再乘以 scale
-        torque_impulse = -payload_cfg.mass * torch.cross(removed_offset, gravity_vec)
-        if torch.linalg.norm(torque_impulse).item() > 1e-6:
-            self.pending_torque_impulses.append(
-                {"torque": torque_impulse, "steps": torch.tensor(45, device=self.device)}
-            )
-
+        # gravity_vec = self.env_manager.IGE_env.global_tensor_dict["gravity"][0].to(self.device)
+        # torque_impulse = -payload_cfg.mass * torch.cross(removed_offset, gravity_vec)
+        # if torch.linalg.norm(torque_impulse).item() > 1e-6:
+        #     self.pending_torque_impulses.append(
+        #         {"torque": torque_impulse, "steps": torch.tensor(5, device=self.device)} # (你改成了5)
+        #     )
+        # ============================================
+        # === 关键修复：重置PID积分项 ===
+        # 防止前一次扰动累积的积分误差 (Windup) 导致后续控制失败
+        logger.warning(f"重置PID位置积分项 (pos_integral) 为 0，清除累积误差。")
+        self.env_manager.robot_manager.robot.controller.pos_integral[:] = 0.0
+        # ================================
         # 写回仿真器以确保刚更新的状态立即生效  # CODEx
         self.env_manager.IGE_env.write_to_sim()
 
@@ -303,13 +364,13 @@ def run_controller(controller_name, args, results):
     env_manager.reset()  # CODEx
     controller = env_manager.robot_manager.robot.controller
     # [解决方案]：注释掉下面这几行，以匹配 RL 训练时的配置
-    # xy_i_max = torch.tensor([0.6, 0.6], device=device)
-    # xy_i_min = torch.tensor([0.2, 0.2], device=device)
-    # xy_i_cur = torch.tensor([0.4, 0.4], device=device)
-    # controller.K_pos_i_tensor_max[:, :2] = xy_i_max
-    # controller.K_pos_i_tensor_min[:, :2] = xy_i_min
-    # controller.K_pos_i_tensor_current[:, :2] = xy_i_cur
-    # controller.pos_integral_clamp = 5.0
+    xy_i_max = torch.tensor([0.6, 0.6], device=device)
+    xy_i_min = torch.tensor([0.2, 0.2], device=device)
+    xy_i_cur = torch.tensor([0.4, 0.4], device=device)
+    controller.K_pos_i_tensor_max[:, :2] = xy_i_max
+    controller.K_pos_i_tensor_min[:, :2] = xy_i_min
+    controller.K_pos_i_tensor_current[:, :2] = xy_i_cur
+    controller.pos_integral_clamp = 5.0
     controller.pos_integral[:] = 0.0
 
     initial_state = torch.zeros(13, device=device)
@@ -367,6 +428,19 @@ def run_controller(controller_name, args, results):
             world_force = force_vec.unsqueeze(0).expand(orientations.shape[0], -1)
             body_force = quat_rotate_inverse(orientations, world_force)
             robot_force[:, body_index, :] += body_force
+        # --- 从这里开始修改 ---
+        torque_world = payload_manager.consume_torque_impulse()
+        if torch.linalg.norm(torque_world).item() > 0.0:
+            
+            # === 在这里添加日志 ===
+            logger.info(f"[Step {current_step}] 施加扭矩 (世界坐标): {torque_world.cpu().numpy()}")
+            # =====================
+
+            robot_torque = manager.IGE_env.global_tensor_dict["robot_torque_tensor"]
+            torque_body = quat_rotate_inverse(orientations, torque_world.unsqueeze(0).expand(orientations.shape[0], -1))
+            robot_torque[:, body_index, :] += torque_body
+        # --- 到这里结束修改 ---
+            
         torque_world = payload_manager.consume_torque_impulse()
         if torch.linalg.norm(torque_world).item() > 0.0:
             robot_torque = manager.IGE_env.global_tensor_dict["robot_torque_tensor"]

@@ -1,4 +1,8 @@
-"""Tune Lee controller gains with rl-games PPO and multi-env Isaac Gym."""
+"""Tune Lee controller gains with rl-games PPO and multi-env Isaac Gym.
+CUDA_VISIBLE_DEVICES=0 python -m aerial_gym.examples.adjust_lee_rl_gamer_control   --device cuda:0   --sim-envs 128   --num-workers 1   --eval-horizon 800   --max-epochs 200   --metric-log logs/stage2_1.0kg_metrics.jsonl   --history-path logs/stage2_1.0kg_eval.jsonl   --checkpoint-dir checkpoints/stage2_1.0kg_fixbug   --load-checkpoint checkpoints/stage2_1.0kg/lee_gain_tune/nn/lee_gain_tune_run.pth 
+
+
+"""
 
 import argparse
 import json
