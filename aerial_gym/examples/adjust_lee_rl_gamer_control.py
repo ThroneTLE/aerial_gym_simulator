@@ -39,6 +39,10 @@ from tqdm import tqdm
 
 gym.logger.set_level(gym.logger.ERROR)
 
+DEBUG_LOG = True          # 开/关总开关
+DEBUG_EVERY_N_STEPS = 1  # 每 N 步采样一次，别太频繁
+DEBUG_ENV_IDX = 0         # 只看第 0 个环境，避免 1000+ env 同时打印
+DT = 0.01                 # 你的仿真步长
 
 # ---------------------------- 常量与配置 ---------------------------- #
 '''
@@ -88,10 +92,10 @@ RELEASE_PLAN = [
 
 
 PARAM_SPECS = [
-    ("K_pos_xyz", 3, [0.5, 5.0]),
-    ("K_vel_xyz", 3, [0.5, 5.0]),
-    ("K_rot_xyz", 3, [0.5, 5.0]),
-    ("K_angvel_xyz", 3, [0.05, 5.0]),
+    ("K_pos_xyz", 3, [6, 20]),
+    ("K_vel_xyz", 3, [6, 20]),
+    ("K_rot_xyz", 3, [6, 20]),
+    ("K_angvel_xyz", 3, [3, 6]),
 ]
 
 LOSS_WEIGHTS = {
@@ -643,13 +647,13 @@ class LeeGainTuningEnv(gym.Env):
             rows = dst.shape[0]
             copied = value_row.expand(rows, -1).clone()
             dst.copy_(copied)
-
         for name, dim, bounds in PARAM_SPECS:
             segment = gains[ptr : ptr + dim]
             ptr += dim
-            low, high = bounds
-            actual = ((segment + 1.0) * 0.5) * (high - low) + low
+            # 注意：gains 已经在 step() 中做过一次 _denormalize()，此处不要再映射
+            actual = segment
             tensor = torch.tensor(actual, device=self.device, dtype=torch.float32).view(1, -1)
+
             if name.startswith("K_pos"):
                 _assign(controller.K_pos_tensor_current, tensor)
                 _assign(controller.K_pos_tensor_min, tensor)
@@ -666,6 +670,32 @@ class LeeGainTuningEnv(gym.Env):
                 _assign(controller.K_angvel_tensor_current, tensor)
                 _assign(controller.K_angvel_tensor_min, tensor)
                 _assign(controller.K_angvel_tensor_max, tensor)
+                
+                    # —— 在 _apply_gains() 末尾加：记录实际（非归一化）PID 参数 ——
+            if DEBUG_LOG:
+                # 把 4 组参数打包成字典，便于打印或写 JSONL
+                gains_dict = {
+                    "K_pos": actual[:3].tolist() if len(actual) >= 3 else None,
+                }
+                # 更稳妥：直接从 controller 张量读，确保一目了然
+                gains_dict = {
+                    "K_pos": controller.K_pos_tensor_current[0].detach().cpu().tolist(),
+                    "K_vel": controller.K_linvel_tensor_current[0].detach().cpu().tolist(),
+                    "K_rot": controller.K_rot_tensor_current[0].detach().cpu().tolist(),
+                    "K_angvel": controller.K_angvel_tensor_current[0].detach().cpu().tolist(),
+                }
+
+                # 方式 1：写到 MetricRecorder（推荐，训练期不会丢）
+                if hasattr(self, "tracker") and self.tracker:
+                    # 复用 metric_recorder：以 “debug/xxx” 前缀写
+                    # 注意：MetricRecorder 挂在 ProgressObserver 里，这里简单 print 更直接；
+                    # 如果要统一写文件，见下文“D. 统一写 JSONL”的示例
+                    pass
+
+                # 方式 2：直接打印（若你取消了 stdout 重定向）
+                print(f"[GAINS] K_pos={gains_dict['K_pos']}, K_vel={gains_dict['K_vel']}, "
+                    f"K_rot={gains_dict['K_rot']}, K_angvel={gains_dict['K_angvel']}")
+
 
     def _rollout(self) -> Dict[str, float]:
         env_manager = self.env_manager
@@ -680,6 +710,13 @@ class LeeGainTuningEnv(gym.Env):
         for step in range(self.eval_horizon):
             obs = env_manager.get_obs()
             orientations = obs["robot_orientation"]
+            # 读取上一步速度（用于差分加速度），字段名按你的 env 保持一致
+            # vec_root_tensor: [pos(0:3), quat(3:7), lin_vel(7:10), ang_vel(10:13), ...]
+            root = env_manager.IGE_env.global_tensor_dict["vec_root_tensor"]
+            root_this = root[:, 0] if root.ndim == 3 else root       # [num_envs, 13+]
+            v_prev = root_this[:, 7:10].clone()
+            w_prev = root_this[:, 10:13].clone()
+            
 
             if step in release_lookup:
                 payload_manager.release(release_lookup[step])
@@ -702,6 +739,7 @@ class LeeGainTuningEnv(gym.Env):
                 break
 
             obs_after = env_manager.get_obs()
+            
             pos = obs_after["robot_position"]
             att = ssa(get_euler_xyz_tensor(obs_after["robot_orientation"]))
             forces = env_manager.IGE_env.global_tensor_dict["robot_force_tensor"]
@@ -949,7 +987,7 @@ def plot_eval_history(history_path: Optional[str]):
 
 def create_config(num_workers: int, max_epochs: int, sim_envs: int) -> Dict:
     num_actors =1
-    horizon = max(256, sim_envs // 4)
+    horizon = max(4, sim_envs // 4)#256
     batch_size = num_actors * horizon
     minibatch = max(32, batch_size // 8)
     minibatch = min(minibatch, batch_size)
@@ -993,10 +1031,10 @@ def create_config(num_workers: int, max_epochs: int, sim_envs: int) -> Dict:
                 "ppo": True,
                 "gamma": 0.99,
                 "tau": 0.95,
-                "learning_rate": 1e-4,
+                "learning_rate": 1e-5,
                 "lr_schedule": None,
                 "grad_norm": 1.0,
-                "entropy_coef": 0.001,
+                "entropy_coef": 0.0001,
                 "critic_coef": 2.0,
                 "clip_value": False,
                 "e_clip": 0.2,
@@ -1101,7 +1139,9 @@ def main():
             run_args["checkpoint"] = args.load_checkpoint
         # --- 开始重定向 ---
         # 保存原始的 stdout
-        original_stdout = sys.stdout 
+        runner.run(run_args)
+        """
+        original_stdout = sys.stdout
         try:
             # 打开 "空设备" (在 Windows 上是 'nul', 
             # 在 Linux/macOS 上是 '/dev/null')
@@ -1117,7 +1157,7 @@ def main():
             sys.stdout = original_stdout
             f.close()
         # --- 结束重定向 ---
-
+        """
     finally:
         observer.close()
 

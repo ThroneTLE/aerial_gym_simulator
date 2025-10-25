@@ -17,7 +17,7 @@ matplotlib.rcParams["axes.unicode_minus"] = False
 
 logger = CustomLogger(__name__)
 
-DEFAULT_THRUST_MARGIN = 3.5  # CODEx: 推力裕度，可调，用于适应更大总质量。
+DEFAULT_THRUST_MARGIN = 2.5  # CODEx: 推力裕度，可调，用于适应更大总质量。
 
 
 def adjust_motor_thrust_limits(  # CODEx
@@ -56,7 +56,7 @@ class Payload:  # CODEx
     name: str
     mass: float
     offset: torch.Tensor  # 3x tensor in base frame meters
-    radius: float = 0.05  # CODEx: 可单独调节每个子机可视化球体的半径。
+    radius: float = 0.5  # CODEx: 可单独调节每个子机可视化球体的半径。
 
 
 # === 子机布置参数 ===
@@ -203,7 +203,7 @@ class PayloadManager:  # CODEx
         torque_impulse = -payload_cfg.mass * torch.cross(removed_offset, gravity_vec)
         if torch.linalg.norm(torque_impulse).item() > 1e-6:
             self.pending_torque_impulses.append(
-                {"torque": torque_impulse, "steps": torch.tensor(30, device=self.device)}
+                {"torque": torque_impulse, "steps": torch.tensor(45, device=self.device)}
             )
 
         # 写回仿真器以确保刚更新的状态立即生效  # CODEx
@@ -301,16 +301,15 @@ def run_controller(controller_name, args, results):
     )
 
     env_manager.reset()  # CODEx
-
-    # 调整控制器积分增益（特别是 X/Y 方向），并提升积分限幅以减少稳态偏差。  # CODEx
     controller = env_manager.robot_manager.robot.controller
-    xy_i_max = torch.tensor([0.6, 0.6], device=device)
-    xy_i_min = torch.tensor([0.2, 0.2], device=device)
-    xy_i_cur = torch.tensor([0.4, 0.4], device=device)
-    controller.K_pos_i_tensor_max[:, :2] = xy_i_max
-    controller.K_pos_i_tensor_min[:, :2] = xy_i_min
-    controller.K_pos_i_tensor_current[:, :2] = xy_i_cur
-    controller.pos_integral_clamp = 5.0
+    # [解决方案]：注释掉下面这几行，以匹配 RL 训练时的配置
+    # xy_i_max = torch.tensor([0.6, 0.6], device=device)
+    # xy_i_min = torch.tensor([0.2, 0.2], device=device)
+    # xy_i_cur = torch.tensor([0.4, 0.4], device=device)
+    # controller.K_pos_i_tensor_max[:, :2] = xy_i_max
+    # controller.K_pos_i_tensor_min[:, :2] = xy_i_min
+    # controller.K_pos_i_tensor_current[:, :2] = xy_i_cur
+    # controller.pos_integral_clamp = 5.0
     controller.pos_integral[:] = 0.0
 
     initial_state = torch.zeros(13, device=device)
