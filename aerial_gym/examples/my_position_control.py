@@ -19,11 +19,21 @@ matplotlib.rcParams["axes.unicode_minus"] = False
 
 logger = CustomLogger(__name__)
 
-DEFAULT_THRUST_MARGIN = 55  # CODEx: 推力裕度，可调，用于适应更大总质量。
+DEFAULT_THRUST_MARGIN = 2.5  # CODEx: 推力裕度，可调，用于适应更大总质量。
 DEBUG_DIAG_STEPS = {500, 1000, 1500, 1600, 1700, 1800, 1900}
 DIAG_JSON_PATH = "payload_diag_log.jsonl"
 LAST_DIAG_STATE = {"linvel": None, "angvel": None}
 N=True
+# 固定惯量矩阵（来源于 step1501），只在初始化时写入一次物理引擎，并供控制器使用。
+STEP1501_INERTIA = torch.tensor(
+    [
+        [0.02540028, 0.02275556, -0.00711111],
+        [0.02275556, 0.02540028, 0.00711111],
+        [-0.00711111, 0.00711111, 0.04635611],
+    ],
+    dtype=torch.float32,
+)
+
 def adjust_motor_thrust_limits(  # CODEx
     env_manager,
     margin: float = DEFAULT_THRUST_MARGIN,
@@ -165,6 +175,10 @@ def log_physics_snapshot(step: int, env_manager, payload_manager: "PayloadManage
     else:
         diag_data["controller_wrench"] = controller_wrench
 
+    debug_snapshot = getattr(controller, "debug_snapshot", None)
+    if isinstance(debug_snapshot, dict) and debug_snapshot:
+        diag_data["controller_debug"] = debug_snapshot
+
     logger.error(
         f"[Diag][Step {step}] mass={robot_mass:.3f}kg, controller_mass={controller_mass:.3f}, "
         f"min_thrust={diag_data['motor_min_thrust']}, max_thrust={diag_data['motor_max_thrust']}, "
@@ -214,6 +228,18 @@ class PayloadManager:
         self.mass_history: List[float] = []
         self.com_history: List[torch.Tensor] = []
         self.base_state_view = env_manager.IGE_env.vec_root_tensor
+        self._pending_release_torque_world = torch.zeros(3, device=self.device, dtype=torch.float32)
+
+        self.current_inertia: torch.Tensor = None  # type: ignore
+        self._inertia_start: torch.Tensor = None  # type: ignore
+        self._inertia_target: torch.Tensor = None  # type: ignore
+        self._inertia_transition_steps = 40
+        self._inertia_transition_progress = 0
+        self._inertia_transition_active = False
+        self._latest_mass: float = float(self.base_mass)
+        self._latest_com: torch.Tensor = self.base_com.clone()
+        self.gain_relax_scale = 0.45
+        self.gain_relax_duration = 60
 
         self.apply_to_sim()
 
@@ -250,44 +276,14 @@ class PayloadManager:
     def apply_to_sim(self):
         total_mass, inertia_total, combined_com = self._compute_total_properties()
 
-        # 每次都计算虚拟惯量 (about new COM)
-        inertia_np = inertia_total.detach().cpu().numpy()
-
-        # --- 仅首轮把惯量写回物理引擎，其后不再写入 ---
-        # 如果你前面没有 global N，请在文件顶部定义 N=True，并在此声明 global
-        global N
-        if N is True:
-            N = False
-            print("[PayloadManager] 应用到仿真(仅一次写物理惯量): 总质量={:.3f}kg, COM={}".format(
-                float(total_mass.item()), combined_com.detach().cpu().numpy().tolist()))
-            base_prop = self.body_props[0]
-            base_prop.mass = float(total_mass.item())
-            base_prop.com = torch_to_vec3(combined_com)
-            # 只在第一次真正写入物理惯量
-            base_prop.inertia = tensor33_to_mat33(inertia_np)
-
-        # 仍然把 body_props 写回，以保证 mass/COM 生效；惯量在第一次之后不再改变
-        self.gym.set_actor_rigid_body_properties(
-            self.env_ptr, self.robot_handle, self.body_props, recomputeInertia=False
-        )
-
-        env = self.env_manager
-        # 把“虚拟惯量”同步到张量，供控制器使用（重要！）
-        inertia_tensor = torch.tensor(inertia_np, device=self.device, dtype=torch.float32)
-        env.robot_manager.robot_inertia = inertia_tensor
-        env.robot_manager.robot_inertias[:] = inertia_tensor
-        env.IGE_env.global_tensor_dict["robot_inertia"][:] = inertia_tensor
-
-        # 质量相关同步（保持你原逻辑）
-        env.robot_manager.robot_mass = float(total_mass.item())
-        env.robot_manager.robot_masses.fill_(float(total_mass.item()))
-        env.IGE_env.global_tensor_dict["robot_mass"].fill_(float(total_mass.item()))
-        controller_mass = torch.full((env.num_envs, 1), float(total_mass.item()), device=self.device)
-        env.robot_manager.robot.controller.mass = controller_mass
+        self._latest_mass = float(total_mass.item())
+        self._latest_com = combined_com.clone()
+        self._start_inertia_transition(inertia_total)
+        self._apply_mass_and_inertia()
 
         adjust_motor_thrust_limits(env_manager=self.env_manager, margin=DEFAULT_THRUST_MARGIN)
 
-        self.mass_history.append(float(total_mass.item()))
+        self.mass_history.append(self._latest_mass)
         self.com_history.append(combined_com.detach().cpu())
 
 
@@ -540,7 +536,7 @@ def run_controller(controller_name, args, results):
                 f"Step {current_step}, 位置: {obs['robot_position']}, 误差: {error}, 当前质量: {mass_log[-1]:.3f}"
             )
         
-        #log_physics_snapshot(current_step, env_manager, payload_manager)
+        log_physics_snapshot(current_step, env_manager, payload_manager)
 
     results[controller_name] = {
         "errors": np.array(errors),

@@ -1,4 +1,5 @@
 import torch # 导入 PyTorch
+from typing import Dict, Any
 
 from aerial_gym.utils.math import * # 导入数学工具函数（如四元数、旋转矩阵操作）
 
@@ -31,6 +32,85 @@ class BaseLeeController(BaseController):
         self.inertia_alpha = 0.2  # 0.0~1.0, 数值越小过渡越慢，按需要调
         self.J_sim_const = None  # 首次捕获的物理惯量(常值)
         self.use_inertia_virtualization = True  # 开关，必要时可设为 False
+        # 调试信息缓存：在 compute_* 阶段填充，供外部日志提取
+        self._debug_cache: Dict[str, object] = {}
+        self.debug_snapshot: Dict[str, object] = {}
+        self._gain_scale_current: float = 1.0
+        self._gain_scale_start: float = 1.0
+        self._gain_scale_target: float = 1.0
+        self._gain_scale_duration: int = 1
+        self._gain_scale_progress: int = 0
+        self._gain_scale_active: bool = False
+        if not hasattr(self.cfg, "max_rotation_error"):
+            setattr(self.cfg, "max_rotation_error", 0.35)
+
+
+    def _capture_debug_tensor(self, key: str, tensor: torch.Tensor):
+        if tensor is None:
+            return
+        if not isinstance(tensor, torch.Tensor):
+            self._debug_cache[key] = tensor
+            return
+
+        t_cpu = tensor.detach().cpu()
+        summary: Dict[str, Any] = {}
+
+        if t_cpu.ndim >= 1 and t_cpu.shape[0] == self.num_envs:
+            if t_cpu.shape[0] > 0:
+                summary["env0"] = t_cpu[0].tolist()
+            if t_cpu.ndim == 1:
+                summary["mean"] = float(t_cpu.mean().item())
+                summary["min"] = float(t_cpu.min().item())
+                summary["max"] = float(t_cpu.max().item())
+                if self.num_envs > 1:
+                    summary["std"] = float(t_cpu.std(unbiased=False).item())
+            elif t_cpu.ndim == 2:
+                summary["mean"] = t_cpu.mean(dim=0).tolist()
+                summary["min"] = t_cpu.min(dim=0)[0].tolist()
+                summary["max"] = t_cpu.max(dim=0)[0].tolist()
+                if self.num_envs > 1:
+                    summary["std"] = t_cpu.std(dim=0, unbiased=False).tolist()
+            elif t_cpu.ndim == 3:
+                summary["env0"] = t_cpu[0].tolist() if t_cpu.shape[0] > 0 else []
+                if self.num_envs > 1:
+                    flattened = t_cpu.view(self.num_envs, -1)
+                    norms = torch.linalg.norm(flattened, dim=1)
+                    summary["fro_norm_mean"] = float(norms.mean().item())
+                    summary["fro_norm_max"] = float(norms.max().item())
+        else:
+            if t_cpu.ndim == 0:
+                summary["value"] = float(t_cpu.item())
+            else:
+                summary["value"] = t_cpu.tolist()
+
+        self._debug_cache[key] = summary
+
+
+    def _update_gain_scale(self):
+        if not self._gain_scale_active:
+            self._gain_scale_current = float(self._gain_scale_target)
+            return
+
+        steps = max(1, self._gain_scale_duration)
+        frac = min(1.0, self._gain_scale_progress / steps)
+        self._gain_scale_current = (
+            (1.0 - frac) * self._gain_scale_start + frac * self._gain_scale_target
+        )
+        self._gain_scale_progress += 1
+        if self._gain_scale_progress > steps:
+            self._gain_scale_current = self._gain_scale_target
+            self._gain_scale_active = False
+
+
+    def schedule_gain_scale(self, scale: float, duration_steps: int):
+        scale = float(max(0.05, min(scale, 1.0)))
+        duration_steps = int(max(1, duration_steps))
+        self._gain_scale_start = scale
+        self._gain_scale_target = 1.0
+        self._gain_scale_duration = duration_steps
+        self._gain_scale_progress = 0
+        self._gain_scale_active = True
+        self._gain_scale_current = scale
 
 
     def init_tensors(self, global_tensor_dict):
@@ -41,31 +121,31 @@ class BaseLeeController(BaseController):
         # K_pos_tensor: 位置增益 (P 项)
         self.K_pos_tensor_max = torch.tensor(
             self.cfg.K_pos_tensor_max, device=self.device, requires_grad=False
-        ).expand(self.num_envs, -1)
+        ).unsqueeze(0).repeat(self.num_envs, 1)
         self.K_pos_tensor_min = torch.tensor(
             self.cfg.K_pos_tensor_min, device=self.device, requires_grad=False
-        ).expand(self.num_envs, -1)
+        ).unsqueeze(0).repeat(self.num_envs, 1)
         # K_linvel_tensor: 线性速度增益 (D 项)
         self.K_linvel_tensor_max = torch.tensor(
             self.cfg.K_vel_tensor_max, device=self.device, requires_grad=False
-        ).expand(self.num_envs, -1)
+        ).unsqueeze(0).repeat(self.num_envs, 1)
         self.K_linvel_tensor_min = torch.tensor(
             self.cfg.K_vel_tensor_min, device=self.device, requires_grad=False
-        ).expand(self.num_envs, -1)
+        ).unsqueeze(0).repeat(self.num_envs, 1)
         # K_rot_tensor: 旋转/姿态误差增益 (P 项)
         self.K_rot_tensor_max = torch.tensor(
             self.cfg.K_rot_tensor_max, device=self.device, requires_grad=False
-        ).expand(self.num_envs, -1)
+        ).unsqueeze(0).repeat(self.num_envs, 1)
         self.K_rot_tensor_min = torch.tensor(
             self.cfg.K_rot_tensor_min, device=self.device, requires_grad=False
-        ).expand(self.num_envs, -1)
+        ).unsqueeze(0).repeat(self.num_envs, 1)
         # K_angvel_tensor: 角速度增益 (D 项)
         self.K_angvel_tensor_max = torch.tensor(
             self.cfg.K_angvel_tensor_max, device=self.device, requires_grad=False
-        ).expand(self.num_envs, -1)
+        ).unsqueeze(0).repeat(self.num_envs, 1)
         self.K_angvel_tensor_min = torch.tensor(
             self.cfg.K_angvel_tensor_min, device=self.device, requires_grad=False
-        ).expand(self.num_envs, -1)
+        ).unsqueeze(0).repeat(self.num_envs, 1)
 
         # 将当前增益设置为最大值和最小值的平均值（初始值）
         self.K_pos_tensor_current = (self.K_pos_tensor_max + self.K_pos_tensor_min) / 2.0
@@ -137,6 +217,10 @@ class BaseLeeController(BaseController):
         """
         计算实现位置和速度跟踪所需的加速度指令 (PD 控制)。
         """
+        # 重置本周期的调试缓存
+        self._debug_cache = {}
+        self._update_gain_scale()
+
         # 计算世界坐标系下的位置误差
         position_error_world_frame = setpoint_position - self.robot_position
         # 将期望速度从相对坐标系（假设是载具坐标系）旋转到世界坐标系
@@ -146,11 +230,25 @@ class BaseLeeController(BaseController):
 
         # --- [ I 控制代码已移除 ] ---
 
+        gain_scale = self._gain_scale_current
+        effective_k_pos = self.K_pos_tensor_current * gain_scale
+        effective_k_vel = self.K_linvel_tensor_current * gain_scale
         # 计算加速度指令 (PD 控制律)
         accel_command = (
-            self.K_pos_tensor_current * position_error_world_frame # P 项
-            + self.K_linvel_tensor_current * velocity_error         # D 项
+            effective_k_pos * position_error_world_frame # P 项
+            + effective_k_vel * velocity_error         # D 项
         )
+
+        # 调试记录
+        self._capture_debug_tensor("setpoint_position_world", setpoint_position)
+        self._capture_debug_tensor("robot_position_world", self.robot_position)
+        self._capture_debug_tensor("position_error_world", position_error_world_frame)
+        self._capture_debug_tensor("setpoint_velocity_world", setpoint_velocity_world_frame)
+        self._capture_debug_tensor("robot_velocity_world", self.robot_linvel)
+        self._capture_debug_tensor("velocity_error_world", velocity_error)
+        self._capture_debug_tensor("accel_command_world", accel_command)
+        self._debug_cache["gain_scale_current"] = float(self._gain_scale_current)
+
         return accel_command
 
     def compute_body_torque(self, setpoint_orientation, setpoint_angvel):
@@ -165,9 +263,17 @@ class BaseLeeController(BaseController):
             self.I_filt = self.inertia_alpha * I_cur + (1.0 - self.inertia_alpha) * self.I_filt
 
         # 对期望的偏航角速度进行限幅
+        raw_yaw_rate = setpoint_angvel[:, 2].clone()
         setpoint_angvel[:, 2] = torch.clamp(
             setpoint_angvel[:, 2], -self.cfg.max_yaw_rate, self.cfg.max_yaw_rate
         )
+        yaw_clamped = torch.ne(raw_yaw_rate, setpoint_angvel[:, 2])
+        self._debug_cache["yaw_rate_clamp_count"] = int(yaw_clamped.sum().item())
+        self._capture_debug_tensor("raw_setpoint_yaw_rate", raw_yaw_rate)
+        self._capture_debug_tensor("setpoint_angvel_body", setpoint_angvel)
+        self._capture_debug_tensor("robot_body_angvel", self.robot_body_angvel)
+        self._capture_debug_tensor("setpoint_orientation_quat", setpoint_orientation)
+        self._capture_debug_tensor("robot_orientation_quat", self.robot_orientation)
         
         # 计算旋转误差四元数: R^T * R_d (从实际姿态到期望姿态的旋转)
         RT_Rd_quat = quat_mul(quat_inverse(self.robot_orientation), setpoint_orientation)
@@ -177,10 +283,23 @@ class BaseLeeController(BaseController):
         # 计算旋转误差向量 (Lee 姿态控制的核心项)
         # rotation_error = 1/2 * vee_map(R_d^T * R - R^T * R_d)
         rotation_error = 0.5 * compute_vee_map(torch.transpose(RT_Rd, -2, -1) - RT_Rd)
+
+        max_rot_err = getattr(self.cfg, "max_rotation_error", 0.35)
+        if max_rot_err and max_rot_err > 0:
+            norms = torch.linalg.norm(rotation_error, dim=1, keepdim=True)
+            safe_norms = torch.clamp(norms, min=1e-6)
+            clamp_factor = torch.clamp(max_rot_err / safe_norms, max=1.0)
+            clamped_mask = (norms > max_rot_err).squeeze(1)
+            rotation_error = rotation_error * clamp_factor
+            self._debug_cache["rotation_error_clamped_count"] = int(clamped_mask.sum().item())
+        else:
+            self._debug_cache["rotation_error_clamped_count"] = 0
         
         # 计算角速度误差
         # setpoint_angvel 需要被旋转到实际体坐标系：R^T * \omega_d
         angvel_error = self.robot_body_angvel - quat_rotate(RT_Rd_quat, setpoint_angvel)
+        self._capture_debug_tensor("rotation_error_body", rotation_error)
+        self._capture_debug_tensor("angvel_error_body", angvel_error)
         if self.I_filt is None:
             self.I_filt = self.robot_inertia.clone()
         else:
@@ -189,6 +308,7 @@ class BaseLeeController(BaseController):
             self.I_filt = alpha * self.robot_inertia + (1 - alpha) * self.I_filt
 
         I_use = self.I_filt  # 用滤后的惯量做前馈
+        self._capture_debug_tensor("inertia_filtered", I_use)
         # 原来的前馈行：
         # feed_forward_body_rates = torch.cross(
         #     self.robot_body_angvel,
@@ -201,13 +321,28 @@ class BaseLeeController(BaseController):
             torch.bmm(I_use, self.robot_body_angvel.unsqueeze(2)).squeeze(2),
             dim=1,
         )
-        
+        self._capture_debug_tensor("feedforward_body_rates", feed_forward_body_rates)
+
         # 计算最终力矩
+        gain_scale = self._gain_scale_current
+        effective_k_rot = self.K_rot_tensor_current * gain_scale
+        effective_k_ang = self.K_angvel_tensor_current * gain_scale
         torque = (
-            -self.K_rot_tensor_current * rotation_error # P 项 (姿态误差)
-            - self.K_angvel_tensor_current * angvel_error # D 项 (角速度误差)
+            -effective_k_rot * rotation_error # P 项 (姿态误差)
+            - effective_k_ang * angvel_error # D 项 (角速度误差)
             + feed_forward_body_rates # 前馈项
         )
+        self._capture_debug_tensor("torque_command_body", torque)
+        self._capture_debug_tensor("K_pos_current", self.K_pos_tensor_current)
+        self._capture_debug_tensor("K_vel_current", self.K_linvel_tensor_current)
+        self._capture_debug_tensor("K_rot_current", self.K_rot_tensor_current)
+        self._capture_debug_tensor("K_angvel_current", self.K_angvel_tensor_current)
+        self._debug_cache["gain_scale_current"] = float(self._gain_scale_current)
+
+        self._debug_cache.setdefault("torque_saturation_count", 0)
+        self._debug_cache.setdefault("thrust_saturation_count", 0)
+
+        self.debug_snapshot = dict(self._debug_cache)
         return torque
 
 
