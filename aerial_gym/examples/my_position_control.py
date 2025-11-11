@@ -1,264 +1,314 @@
-from aerial_gym.utils.logging import CustomLogger
+"""Minimal example showing payload release by editing mass properties only."""
+from __future__ import annotations
+
+import matplotlib.pyplot as plt
+from matplotlib.widgets import Slider
+import numpy as np
+
+_deprecated_aliases = {
+    "int": int,
+    "float": float,
+}
+for _alias, _target in _deprecated_aliases.items():
+    if not hasattr(np, _alias):
+        setattr(np, _alias, _target)  # type: ignore[attr-defined]
+
+from isaacgym import gymapi, gymtorch
 import torch
+
 from aerial_gym.sim.sim_builder import SimBuilder
 from aerial_gym.utils.helpers import get_args
-import numpy as np
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-import matplotlib
-from isaacgym import gymapi, gymtorch
+from aerial_gym.utils.logging import CustomLogger
+from aerial_gym.utils.math import get_euler_xyz_tensor
 
-# 设置支持中文的字体
-matplotlib.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'Arial Unicode MS']
-matplotlib.rcParams['axes.unicode_minus'] = False
+plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "Arial Unicode MS", "Noto Sans CJK SC"]
+plt.rcParams["axes.unicode_minus"] = False
 
 logger = CustomLogger(__name__)
 
-def add_noise(tensor, noise_std=0.01):
-    """添加高斯噪声"""
-    return tensor + torch.randn_like(tensor, device=tensor.device) * noise_std
+PAYLOAD_OFFSETS = [
+    np.array([8.08, 0.08, -0.02], dtype=np.float32),
+    np.array([-8.08, 0.08, -0.02], dtype=np.float32),
+    np.array([-8.08, -0.08, -0.02], dtype=np.float32),
+    np.array([8.08, -0.08, -0.02], dtype=np.float32),
+]
+PAYLOAD_MASS = 10.02375  # kg
+RELEASE_START_STEP = 400
+RELEASE_INTERVAL = 400
 
-def update_mass_properties(env_manager, mass_reduction=0.5):
-    """更新质量、惯性张量和质心，模拟子机释放"""
-    gym = env_manager.IGE_env.gym
-    sim = env_manager.IGE_env.sim
-    robot_handle = env_manager.robot_manager.robot_handles[0]
-    
-    # 获取当前机器人属性
-    env_ptr = env_manager.IGE_env.env_handles[0]
-    props = gym.get_actor_rigid_body_properties(env_ptr, robot_handle)
-    
-    # 初始质量（母机 0.25kg + 子机 0.5kg）
-    initial_mass = 0.75
-    props[0].mass = initial_mass
-    new_mass = max(initial_mass - mass_reduction, 0.25)
-    
-    # URDF 初始惯性张量（base_link）
-    initial_inertia = np.array([
-        [0.0004225, 0.0, 0.0],
-        [0.0, 0.0004225, 0.0],
-        [0.0, 0.0, 0.000845]
-    ])
-    
-    # 子机（0.5kg, z=-0.1m）增加 Ixx, Iyy
-    sub_inertia = 0.5 * 0.1**2  # 0.005 kg·m²
-    initial_inertia[0, 0] += sub_inertia
-    initial_inertia[1, 1] += sub_inertia
-    
-    # 按质量比例缩放（0.25/0.75）
-    mass_ratio = new_mass / initial_mass
-    new_inertia = initial_inertia * mass_ratio
-    
-    # 质心：初始 z = (0.25*0 + 0.5*(-0.1))/0.75 = -0.0667，释放后 z=0
-    props[0].com = gymapi.Vec3(0.0, 0.0, -0.0667)
-    new_com = gymapi.Vec3(0.0, 0.0, 0.0)
-    
-    # 更新 Mat33（使用 Vec3 构造）
-    # 更新惯性矩阵（你的 gym_38.so 版本专用）
-    inertia_mat = gymapi.Mat33()
-    inertia_mat.x = gymapi.Vec3(new_inertia[0, 0], new_inertia[1, 0], new_inertia[2, 0])
-    inertia_mat.y = gymapi.Vec3(new_inertia[0, 1], new_inertia[1, 1], new_inertia[2, 1])
-    inertia_mat.z = gymapi.Vec3(new_inertia[0, 2], new_inertia[1, 2], new_inertia[2, 2])
-    props[0].inertia = inertia_mat
-
-
-
-    props[0].com = new_com
-    props[0].mass = new_mass
-    
-    # 应用物理属性
-    gym.set_actor_rigid_body_properties(env_ptr, robot_handle, props)
-    
-    logger.info(f"子机释放, 质量从 {initial_mass:.4f} 减少到 {props[0].mass:.4f}")
-    logger.info(f"惯性张量更新: \n{new_inertia}")
-    logger.info(f"质心更新: ({props[0].com.x:.4f}, {props[0].com.y:.4f}, {props[0].com.z:.4f})")
-    
-    return new_mass, new_inertia
-
-def run_controller(controller_name, args, results):
-    """运行 lee_position_control 控制器，模拟子机释放"""
-    logger.warning(f"测试控制器: {controller_name}")
-    device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    logger.info(f"使用设备: {device}")
-    
-    env_manager = SimBuilder().build_env(
-        sim_name="base_sim",
-        env_name="empty_env",
-        robot_name="base_quadrotor",
-        controller_name=controller_name,
-        args=None,
-        device=device,
-        num_envs=1,
-        headless=args.headless,
-        use_warp=True,
+# 将 Mat33 拆解成 numpy 数组，方便后续做线性代数运算（例如缩放惯量）。
+def _mat33_to_np(mat: gymapi.Mat33) -> np.ndarray:
+    """将 Isaac Gym 的 Mat33 按列主序转换为 numpy 数组。"""
+    return np.array(
+        [
+            [mat.x.x, mat.y.x, mat.z.x],
+            [mat.x.y, mat.y.y, mat.z.y],
+            [mat.x.z, mat.y.z, mat.z.z],
+        ],
+        dtype=np.float32,
     )
-    # 强制初始位置为 [0, 0, 0]
-    initial_state = torch.zeros(13, device=device)
-    initial_state[0:3] = torch.tensor([0.0, 0.0, 0.0], device=device)
-    initial_state[6] = 1.0
-    root_state_tensor = gymtorch.wrap_tensor(env_manager.IGE_env.gym.acquire_actor_root_state_tensor(env_manager.IGE_env.sim))
-    root_state_tensor[:] = initial_state.repeat(env_manager.num_envs, 1)
+
+# 依据自定义的 numpy 矩阵重建 Mat33，以便写回 Isaac Gym。
+def _np_to_mat33(arr: np.ndarray) -> gymapi.Mat33:
+    """把 numpy 数组重新封装为 Mat33。"""
+    mat = gymapi.Mat33()
+    mat.x = gymapi.Vec3(arr[0, 0], arr[1, 0], arr[2, 0])
+    mat.y = gymapi.Vec3(arr[0, 1], arr[1, 1], arr[2, 1])
+    mat.z = gymapi.Vec3(arr[0, 2], arr[1, 2], arr[2, 2])
+    return mat
+
+# 将最新质量值同步进控制器内部的张量，避免控制器仍用旧质量计算推力。
+def _sync_controller_mass(env_manager, new_mass: float) -> None:
+    """在示例内部同步控制器保存的质量张量，保持物理属性一致。"""
+    controller = env_manager.robot_manager.robot.controller
+    if hasattr(controller, "mass"):
+        mass_tensor = torch.full_like(controller.mass, new_mass)
+        controller.mass = mass_tensor
+        logger.info("Controller mass tensor updated to %.3f kg", new_mass)
+    else:
+        logger.warning("控制器未暴露质量张量，跳过同步。")
+
+# 在所有环境中写入统一的初始根状态（零位移+单位四元数），确保每次仿真可复现。
+def initialize_vehicle_state(env_manager, device: str) -> None:
+    """将根状态清零并设为单位四元数，保证仿真以一致初态开始。"""
+    root_state = gymtorch.wrap_tensor(
+        env_manager.IGE_env.gym.acquire_actor_root_state_tensor(env_manager.IGE_env.sim)
+    )
+    single_state = torch.zeros(13, device=device)
+    single_state[6] = 1.0  # unit quaternion
+    root_state[:] = single_state.repeat(env_manager.num_envs, 1)
     env_manager.IGE_env.gym.refresh_actor_root_state_tensor(env_manager.IGE_env.sim)
-    env_manager.reset()
-    
-    target_position = torch.tensor([[0.0, 0.0, 0.0, 0.0]], device=device)
-    actions = target_position.repeat(env_manager.num_envs, 1)
-    
-    errors = []
-    positions = []
-    velocities = []
-    release_triggered = False
-    release_step = 500
 
-    env_ptr = env_manager.IGE_env.env_handles[0]
-    robot_handle = env_manager.robot_manager.robot_handles[0]
-    gym = env_manager.IGE_env.gym
-    sim = env_manager.IGE_env.sim
-    
-    # 确保 num_bodies 和 body_index 已定义
-    num_bodies = gym.get_actor_rigid_body_count(env_ptr, robot_handle)
-    body_index = 0
-    
-    # 确保 rigid_body_names 在循环前被定义 (解决 NameError)
-    # ⚠️ 修复 NameError 的关键步骤 ⚠️
-    try:
-        rigid_body_names = gym.get_actor_rigid_body_names(env_ptr, robot_handle)
-    except AttributeError:
-        # 如果您的 Isaac Gym 版本没有这个函数，可以返回一个默认列表
-        rigid_body_names = [f"body_{j}" for j in range(num_bodies)]
+# 依据平行轴定理计算点质量在母机坐标系下的惯量增量，用于构建复合惯量矩。
+def point_mass_inertia(mass: float, offset: np.ndarray) -> np.ndarray:
+    """点质量相对于母机原点的惯量贡献。"""
+    r_sq = float(np.dot(offset, offset))
+    return mass * (r_sq * np.eye(3) - np.outer(offset, offset))
+
+
+class PayloadManager:
+    """管理四角子机的释放、惯量更新以及等效的重力力矩补偿。"""
+
+    # 初始化载荷管理器：采样子机的质量/位置，缓存初始惯量矩并准备释放调度。
+    def __init__(
+        self,
+        env_manager,
+        payload_mass: float,
+        offsets,
+        release_start: int,
+        release_interval: int,
+    ):
+        self.env_manager = env_manager
+        self.device = env_manager.device
+        self.gym = env_manager.IGE_env.gym
+        self.env_handle = env_manager.IGE_env.env_handles[0]
+        self.robot_handle = env_manager.robot_manager.robot_handles[0]
+        self.payloads = [
+            {"mass": payload_mass, "offset": np.array(offset, dtype=np.float32), "attached": True}
+            for offset in offsets
+        ]
+        self.release_idx = 0
+        self.next_release_step = release_start
+        self.release_interval = release_interval
+        self.release_history = []
+
+        props = self.gym.get_actor_rigid_body_properties(self.env_handle, self.robot_handle)
+        self.props = props
+        self.base_prop = props[0]
+        self.initial_mass = float(self.base_prop.mass)
+        self.total_payload_mass = sum(p["mass"] for p in self.payloads)
+        self.empty_mass = max(self.initial_mass - self.total_payload_mass, 1e-3)
+        self.initial_inertia = _mat33_to_np(self.base_prop.inertia)
+        payload_inertia_total = sum(point_mass_inertia(p["mass"], p["offset"]) for p in self.payloads)
+        self.empty_inertia = self.initial_inertia - payload_inertia_total
+
+        self.gravity_vec = (
+            env_manager.IGE_env.global_tensor_dict["gravity"][0].detach().cpu().numpy()
+        )
+        self.global_torque_tensor = env_manager.IGE_env.global_tensor_dict["global_torque_tensor"]
+        self.base_body_index = 0  # base_link 假设是第一个刚体
+        self.current_mass = self.initial_mass
+
+    # 返回当前仍附着在母机上的子机列表。
+    def _attached_payloads(self):
+        return [p for p in self.payloads if p["attached"]]
+
+    # 在满足触发步数时释放一个子机，并记录释放历史、更新质量属性。
+    def maybe_release(self, step: int):
+        if self.release_idx >= len(self.payloads):
+            return
+        if step < self.next_release_step:
+            return
+        payload = self.payloads[self.release_idx]
+        payload["attached"] = False
+        self.release_idx += 1
+        self.release_history.append((step, self.release_idx))
+        self.next_release_step += self.release_interval
+        self.update_mass_properties()
+        logger.info("Payload %d released -> new mass %.3f kg", self.release_idx, self.current_mass)
+
+    # 根据当前仍附着的子机重新计算质量与惯量，并写入物理属性。
+    def update_mass_properties(self):
         
-    logger.warning(f"【循环前确认】刚体数量: {num_bodies}, 刚体列表: {rigid_body_names}")
-    logger.warning(f"【循环前确认】施加力目标刚体索引: {body_index}, 名称: {rigid_body_names[body_index]}")
+        attached = self._attached_payloads()
+        payload_mass_sum = sum(p["mass"] for p in attached)
+        self.current_mass = self.empty_mass + payload_mass_sum
+        inertia_np = self.initial_inertia#self.empty_inertia.copy()
+        for payload in attached:
+            inertia_np += point_mass_inertia(payload["mass"], payload["offset"])
 
+        #self.base_prop.mass = self.current_mass
+        #self.base_prop.inertia = _np_to_mat33(inertia_np)
+        #self.props[0] = self.base_prop
+        """
+        self.gym.set_actor_rigid_body_properties(
+            self.env_handle, self.robot_handle, self.props, recomputeInertia=False
+        )"""
+        #_sync_controller_mass(self.env_manager, self.current_mass)
 
-    for i in range(1500):
-        obs = env_manager.get_obs()
+    # 依据剩余子机造成的重心偏移生成等效重力力矩，写入全局扭矩张量。
+    def apply_payload_torque(self):
+        tensor = self.global_torque_tensor
+        tensor[self.base_body_index, :] = 0.0
+        attached = self._attached_payloads()
+        if not attached:
+            return
+        total_mass = self.current_mass
+        if total_mass <= 0:
+            return
+        offset = np.zeros(3, dtype=np.float32)
+        for payload in attached:
+            offset += payload["mass"] * payload["offset"]
+        com_offset = offset / total_mass
+        torque = np.cross(com_offset, self.gravity_vec * total_mass).astype(np.float32)
+        tensor[self.base_body_index, :] = torch.tensor(torque, device=self.device)
 
-        
-        # 风力扰动
-        #wind_force = torch.randn((env_manager.num_envs, 3), device=device) * 100
-        #env_manager.robot_manager.robot.controller.wrench_command[:, 0:3] += wind_force
-
-
-
-
-        # 触发时
-        if i == 500 and not release_triggered:
-            release_step = i
-            new_mass, new_inertia = update_mass_properties(env_manager, mass_reduction=0.5)
-            controller_mass_tensor = torch.full((env_manager.num_envs,), new_mass, device=device, dtype=torch.float32)
-            env_manager.robot_manager.robot.controller.mass = controller_mass_tensor.unsqueeze(1)
-            release_triggered = True
-            logger.info("子机释放并同步控制器质量")
-
-        # 构造 forces_flat 的索引形式 (num_envs * num_bodies, 3)
-        forces_flat = torch.zeros((env_manager.num_envs * num_bodies, 3), device=device, dtype=torch.float32)
-        idx = 0 * num_bodies + body_index
-        # 施加外力：持续0.2秒（20个step）
-        if 500 <= i < 501:
-            env_manager.robot_manager.robot.controller.wrench_command[:] = 0.0
-
-            # 1. 获取 Isaac Gym 内部用于施力的张量
-            global_force_tensor = env_manager.IGE_env.global_tensor_dict["global_force_tensor"]
-            
-            # 2. 清零内部施力张量，防止其他控制逻辑干扰 (可选，但推荐)
-            global_force_tensor[:] = 0.0
-
-            # 3. 计算第一个环境、第一个刚体（base_link）的索引（idx=0）
-            # 注意: global_force_tensor 已经是扁平化的 (num_total_rigid_bodies, 3)
-            # 所以第一个环境的第一个刚体的索引就是 0。
-            # 如果 num_envs=1，则 idx=0
-            idx = 0 
-
-            # 4. 施加扰动力 (例如 200.0 N)
-            global_force_tensor[idx, 2] = 100.0  # Z轴向上
-            env_manager.IGE_env.global_tensor_dict["global_force_tensor"]=global_force_tensor
-            # 5. IGE_env_manager.pre_physics_step 会自动使用这个更新后的张量施力
-            
-            logger.info(f"Step {i}: 施加扰动力 {global_force_tensor[idx, 2].item():.1f} N 到 {rigid_body_names[body_index]}")
-            # 注意: 此时不需要再手动调用 gym.apply_rigid_body_force_tensors 了！
-    
-
-
-
-
-
-        # 然后执行控制与仿真步
-        actions = target_position.repeat(env_manager.num_envs, 1)
-        env_manager.step(actions=actions)
-        env_manager.render()
-
-
-        
-        error = torch.norm(target_position[:, 0:3] - obs["robot_position"], dim=1)
-        errors.append(error.cpu().numpy())
-        positions.append(obs["robot_position"].cpu().numpy())
-        velocities.append(obs["robot_vehicle_linvel"].cpu().numpy())
-        
-        if i % 100 == 0:
-            logger.info(f"Step {i}, 当前位置: {obs['robot_position']}, 误差: {error}")
-    
-    results[controller_name] = {
-        "errors": np.array(errors),
-        "positions": np.array(positions),
-        "release_time": (release_step * 0.01) if release_triggered else None
-    }
-
-    
-    del env_manager
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
 
 if __name__ == "__main__":
     args = get_args()
-    controller_name = "lee_position_control"
-    results = {}
-    release_step = None
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
-    run_controller(controller_name, args, results)
-    
-    plt.figure(figsize=(10, 6))
-    if controller_name in results:
-        plt.plot(np.arange(len(results[controller_name]["errors"])) * 0.01, 
-                 results[controller_name]["errors"], 
-                 label=f"{controller_name} 误差")
-        if results[controller_name]["release_time"] is not None:
-            plt.axvline(x=results[controller_name]["release_time"], color='r', linestyle='--', label="子机释放")
-    plt.xlabel("时间 (秒)")
-    plt.ylabel("位置误差 (米)")
-    plt.title("控制器性能")
-    plt.legend()
-    plt.grid(True)
-    plt.show()
+    sim_builder = SimBuilder()
+    env_manager = sim_builder.build_env(
+        sim_name="base_sim",
+        env_name="empty_env",
+        robot_name="base_quadrotor",
+        controller_name="lee_position_control",
+        args=None,
+        device=device,
+        num_envs=args.num_envs,
+        headless=args.headless,
+        use_warp=args.use_warp,
+    )
 
-    fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(111, projection='3d')
-    if controller_name in results:
-        pos = results[controller_name]["positions"]
-        ax.plot(pos[:, 0, 0], pos[:, 0, 1], pos[:, 0, 2], label=f"{controller_name} 轨迹")
-        ax.scatter(pos[0, 0, 0], pos[0, 0, 1], pos[0, 0, 2], color='g', label="起始点")
-        release_idx = int(results[controller_name]["release_time"] / 0.01)
-        ax.scatter(pos[release_idx, 0, 0], pos[release_idx, 0, 1], pos[release_idx, 0, 2], color='r', label="释放点")
-        ax.scatter(pos[-1, 0, 0], pos[-1, 0, 1], pos[-1, 0, 2], color='b', label="结束点")
-    ax.set_xlabel("X (米)")
-    ax.set_ylabel("Y (米)")
-    ax.set_zlabel("Z (米)")
-    ax.set_title("无人机3D轨迹")
-    ax.legend()
-    plt.show()
-    
-    plt.figure(figsize=(10, 6))
-    if controller_name in results:
-        vel = np.array(results[controller_name]["positions"])
-        z_vel = np.diff(vel[:, 0, 2], prepend=vel[0, 0, 2]) / 0.01
-        plt.plot(np.arange(len(z_vel)) * 0.01, z_vel, label=f"{controller_name} Z轴速度")
-    plt.xlabel("时间 (秒)")
-    plt.ylabel("Z轴速度 (米/秒)")
-    plt.title("无人机Z轴速度")
-    plt.legend()
-    plt.grid(True)
-    plt.show()
-    
-    if controller_name in results:
-        mean_error = np.mean(results[controller_name]["errors"])
-        logger.info(f"平均位置误差: {mean_error:.4f} 米")
+    initialize_vehicle_state(env_manager, device)
+    env_manager.reset()
+    payload_manager = PayloadManager(
+        env_manager,
+        payload_mass=PAYLOAD_MASS,
+        offsets=PAYLOAD_OFFSETS,
+        release_start=RELEASE_START_STEP,
+        release_interval=RELEASE_INTERVAL,
+    )
+
+    actions = torch.zeros((env_manager.num_envs, 4), device=device)
+    z_history = []
+    euler_history = []
+
+    for step in range(2000):
+        payload_manager.maybe_release(step)
+        payload_manager.apply_payload_torque()
+        env_manager.step(actions=actions)
+        obs = env_manager.get_obs()
+        z_history.append(obs["robot_position"][0, 2].item())
+        quat = obs["robot_orientation"][0:1]
+        euler = get_euler_xyz_tensor(quat)
+        euler_history.append(euler[0].detach().cpu().numpy())
+
+        if step % 200 == 0:
+            position = obs["robot_position"][0]
+            logger.info("Step %d | position: [%.2f, %.2f, %.2f]", step, *position.tolist())
+
+    sim_builder.delete_env()
+
+    # 创建缩放滑块，让多个子图共享同一组 X/Y 缩放倍率。
+    def _add_axis_sliders(fig, axes):
+        fig.subplots_adjust(bottom=0.25)
+        slider_color = "#24a8a8"
+        ax_xscale = fig.add_axes([0.15, 0.1, 0.7, 0.03], facecolor=slider_color)
+        ax_yscale = fig.add_axes([0.15, 0.05, 0.7, 0.03], facecolor=slider_color)
+        slider_x = Slider(ax_xscale, "X轴缩放", 0.2, 5.0, valinit=1.0)
+        slider_y = Slider(ax_yscale, "Y轴缩放", 0.2, 5.0, valinit=1.0)
+
+        base_limits = {
+            axis: {"x": axis.get_xlim(), "y": axis.get_ylim()} for axis in axes
+        }
+
+        def _apply_scale(_):
+            x_scale = slider_x.val
+            y_scale = slider_y.val
+
+            for axis in axes:
+                base_xlim = base_limits[axis]["x"]
+                base_ylim = base_limits[axis]["y"]
+
+                x_mid = 0.5 * (base_xlim[0] + base_xlim[1])
+                x_span = (base_xlim[1] - base_xlim[0]) / x_scale
+                axis.set_xlim(x_mid - 0.5 * x_span, x_mid + 0.5 * x_span)
+
+                y_mid = 0.5 * (base_ylim[0] + base_ylim[1])
+                y_span = (base_ylim[1] - base_ylim[0]) / y_scale
+                axis.set_ylim(y_mid - 0.5 * y_span, y_mid + 0.5 * y_span)
+
+            fig.canvas.draw_idle()
+
+        slider_x.on_changed(_apply_scale)
+        slider_y.on_changed(_apply_scale)
+        return slider_x, slider_y
+
+    if z_history:
+        steps = np.arange(len(z_history))
+        eulers = None
+        if euler_history:
+            eulers_rad = np.array(euler_history)
+            eulers_continuous = np.unwrap(eulers_rad, axis=0)
+            eulers = np.rad2deg(eulers_continuous)
+            offsets = np.round(eulers[0] / 360.0) * 360.0
+            eulers -= offsets
+
+        fig, (ax_z, ax_euler) = plt.subplots(2, 1, figsize=(10, 8))
+
+        ax_z.plot(steps, z_history, label="Z 轴高度")
+        ax_z.set_xlabel("步数")
+        ax_z.set_ylabel("Z 轴高度 (米)")
+        ax_z.set_title("无人机 Z 轴位置曲线")
+        ax_z.grid(True)
+        ax_z.legend()
+
+        for idx, (release_step, release_id) in enumerate(payload_manager.release_history, start=1):
+            ax_z.axvline(release_step, color="r", linestyle="--", alpha=0.6)
+            ax_z.text(
+                release_step,
+                ax_z.get_ylim()[1],
+                f"释放 {release_id}",
+                color="r",
+                fontsize=9,
+                verticalalignment="top",
+                horizontalalignment="center",
+                rotation=90,
+            )
+
+        if eulers is not None:
+            ax_euler.plot(steps, eulers[:, 0], label="Roll (°)")
+            ax_euler.plot(steps, eulers[:, 1], label="Pitch (°)")
+            ax_euler.plot(steps, eulers[:, 2], label="Yaw (°)")
+            ax_euler.set_xlabel("步数")
+            ax_euler.set_ylabel("角度 (°)")
+            ax_euler.set_title("无人机姿态角 (XYZ)")
+            ax_euler.grid(True)
+            ax_euler.legend()
+        else:
+            ax_euler.axis("off")
+
+        _ = _add_axis_sliders(fig, [ax_z, ax_euler])
+        plt.show()
