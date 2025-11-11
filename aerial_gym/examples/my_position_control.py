@@ -19,7 +19,7 @@ import torch
 from aerial_gym.sim.sim_builder import SimBuilder
 from aerial_gym.utils.helpers import get_args
 from aerial_gym.utils.logging import CustomLogger
-from aerial_gym.utils.math import get_euler_xyz_tensor
+from aerial_gym.utils.math import get_euler_xyz_tensor, quat_rotate_inverse
 
 plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "Arial Unicode MS", "Noto Sans CJK SC"]
 plt.rcParams["axes.unicode_minus"] = False
@@ -27,12 +27,12 @@ plt.rcParams["axes.unicode_minus"] = False
 logger = CustomLogger(__name__)
 
 PAYLOAD_OFFSETS = [
-    np.array([8.08, 0.08, -0.02], dtype=np.float32),
-    np.array([-8.08, 0.08, -0.02], dtype=np.float32),
-    np.array([-8.08, -0.08, -0.02], dtype=np.float32),
-    np.array([8.08, -0.08, -0.02], dtype=np.float32),
+    np.array([0.4, 0.4, -0.4], dtype=np.float32),
+    np.array([0.4, -0.4, -0.4], dtype=np.float32),
+    np.array([-0.4, 0.4, -0.4], dtype=np.float32),
+    np.array([-0.4, -0.4, -0.4], dtype=np.float32),
 ]
-PAYLOAD_MASS = 10.02375  # kg
+PAYLOAD_MASS = 0.01375  # kg
 RELEASE_START_STEP = 400
 RELEASE_INTERVAL = 400
 
@@ -123,7 +123,7 @@ class PayloadManager:
         self.empty_inertia = self.initial_inertia - payload_inertia_total
 
         self.gravity_vec = (
-            env_manager.IGE_env.global_tensor_dict["gravity"][0].detach().cpu().numpy()
+            env_manager.IGE_env.global_tensor_dict["gravity"][0].detach().to(self.device)
         )
         self.global_torque_tensor = env_manager.IGE_env.global_tensor_dict["global_torque_tensor"]
         self.base_body_index = 0  # base_link 假设是第一个刚体
@@ -147,41 +147,36 @@ class PayloadManager:
         self.update_mass_properties()
         logger.info("Payload %d released -> new mass %.3f kg", self.release_idx, self.current_mass)
 
-    # 根据当前仍附着的子机重新计算质量与惯量，并写入物理属性。
+    # 根据当前仍附着的子机重新计算质量，供外部扭矩计算使用。
     def update_mass_properties(self):
-        
         attached = self._attached_payloads()
         payload_mass_sum = sum(p["mass"] for p in attached)
         self.current_mass = self.empty_mass + payload_mass_sum
-        inertia_np = self.initial_inertia#self.empty_inertia.copy()
-        for payload in attached:
-            inertia_np += point_mass_inertia(payload["mass"], payload["offset"])
 
-        #self.base_prop.mass = self.current_mass
-        #self.base_prop.inertia = _np_to_mat33(inertia_np)
-        #self.props[0] = self.base_prop
-        """
-        self.gym.set_actor_rigid_body_properties(
-            self.env_handle, self.robot_handle, self.props, recomputeInertia=False
-        )"""
-        #_sync_controller_mass(self.env_manager, self.current_mass)
-
-    # 依据剩余子机造成的重心偏移生成等效重力力矩，写入全局扭矩张量。
-    def apply_payload_torque(self):
-        tensor = self.global_torque_tensor
-        tensor[self.base_body_index, :] = 0.0
+    # 计算当前剩余子机导致的世界系扭矩（针对每个 env 返回一个 3D 向量）。
+    def compute_world_torque(self) -> torch.Tensor:
         attached = self._attached_payloads()
         if not attached:
-            return
+            return torch.zeros((self.env_manager.num_envs, 3), device=self.device)
         total_mass = self.current_mass
         if total_mass <= 0:
-            return
-        offset = np.zeros(3, dtype=np.float32)
+            return torch.zeros((self.env_manager.num_envs, 3), device=self.device)
+        weighted_offset = torch.zeros(3, device=self.device)
         for payload in attached:
-            offset += payload["mass"] * payload["offset"]
-        com_offset = offset / total_mass
-        torque = np.cross(com_offset, self.gravity_vec * total_mass).astype(np.float32)
-        tensor[self.base_body_index, :] = torch.tensor(torque, device=self.device)
+            offset = torch.as_tensor(
+                payload["offset"], device=self.device, dtype=torch.float32
+            )
+            weighted_offset += payload["mass"] * offset
+        com_offset = weighted_offset / total_mass
+        torque = torch.cross(com_offset, self.gravity_vec * total_mass)
+        return torque.unsqueeze(0).expand(self.env_manager.num_envs, -1)
+
+    # 将世界系扭矩转换到机体系，供控制器的 wrench 注入。
+    def compute_body_torque(self, orientations: torch.Tensor) -> torch.Tensor:
+        world_torque = self.compute_world_torque()
+        if world_torque.shape[0] != orientations.shape[0]:
+            world_torque = world_torque[: orientations.shape[0]]
+        return quat_rotate_inverse(orientations, world_torque)
 
 
 if __name__ == "__main__":
@@ -211,14 +206,27 @@ if __name__ == "__main__":
         release_interval=RELEASE_INTERVAL,
     )
 
+    orig_pre_physics_step = env_manager.robot_manager.pre_physics_step
+
+    def patched_pre_physics_step(actions, _orig=orig_pre_physics_step):
+        _orig(actions)
+        orientations = env_manager.IGE_env.global_tensor_dict["robot_orientation"]
+        body_torque = payload_manager.compute_body_torque(orientations)
+        env_manager.robot_manager.robot.robot_torque_tensors[:, 0, :] += body_torque
+
+    env_manager.robot_manager.pre_physics_step = patched_pre_physics_step
+
     actions = torch.zeros((env_manager.num_envs, 4), device=device)
     z_history = []
     euler_history = []
 
+    obs = env_manager.get_obs()
+
     for step in range(2000):
         payload_manager.maybe_release(step)
-        payload_manager.apply_payload_torque()
+        
         env_manager.step(actions=actions)
+
         obs = env_manager.get_obs()
         z_history.append(obs["robot_position"][0, 2].item())
         quat = obs["robot_orientation"][0:1]
