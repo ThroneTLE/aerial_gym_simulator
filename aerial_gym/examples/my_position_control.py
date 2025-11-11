@@ -20,7 +20,7 @@ import torch
 from aerial_gym.sim.sim_builder import SimBuilder
 from aerial_gym.utils.helpers import get_args
 from aerial_gym.utils.logging import CustomLogger
-from aerial_gym.utils.math import get_euler_xyz_tensor, quat_rotate_inverse, quat_rotate
+from aerial_gym.utils.math import get_euler_xyz_tensor, quat_rotate_inverse
 
 plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "Arial Unicode MS", "Noto Sans CJK SC"]
 plt.rcParams["axes.unicode_minus"] = False
@@ -134,7 +134,6 @@ class PayloadManager:
         self.global_torque_tensor = env_manager.IGE_env.global_tensor_dict["global_torque_tensor"]
         self.base_body_index = 0  # base_link 假设是第一个刚体
         self.current_mass = self.initial_mass
-        self.pending_angvel = None
 
     # 返回当前仍附着在母机上的子机列表。
     def _attached_payloads(self):
@@ -172,33 +171,6 @@ class PayloadManager:
         self.gym.set_actor_rigid_body_properties(
             self.env_handle, self.robot_handle, self.props, recomputeInertia=False
         )
-
-        env_id = 0  # 当前示例仅演示单环境
-        robot_manager = self.env_manager.robot_manager
-        tensors = self.env_manager.IGE_env.global_tensor_dict
-        I_old = robot_manager.robot_inertias[env_id].clone()
-        I_new = torch.from_numpy(inertia_np).to(self.device)
-        robot_manager.robot_inertia = I_new
-        robot_manager.robot_inertias[env_id] = I_new
-        robot_manager.robot_mass = self.current_mass
-        robot_manager.robot_masses[env_id] = self.current_mass
-
-        omega_old_body = tensors["robot_body_angvel"][env_id].clone()
-        try:
-            target_L = I_old @ omega_old_body
-            omega_new_body = torch.linalg.solve(I_new, target_L)
-        except RuntimeError:
-            omega_new_body = omega_old_body
-
-        orientations = tensors["robot_orientation"]
-        omega_world = quat_rotate(
-            orientations[env_id : env_id + 1], omega_new_body.unsqueeze(0)
-        )[0]
-        self.pending_angvel = {
-            "env_id": env_id,
-            "body": omega_new_body.clone(),
-            "world": omega_world.clone(),
-        }
     # 计算当前剩余子机导致的世界系扭矩（针对每个 env 返回一个 3D 向量）。
     def compute_world_torque(self) -> torch.Tensor:
         attached = self._attached_payloads()
@@ -256,13 +228,6 @@ if __name__ == "__main__":
     orig_pre_physics_step = env_manager.robot_manager.pre_physics_step
 
     def patched_pre_physics_step(actions, _orig=orig_pre_physics_step):
-        if payload_manager.pending_angvel is not None:
-            pend = payload_manager.pending_angvel
-            tensors = env_manager.IGE_env.global_tensor_dict
-            tensors["robot_body_angvel"][pend["env_id"]] = pend["body"]
-            tensors["robot_angvel"][pend["env_id"]] = pend["world"]
-            #env_manager.IGE_env.write_to_sim()
-            payload_manager.pending_angvel = None
         _orig(actions)
         orientations = env_manager.IGE_env.global_tensor_dict["robot_orientation"]
         body_torque = payload_manager.compute_body_torque(orientations)
