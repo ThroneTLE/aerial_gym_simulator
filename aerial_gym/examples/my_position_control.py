@@ -4,6 +4,7 @@ from __future__ import annotations
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 import numpy as np
+import random
 
 _deprecated_aliases = {
     "int": int,
@@ -19,7 +20,7 @@ import torch
 from aerial_gym.sim.sim_builder import SimBuilder
 from aerial_gym.utils.helpers import get_args
 from aerial_gym.utils.logging import CustomLogger
-from aerial_gym.utils.math import get_euler_xyz_tensor, quat_rotate_inverse
+from aerial_gym.utils.math import get_euler_xyz_tensor, quat_rotate_inverse, quat_rotate
 
 plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "Arial Unicode MS", "Noto Sans CJK SC"]
 plt.rcParams["axes.unicode_minus"] = False
@@ -32,7 +33,7 @@ PAYLOAD_OFFSETS = [
     np.array([-0.4, 0.4, -0.4], dtype=np.float32),
     np.array([-0.4, -0.4, -0.4], dtype=np.float32),
 ]
-PAYLOAD_MASS = 0.01375  # kg
+PAYLOAD_MASS = 0.001  # kg
 RELEASE_START_STEP = 400
 RELEASE_INTERVAL = 400
 
@@ -104,8 +105,13 @@ class PayloadManager:
         self.env_handle = env_manager.IGE_env.env_handles[0]
         self.robot_handle = env_manager.robot_manager.robot_handles[0]
         self.payloads = [
-            {"mass": payload_mass, "offset": np.array(offset, dtype=np.float32), "attached": True}
-            for offset in offsets
+            {
+                "mass": payload_mass,
+                "offset": np.array(offset, dtype=np.float32),
+                "attached": True,
+                "name": f"payload_{idx}",
+            }
+            for idx, offset in enumerate(offsets)
         ]
         self.release_idx = 0
         self.next_release_step = release_start
@@ -128,6 +134,7 @@ class PayloadManager:
         self.global_torque_tensor = env_manager.IGE_env.global_tensor_dict["global_torque_tensor"]
         self.base_body_index = 0  # base_link 假设是第一个刚体
         self.current_mass = self.initial_mass
+        self.pending_angvel = None
 
     # 返回当前仍附着在母机上的子机列表。
     def _attached_payloads(self):
@@ -139,20 +146,59 @@ class PayloadManager:
             return
         if step < self.next_release_step:
             return
-        payload = self.payloads[self.release_idx]
+        attached_payloads = self._attached_payloads()
+        if not attached_payloads:
+            return
+        payload = random.choice(attached_payloads)
         payload["attached"] = False
         self.release_idx += 1
-        self.release_history.append((step, self.release_idx))
+        self.release_history.append((step, payload.get("name", f"{self.release_idx}")))
         self.next_release_step += self.release_interval
         self.update_mass_properties()
         logger.info("Payload %d released -> new mass %.3f kg", self.release_idx, self.current_mass)
 
-    # 根据当前仍附着的子机重新计算质量，供外部扭矩计算使用。
+    # 根据当前仍附着的子机重新计算质量与惯量，并写入物理属性。
     def update_mass_properties(self):
+        
         attached = self._attached_payloads()
         payload_mass_sum = sum(p["mass"] for p in attached)
         self.current_mass = self.empty_mass + payload_mass_sum
+        inertia_np = self.empty_inertia.copy()#self.initial_inertia
+        for payload in attached:
+            inertia_np += point_mass_inertia(payload["mass"], payload["offset"])
 
+        self.base_prop.mass = self.current_mass
+        self.base_prop.inertia = _np_to_mat33(inertia_np)
+        self.gym.set_actor_rigid_body_properties(
+            self.env_handle, self.robot_handle, self.props, recomputeInertia=False
+        )
+
+        env_id = 0  # 当前示例仅演示单环境
+        robot_manager = self.env_manager.robot_manager
+        tensors = self.env_manager.IGE_env.global_tensor_dict
+        I_old = robot_manager.robot_inertias[env_id].clone()
+        I_new = torch.from_numpy(inertia_np).to(self.device)
+        robot_manager.robot_inertia = I_new
+        robot_manager.robot_inertias[env_id] = I_new
+        robot_manager.robot_mass = self.current_mass
+        robot_manager.robot_masses[env_id] = self.current_mass
+
+        omega_old_body = tensors["robot_body_angvel"][env_id].clone()
+        try:
+            target_L = I_old @ omega_old_body
+            omega_new_body = torch.linalg.solve(I_new, target_L)
+        except RuntimeError:
+            omega_new_body = omega_old_body
+
+        orientations = tensors["robot_orientation"]
+        omega_world = quat_rotate(
+            orientations[env_id : env_id + 1], omega_new_body.unsqueeze(0)
+        )[0]
+        self.pending_angvel = {
+            "env_id": env_id,
+            "body": omega_new_body.clone(),
+            "world": omega_world.clone(),
+        }
     # 计算当前剩余子机导致的世界系扭矩（针对每个 env 返回一个 3D 向量）。
     def compute_world_torque(self) -> torch.Tensor:
         attached = self._attached_payloads()
@@ -168,6 +214,7 @@ class PayloadManager:
             )
             weighted_offset += payload["mass"] * offset
         com_offset = weighted_offset / total_mass
+        #print(f"[PayloadTorque] COM offset: {com_offset.tolist()}")
         torque = torch.cross(com_offset, self.gravity_vec * total_mass)
         return torque.unsqueeze(0).expand(self.env_manager.num_envs, -1)
 
@@ -209,6 +256,13 @@ if __name__ == "__main__":
     orig_pre_physics_step = env_manager.robot_manager.pre_physics_step
 
     def patched_pre_physics_step(actions, _orig=orig_pre_physics_step):
+        if payload_manager.pending_angvel is not None:
+            pend = payload_manager.pending_angvel
+            tensors = env_manager.IGE_env.global_tensor_dict
+            tensors["robot_body_angvel"][pend["env_id"]] = pend["body"]
+            tensors["robot_angvel"][pend["env_id"]] = pend["world"]
+            #env_manager.IGE_env.write_to_sim()
+            payload_manager.pending_angvel = None
         _orig(actions)
         orientations = env_manager.IGE_env.global_tensor_dict["robot_orientation"]
         body_torque = payload_manager.compute_body_torque(orientations)
@@ -293,12 +347,12 @@ if __name__ == "__main__":
         ax_z.grid(True)
         ax_z.legend()
 
-        for idx, (release_step, release_id) in enumerate(payload_manager.release_history, start=1):
+        for idx, (release_step, release_name) in enumerate(payload_manager.release_history, start=1):
             ax_z.axvline(release_step, color="r", linestyle="--", alpha=0.6)
             ax_z.text(
                 release_step,
                 ax_z.get_ylim()[1],
-                f"释放 {release_id}",
+                f"释放 {release_name}",
                 color="r",
                 fontsize=9,
                 verticalalignment="top",
