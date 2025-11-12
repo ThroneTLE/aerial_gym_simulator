@@ -33,9 +33,9 @@ PAYLOAD_OFFSETS = [
     np.array([-0.4, 0.4, -0.4], dtype=np.float32),
     np.array([-0.4, -0.4, -0.4], dtype=np.float32),
 ]
-PAYLOAD_MASS = 0.1  # kg
+PAYLOAD_MASS = 0.025  # kg
 RELEASE_START_STEP = 400
-RELEASE_INTERVAL = 400
+RELEASE_INTERVAL = 200
 
 # 将 Mat33 拆解成 numpy 数组，方便后续做线性代数运算（例如缩放惯量）。
 def _mat33_to_np(mat: gymapi.Mat33) -> np.ndarray:
@@ -183,6 +183,7 @@ class PayloadManager:
         self.gym.set_actor_rigid_body_properties(
             self.env_handle, self.robot_handle, self.props, recomputeInertia=False
         )
+        _sync_controller_mass(self.env_manager, self.current_mass)# 同步控制器质量张量
     # 计算当前剩余子机导致的世界系扭矩（针对每个 env 返回一个 3D 向量）。
     def compute_world_torque(self) -> torch.Tensor:
         attached = self._attached_payloads()
