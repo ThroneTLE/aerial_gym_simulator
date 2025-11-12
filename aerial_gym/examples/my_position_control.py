@@ -33,7 +33,7 @@ PAYLOAD_OFFSETS = [
     np.array([-0.4, 0.4, -0.4], dtype=np.float32),
     np.array([-0.4, -0.4, -0.4], dtype=np.float32),
 ]
-PAYLOAD_MASS = 0.001  # kg
+PAYLOAD_MASS = 0.1  # kg
 RELEASE_START_STEP = 400
 RELEASE_INTERVAL = 400
 
@@ -122,11 +122,23 @@ class PayloadManager:
         self.props = props
         self.base_prop = props[0]
         self.initial_mass = float(self.base_prop.mass)
-        self.total_payload_mass = sum(p["mass"] for p in self.payloads)
-        self.empty_mass = max(self.initial_mass - self.total_payload_mass, 1e-3)
         self.initial_inertia = _mat33_to_np(self.base_prop.inertia)
+
+        self.total_payload_mass = sum(p["mass"] for p in self.payloads)
         payload_inertia_total = sum(point_mass_inertia(p["mass"], p["offset"]) for p in self.payloads)
-        self.empty_inertia = self.initial_inertia - payload_inertia_total
+
+        # 空载母机的属性直接来自 URDF，需要在写回模拟前先保留下来
+        self.empty_mass = self.initial_mass
+        self.empty_inertia = self.initial_inertia
+
+        # 将初始状态更新为“母机 + 全部子机”的质量与惯量
+        self.current_mass = self.initial_mass + self.total_payload_mass
+        full_inertia = self.initial_inertia + payload_inertia_total
+        self.base_prop.mass = self.current_mass
+        self.base_prop.inertia = _np_to_mat33(full_inertia)
+        self.gym.set_actor_rigid_body_properties(
+            self.env_handle, self.robot_handle, self.props, recomputeInertia=False
+        )
 
         self.gravity_vec = (
             env_manager.IGE_env.global_tensor_dict["gravity"][0].detach().to(self.device)

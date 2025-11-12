@@ -65,21 +65,6 @@ class BaseLeeController(BaseController):
         self.K_pos_tensor_current = (self.K_pos_tensor_max + self.K_pos_tensor_min) / 2.0
 
 
-        # --- 积分增益和状态 (Integral Gains and State) ---
-        # K_pos_i_tensor: 位置积分增益 (I 项)
-        self.K_pos_i_tensor_max = torch.tensor(
-            self.cfg.K_pos_i_tensor_max, device=self.device, requires_grad=False
-        ).expand(self.num_envs, -1)
-        self.K_pos_i_tensor_min = torch.tensor(
-            self.cfg.K_pos_i_tensor_min, device=self.device, requires_grad=False
-        ).expand(self.num_envs, -1)
-        self.K_pos_i_tensor_current = (self.K_pos_i_tensor_max + self.K_pos_i_tensor_min) / 2.0
-
-        # 位置积分状态 (用于抗积分饱和/anti-windup)
-        self.pos_integral = torch.zeros((self.num_envs, 3), device=self.device)
-        # 积分限幅值（可选，用于抗积分饱和）
-        self.pos_integral_clamp = 1.0  # 每个轴的限幅幅度 (可调)
-
 
         self.K_linvel_tensor_current = (self.K_linvel_tensor_max + self.K_linvel_tensor_min) / 2.0
         self.K_rot_tensor_current = (self.K_rot_tensor_max + self.K_rot_tensor_min) / 2.0
@@ -118,7 +103,7 @@ class BaseLeeController(BaseController):
             # 如果 env_ids 为 None，则重置所有环境
             env_ids = torch.arange(self.K_rot_tensor.shape[0])
         self.randomize_params(env_ids) # 随机化控制参数
-        # 注意: 积分状态 self.pos_integral 的重置通常在 EnvManager/Task 的 reset 中处理
+        # 注意: 积分控制项目前已移除，如需恢复需在此处重置积分状态
 
     def randomize_params(self, env_ids):
         """
@@ -153,20 +138,10 @@ class BaseLeeController(BaseController):
         # 计算速度误差
         velocity_error = setpoint_velocity_world_frame - self.robot_linvel
 
-        # --- 积分项和抗积分饱和 (Integral Term and Anti-Windup) ---
-        dt = 0.01 # 假设仿真步长 dt = 0.01
-        leak = 0.999  # 积分泄漏/衰减因子
-        # 积分项更新：积分 = 衰减 * 积分 + 误差 * dt
-        self.pos_integral = leak * self.pos_integral + position_error_world_frame * dt
-
-        # 抗积分饱和限幅
-        self.pos_integral = torch.clamp(self.pos_integral, -self.pos_integral_clamp, self.pos_integral_clamp)
-
         # 计算加速度指令 (PID 控制律)
         accel_command = (
             self.K_pos_tensor_current * position_error_world_frame # P 项
             + self.K_linvel_tensor_current * velocity_error         # D 项
-            + self.K_pos_i_tensor_current * self.pos_integral      # I 项
         )
         return accel_command
 
