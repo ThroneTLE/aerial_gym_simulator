@@ -2,6 +2,10 @@ from aerial_gym.task.position_setpoint_task.position_setpoint_task import (
     PositionSetpointTask,
 )
 
+from aerial_gym.task.payload_compensation_task.payload_compensation_task import (
+    PayloadCompensationTask,
+)
+
 from aerial_gym.task.position_setpoint_task_sim2real.position_setpoint_task_sim2real import (
     PositionSetpointTaskSim2Real,
 )
@@ -18,6 +22,9 @@ from aerial_gym.task.navigation_task.navigation_task import NavigationTask
 
 from aerial_gym.config.task_config.position_setpoint_task_config import (
     task_config as position_setpoint_task_config,
+)
+from aerial_gym.config.task_config.payload_compensation_task_config import (
+    task_config as payload_compensation_task_config,
 )
 
 from aerial_gym.config.task_config.position_setpoint_task_sim2real_config import (
@@ -41,6 +48,9 @@ from aerial_gym.registry.task_registry import task_registry
 
 task_registry.register_task(
     "position_setpoint_task", PositionSetpointTask, position_setpoint_task_config
+)
+task_registry.register_task(
+    "payload_compensation_task", PayloadCompensationTask, payload_compensation_task_config
 )
 task_registry.register_task(
     "position_setpoint_task_sim2real",

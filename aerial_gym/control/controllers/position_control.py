@@ -58,3 +58,58 @@ class LeePositionController(BaseLeeController):
         return self.wrench_command
 
 
+class LeePositionControllerWithCompensation(LeePositionController):
+    """
+    Lee position controller that accepts additional torque-compensation inputs.
+
+    Expected command layout per environment:
+        [x, y, z, yaw, τx_cmd, τy_cmd, τz_cmd]
+    The first four entries are identical to the classic Lee controller. The
+    remaining entries are scaled (see config) and added directly to the body-frame
+    torque output to counteract external disturbances such as suspended payloads.
+    """
+
+    _BASE_ACTION_DIM = 4
+
+    def __init__(self, config, num_envs, device):
+        super().__init__(config, num_envs, device)
+        self.compensation_dims = getattr(self.cfg, "compensation_dims", 3)
+        self.comp_torque_limits = None
+
+    def init_tensors(self, global_tensor_dict=None):
+        super().init_tensors(global_tensor_dict)
+        torque_limits = getattr(self.cfg, "compensation_torque_limits", None)
+        if torque_limits is None:
+            raise AttributeError(
+                "compensation_torque_limits must be provided in the controller config."
+            )
+        if len(torque_limits) != self.compensation_dims:
+            raise ValueError(
+                "compensation_torque_limits length must match compensation_dims "
+                f"({self.compensation_dims})."
+            )
+        self.comp_torque_limits = torch.tensor(
+            torque_limits, dtype=torch.float32, device=self.device
+        ).view(1, -1)
+
+    def update(self, command_actions):
+        if command_actions.shape[1] != self._BASE_ACTION_DIM + self.compensation_dims:
+            raise ValueError(
+                "Expected command_actions with "
+                f"{self._BASE_ACTION_DIM + self.compensation_dims} columns, got "
+                f"{command_actions.shape[1]}."
+            )
+
+        base_actions = command_actions[:, : self._BASE_ACTION_DIM]
+        compensation_actions = command_actions[:, self._BASE_ACTION_DIM :]
+
+        # Run the standard Lee position control on the first four commands.
+        wrench = super().update(base_actions)
+
+        # Scale and add compensation torques (Clamp to [-1, 1] to match usual action range).
+        compensation_actions = torch.clamp(compensation_actions, -1.0, 1.0)
+        compensation_torque = compensation_actions * self.comp_torque_limits
+
+        wrench[:, 3:6] += compensation_torque
+        return wrench
+

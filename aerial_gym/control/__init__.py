@@ -4,7 +4,10 @@ from aerial_gym.control.controllers.acceleration_control import (
 )
 from aerial_gym.control.controllers.attitude_control import LeeAttitudeController
 from aerial_gym.control.controllers.velocity_control import LeeVelocityController
-from aerial_gym.control.controllers.position_control import LeePositionController
+from aerial_gym.control.controllers.position_control import (
+    LeePositionController,
+    LeePositionControllerWithCompensation,
+)
 from aerial_gym.control.controllers.velocity_steeing_angle_controller import (
     LeeVelocitySteeringAngleController,
 )
@@ -15,6 +18,9 @@ from aerial_gym.control.controllers.no_control import NoControl
 # import configs for controllers
 from aerial_gym.config.controller_config.lee_controller_config import (
     control as lee_controller_config,
+)
+from aerial_gym.config.controller_config.lee_controller_with_comp_config import (
+    control as lee_controller_with_comp_config,
 )
 from aerial_gym.config.controller_config.no_control_config import (
     control as no_control_config,
@@ -48,6 +54,11 @@ controller_registry.register_controller(
 )
 controller_registry.register_controller(
     "lee_position_control", LeePositionController, lee_controller_config
+)
+controller_registry.register_controller(
+    "lee_position_control_with_compensation",
+    LeePositionControllerWithCompensation,
+    lee_controller_with_comp_config,
 )
 controller_registry.register_controller(
     "lee_rates_control", LeeRatesController, lee_controller_config

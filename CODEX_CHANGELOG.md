@@ -1,0 +1,32 @@
+## 2025-02-14
+- `aerial_gym/control/controllers/position_control.py`
+  - 复制原 Lee 位置控制器的核心逻辑，派生出 `LeePositionControllerWithCompensation`，明确动作切分（前 4 维为 `[x,y,z,yaw]`，后 3 维为姿态力矩补偿），在 `update()` 中对补偿量裁剪/缩放后直接叠加至 `wrench[:,3:6]`，用于抵消悬挂载荷带来的额外外力矩。
+  - 在 `init_tensors()` 中检查并缓存 `compensation_torque_limits`，保障没有配置字段时立即报错，方便早期发现配置缺失。
+- `aerial_gym/config/controller_config/lee_controller_with_comp_config.py`
+  - 继承默认 Lee 配置，重写 `num_actions` 为 7，并新增 `compensation_dims`、`compensation_torque_limits`，便于今后通过配置调整补偿通道数与最大力矩。
+- `aerial_gym/control/__init__.py`
+  - 引入新控制类与配置文件，在 `controller_registry` 中注册 `lee_position_control_with_compensation`，这样任务/机器人只需切换 `controller_name` 即可试用补偿版本。
+- `aerial_gym/task/payload_compensation_task/payload_compensation_task.py`
+  - 新增完整任务，实现 PayloadManager（含质量/惯量更新、释放调度、预警、理想观测特征与等效重力力矩注入），并在 Task 中复用传统 Lee 位置指令 + RL 补偿输入（3 维），将扩展的 payload 状态写入观测、奖励中增加姿态/补偿能量惩罚。
+- `aerial_gym/config/task_config/payload_compensation_task_config.py`
+  - 提供任务配置：指明补偿控制器、动作/观测维度、奖励系数以及 payload 的质量、偏移与释放节奏参数。
+- `aerial_gym/task/__init__.py`
+  - 注册 `payload_compensation_task`，确保 `task_registry` 可用于训练脚本/示例。
+- `aerial_gym/rl_training/rl_games/runner.py`
+  - 为 RL-Games 接入新的任务枚举，使 `--task payload_compensation_task` 通过 `env_configurations` 创建环境。
+- `aerial_gym/task/payload_compensation_task/payload_compensation_task.py`
+  - 随机化释放顺序与节奏：为每个环境生成独立的 payload 乱序队列，并支持 `release_start_range` / `release_interval_range` 配置，释放时重新采样下一次等待步数，使策略面临更加多样的扰动情况。
+- `aerial_gym/config/task_config/payload_compensation_task_config.py`
+  - 新增 `release_start_range`、`release_interval_range`，默认值覆盖 300~500、150~300 步，激活上述随机化逻辑。
+- `docs/payload_compensation_tuning.md`
+  - 编写调参与现象对照表，说明遇到姿态尖峰、过补偿、位置偏差等情况时应优先调节的参数，并解释观测信号含义与推荐流程。
+- `aerial_gym/examples/new_my_position_control.py`
+  - 新增示例脚本，直接通过 `task_registry` 构建 `payload_compensation_task`，在小规模环境中随机注入补偿动作并打印挂点释放事件，便于快速验证控制回路。
+- `aerial_gym/task/payload_compensation_task/payload_compensation_task.py`
+  - 移除 reward 相关函数的 TorchScript 装饰和字典索引限制，改为纯 Python 版本，避免因 `parameter_dict["..."]` 在 TorchScript 中不受支持而导致的初始化报错。
+- `aerial_gym/task/payload_compensation_task/payload_compensation_task.py`
+  - 任务内部保留 `SimBuilder` 实例并在 `close()` 调用其 `delete_env()`，避免直接访问 `EnvManager` 不存在的 `delete_env` 方法而导致关闭阶段抛出 `AttributeError`。
+- `aerial_gym/task/payload_compensation_task/payload_compensation_task.py`
+  - 新增 `_initialize_vehicle_state()`，在 `reset/reset_idx` 时将所有环境的机器人根状态重置为零姿态（单位四元数、零速度），以便复现实验基线并减少随机初态漂移；该函数通过 Isaac Gym root state tensor 写回，保证不会意外触发位置重置。
+- `aerial_gym/examples/new_my_position_control.py`
+  - 释放日志包含环境 ID，便于区分不同环境的挂点事件。
