@@ -487,25 +487,35 @@ class PayloadCompensationTask(BaseTask):
             self.sim_builder.delete_env()
 
     def reset(self):
-        self.target_position[:, 0:3] = 0.0
         self.infos = {}
         self.payload_manager.reset()
         self.sim_env.reset()
-        self._initialize_vehicle_state()
-        self._randomize_target_positions()
-        self._apply_initial_state_noise()
-        self._log_debug_reset(env_tensor=None)
+        self._refresh_env_state(env_ids=None, reset_payload_manager=False)
         return self.get_return_tuple()
 
     def reset_idx(self, env_ids):
-        self.target_position[:, 0:3] = 0.0
-        env_tensor = torch.as_tensor(env_ids, device=self.device)
+        env_tensor = self._get_env_tensor(env_ids)
         self.payload_manager.reset(env_ids=env_tensor)
         self.sim_env.reset_idx(env_ids)
+        self._refresh_env_state(env_ids=env_tensor, reset_payload_manager=False)
+
+    def _refresh_env_state(self, env_ids=None, reset_payload_manager=False):
+        env_tensor = None if env_ids is None else self._get_env_tensor(env_ids)
+        if env_tensor is not None and env_tensor.numel() == 0:
+            return
+
+        if env_tensor is None:
+            self.target_position[:, 0:3] = 0.0
+        else:
+            self.target_position[env_tensor.long(), 0:3] = 0.0
+
+        if reset_payload_manager:
+            self.payload_manager.reset(env_ids=env_tensor)
+
         self._initialize_vehicle_state(env_ids=env_tensor)
         self._randomize_target_positions(env_tensor)
         self._apply_initial_state_noise(env_tensor)
-        self._log_debug_reset(env_tensor)
+        self._log_debug_reset(env_tensor if env_tensor is not None else None)
 
     def render(self):
         return None
@@ -548,7 +558,9 @@ class PayloadCompensationTask(BaseTask):
         self.truncations[:] = torch.where(
             self.sim_env.sim_steps > self.task_config.episode_len_steps, 1, 0
         )
-        self.sim_env.post_reward_calculation_step()
+        reset_envs = self.sim_env.post_reward_calculation_step()
+        if reset_envs is not None and reset_envs.numel() > 0:
+            self._refresh_env_state(env_ids=reset_envs, reset_payload_manager=True)
 
         self.infos = {
             "last_release_index": self.payload_manager.last_release_index.clone().detach().cpu(),

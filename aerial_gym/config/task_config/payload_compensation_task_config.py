@@ -7,7 +7,7 @@ class task_config:
     args = {}
     num_envs = 1024
     use_warp = False
-    headless = False
+    headless = True
     device = "cuda:0"
 
     observation_space_dim = 26  # 13 base + roll/pitch error + 11 payload features
@@ -51,27 +51,15 @@ class task_config:
             [-0.4, 0.4, -0.4],
             [-0.4, -0.4, -0.4],
         ],
-        "release_start": 400,
-        "release_interval": 200,
+        "release_start": 300,
+        "release_interval": 150,
         "release_start_range": None,
         "release_interval_range": None,
         "warning_steps": 20,
         "randomize_release": False,
+        "log_release_events": False,
     }
 
-    randomization_parameters = {
-        "initial_position_noise": [0.05, 0.05, 0.05],
-        "initial_orientation_noise_deg": [2.0, 2.0, 2.0],
-        "target_position_range": [
-            [-0.2, 0.2],
-            [-0.2, 0.2],
-            [0.8, 1.0],
-        ],
-        "obs_noise_std": {
-            "position_error": 0.01,
-            "linear_velocity": 0.01,
-            "angular_velocity": 0.01,
-        },
-    }
+    randomization_parameters = None
 
     curriculum_parameters = None
