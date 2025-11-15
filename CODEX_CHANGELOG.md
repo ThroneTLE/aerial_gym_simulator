@@ -6,6 +6,15 @@
 - 常见风险：play 环境与训练配置不一致（导致回放表现差）、reward 数值与真实稳定性脱节、以及终止条件修改后需重新训练。任何新策略或配置改动，都应同步更新 reward/crash 判据，并通过 TensorBoard（runs/<exp>/summaries）核对 episode/ reward 曲线。
 
 ## 2025-02-14
+- `aerial_gym/rl_training/rl_games/__init__.py`
+  - 对 RL-Games 的 `A2CBase` 进行 monkey patch，保证 checkpoint 保存/恢复 observation 与 value 的 `running_mean_std` 缓冲，从而继续训练或 `--play` 时不再经历奖励瞬间暴跌。
+  - 同时修复 `set_stats_weights()` 在加载 value 归一化统计时使用错误 key（`'normalize_value'`）的问题。
+- `aerial_gym/config/task_config/payload_compensation_task_config.py`
+  - 将载荷释放固定为 `start=300`、`interval=150`（范围为 None 且 `randomize_release=False`），并把 `randomization_parameters` 设为 `None`，方便以确定性的 target/扰动验证表现。
+  - 新增 `log_release_events` 参数（当前默认 True），在调试少量环境时可打印“某个无人机何时释放哪颗子机”的日志。
+- `aerial_gym/task/payload_compensation_task/payload_compensation_task.py`
+  - `randomization_parameters` 允许显式设为 `None`，通过 `getattr(... ) or {}` 兜底，避免在 play 模式关闭随机化时出现 `AttributeError: 'NoneType' object has no attribute 'get'`。
+  - `PayloadManager` 支持 `log_release_events`：当配置开启时，会在每次释载记录环境 ID、payload 索引与偏移，便于四机调试时区分是哪台释放了哪颗挂点。
 - `aerial_gym/control/controllers/position_control.py`
   - 复制原 Lee 位置控制器的核心逻辑，派生出 `LeePositionControllerWithCompensation`，明确动作切分（前 4 维为 `[x,y,z,yaw]`，后 3 维为姿态力矩补偿），在 `update()` 中对补偿量裁剪/缩放后直接叠加至 `wrench[:,3:6]`，用于抵消悬挂载荷带来的额外外力矩。
   - 在 `init_tensors()` 中检查并缓存 `compensation_torque_limits`，保障没有配置字段时立即报错，方便早期发现配置缺失。
@@ -69,3 +78,11 @@
 - `aerial_gym/task/payload_compensation_task_full_rl/payload_compensation_task_full_rl.py`
   - 读取上述随机化配置并在 reset/reset_idx 中重采样目标点、添加初始位置/姿态噪声，同时在 `process_obs_for_task()` 为位置/速度观测叠加噪声；质量/惯量/推力抖动配置仅记录，后续可扩展。
   - 在 `step()` 中根据新参数追加安全惩罚：对临界倾角/高度、过大的线/角速度、以及释放瞬间超限姿态施加负奖励，使策略更警惕极端状态。
+"""
+python -m aerial_gym.rl_training.rl_games.runner --train   --file aerial_gym/rl_training/rl_games/ppo_aerial_quad.yaml   --task payload_compensation_task   --experiment_name payload_comp_rl_stage1_resume   --checkpoint aerial_gym/rl_training/rl_games/runs/payload_comp_rl_stage1_15-17-18-20/nn/payload_comp_rl_stage1.pth   --headless True --num_envs 4096
+
+"""
+python -m aerial_gym.rl_training.rl_games.runner --play   --file aerial_gym/rl_training/rl_games/ppo_aerial_quad.yaml   --task payload_compensation_task   --checkpoint runs/payload_comp_rl_stage2_resume_15-19-04-09/nn/payload_comp_rl_stage2_resume.pth   --headless False --num_envs 64
+
+"""
+python -m aerial_gym.rl_training.rl_games.runner --train   --file aerial_gym/rl_training/rl_games/ppo_aerial_quad.yaml   --task payload_compensation_task   --experiment_name payload_comp_rl_stage1_resume   --checkpoint runs/payload_comp_rl_stage1_resume_15-18-47-44/nn/payload_comp_rl_stage1_resume.pth  --headless True --num_envs 4096

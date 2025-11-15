@@ -53,6 +53,7 @@ class PayloadConfig:
     release_start_range: Optional[Sequence[int]] = None
     release_interval_range: Optional[Sequence[int]] = None
     randomize_release: bool = False
+    log_release_events: bool = False
 
 
 class PayloadManager:
@@ -90,6 +91,7 @@ class PayloadManager:
         self.release_start_range = payload_cfg.release_start_range
         self.release_interval_range = payload_cfg.release_interval_range
         self.randomize_release = payload_cfg.randomize_release
+        self.log_release_events = payload_cfg.log_release_events
 
         self.last_release_index = torch.full(
             (self.num_envs,), -1, dtype=torch.long, device=self.device
@@ -188,6 +190,14 @@ class PayloadManager:
         self.last_release_index[env_id] = payload_id
         self.last_release_mass[env_id] = self.payload_mass
         self.just_released_flag[env_id] = True
+        if self.log_release_events:
+            logger.info(
+                "[ReleaseEvent] env=%d payload=%d offset=%s step=%d",
+                env_id,
+                payload_id,
+                self.offsets[payload_id].tolist(),
+                int(self.step_counter[env_id].item()),
+            )
         self.step_counter[env_id] = 0
         if attach_row.any():
             self.next_release_step[env_id] = self._sample_interval()
@@ -416,13 +426,14 @@ class PayloadCompensationTask(BaseTask):
             release_start_range=self.task_config.payload_parameters.get("release_start_range"),
             release_interval_range=self.task_config.payload_parameters.get("release_interval_range"),
             randomize_release=self.task_config.payload_parameters.get("randomize_release", True),
+            log_release_events=self.task_config.payload_parameters.get("log_release_events", False),
         )
         self.payload_manager = PayloadManager(self.sim_env, payload_cfg)
         self.payload_manager.reset()
         self._patch_pre_physics_step()
         self._initialize_vehicle_state()
 
-        rand_cfg = getattr(self.task_config, "randomization_parameters", {})
+        rand_cfg = getattr(self.task_config, "randomization_parameters", None) or {}
         self.initial_position_noise = torch.tensor(
             rand_cfg.get("initial_position_noise", [0.0, 0.0, 0.0]), device=self.device
         )
