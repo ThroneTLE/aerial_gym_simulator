@@ -10,22 +10,34 @@ class task_config:
     headless = False
     device = "cuda:0"
 
-    observation_space_dim = 24  # 13 base + 11 payload features (for 4 payloads)
+    observation_space_dim = 26  # 13 base + roll/pitch error + 11 payload features
     privileged_observation_space_dim = 0
-    action_space_dim = 3  # compensation torques only
-    controller_action_dim = 7  # 4 Lee inputs + 3 compensation commands
+    action_space_dim = 4  # thrust + 3 compensation torques
+    controller_action_dim = 8  # 4 Lee inputs + thrust + 3 torque compensation commands
 
-    episode_len_steps = 1800
+    episode_len_steps = 800
     return_state_before_reset = False
 
     reward_parameters = {
-        "position_weight": 2.0,
-        "crash_penalty": -20.0,
+        "position_weight": 2.5,
+        "crash_penalty": -60.0,
         "attitude_penalty_coef": 1.2,
         "release_attitude_boost": 2.0,
-        "comp_torque_penalty_coef": 0.05,
-        "velocity_penalty_coef": 0.2,
-        "action_smoothness_coef": 0.05,
+        "comp_torque_penalty_coef": 0.08,
+        "comp_thrust_penalty_coef": 0.08,
+        "velocity_penalty_coef": 0.3,
+        "angvel_penalty_coef": 0.15,
+        "action_smoothness_coef": 0.08,
+        "tilt_warning_deg": 0.0,
+        "tilt_warning_penalty": 0.0,
+        "height_warning": 0.0,
+        "height_warning_penalty": 0.0,
+        "release_tilt_limit_deg": 0.0,
+        "release_tilt_penalty": 0.0,
+        "stability_radius": 0.0,
+        "stability_tilt_deg": 0.0,
+        "stability_penalty": 0.0,
+        "stability_velocity_penalty": 0.0,
     }
 
     crash_distance_threshold = 3.0  # meters
@@ -41,8 +53,25 @@ class task_config:
         ],
         "release_start": 400,
         "release_interval": 200,
-        "release_start_range": [300, 500],
-        "release_interval_range": [150, 300],
+        "release_start_range": None,
+        "release_interval_range": None,
         "warning_steps": 20,
         "randomize_release": False,
     }
+
+    randomization_parameters = {
+        "initial_position_noise": [0.05, 0.05, 0.05],
+        "initial_orientation_noise_deg": [2.0, 2.0, 2.0],
+        "target_position_range": [
+            [-0.2, 0.2],
+            [-0.2, 0.2],
+            [0.8, 1.0],
+        ],
+        "obs_noise_std": {
+            "position_error": 0.01,
+            "linear_velocity": 0.01,
+            "angular_velocity": 0.01,
+        },
+    }
+
+    curriculum_parameters = None

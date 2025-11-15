@@ -75,19 +75,29 @@ class LeePositionControllerWithCompensation(LeePositionController):
         super().__init__(config, num_envs, device)
         self.compensation_dims = getattr(self.cfg, "compensation_dims", 3)
         self.comp_torque_limits = None
+        self.comp_thrust_limit = None
 
     def init_tensors(self, global_tensor_dict=None):
         super().init_tensors(global_tensor_dict)
         torque_limits = getattr(self.cfg, "compensation_torque_limits", None)
+        thrust_limit = getattr(self.cfg, "compensation_thrust_limit", None)
+        if thrust_limit is None:
+            raise AttributeError(
+                "compensation_thrust_limit must be provided in the controller config."
+            )
         if torque_limits is None:
             raise AttributeError(
                 "compensation_torque_limits must be provided in the controller config."
             )
-        if len(torque_limits) != self.compensation_dims:
+
+        if len(torque_limits) != self.compensation_dims - 1:
             raise ValueError(
-                "compensation_torque_limits length must match compensation_dims "
-                f"({self.compensation_dims})."
+                "compensation_torque_limits length must be compensation_dims - 1 "
+                f"({self.compensation_dims - 1})."
             )
+        self.comp_thrust_limit = torch.tensor(
+            [thrust_limit], dtype=torch.float32, device=self.device
+        ).view(1, 1)
         self.comp_torque_limits = torch.tensor(
             torque_limits, dtype=torch.float32, device=self.device
         ).view(1, -1)
@@ -108,8 +118,9 @@ class LeePositionControllerWithCompensation(LeePositionController):
 
         # Scale and add compensation torques (Clamp to [-1, 1] to match usual action range).
         compensation_actions = torch.clamp(compensation_actions, -1.0, 1.0)
-        compensation_torque = compensation_actions * self.comp_torque_limits
+        thrust_action = compensation_actions[:, :1] * self.comp_thrust_limit
+        torque_actions = compensation_actions[:, 1:] * self.comp_torque_limits
 
-        wrench[:, 3:6] += compensation_torque
+        wrench[:, 2:3] += thrust_action
+        wrench[:, 3:6] += torque_actions
         return wrench
-

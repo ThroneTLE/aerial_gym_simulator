@@ -8,7 +8,13 @@ from isaacgym import gymapi, gymtorch
 from aerial_gym.task.base_task import BaseTask
 from aerial_gym.sim.sim_builder import SimBuilder
 from aerial_gym.utils.logging import CustomLogger
-from aerial_gym.utils.math import quat_apply_inverse, quat_axis, quat_rotate_inverse
+from aerial_gym.utils.math import (
+    quat_apply_inverse,
+    quat_axis,
+    quat_rotate_inverse,
+    quat_from_euler_xyz_tensor,
+    quat_mul,
+)
 
 logger = CustomLogger("payload_compensation_task")
 
@@ -46,7 +52,7 @@ class PayloadConfig:
     warning_steps: int
     release_start_range: Optional[Sequence[int]] = None
     release_interval_range: Optional[Sequence[int]] = None
-    randomize_release: bool = True
+    randomize_release: bool = False
 
 
 class PayloadManager:
@@ -374,6 +380,7 @@ class PayloadCompensationTask(BaseTask):
         self.terminations = self.obs_dict["crashes"]
         self.truncations = self.obs_dict["truncations"]
         self.rewards = torch.zeros(self.truncations.shape[0], device=self.device)
+        self._debug_reset_count = 0
 
         self.observation_space_dim = self.task_config.observation_space_dim
         self.action_space_dim = self.task_config.action_space_dim
@@ -415,6 +422,36 @@ class PayloadCompensationTask(BaseTask):
         self._patch_pre_physics_step()
         self._initialize_vehicle_state()
 
+        rand_cfg = getattr(self.task_config, "randomization_parameters", {})
+        self.initial_position_noise = torch.tensor(
+            rand_cfg.get("initial_position_noise", [0.0, 0.0, 0.0]), device=self.device
+        )
+        self.initial_orientation_noise = torch.tensor(
+            rand_cfg.get("initial_orientation_noise_deg", [0.0, 0.0, 0.0]), device=self.device
+        )
+        self.initial_orientation_noise = self.initial_orientation_noise * np.pi / 180.0
+        self.target_position_range = rand_cfg.get("target_position_range")
+        self.current_target_range_tensor = (
+            torch.tensor(self.target_position_range, device=self.device, dtype=torch.float32)
+            if self.target_position_range is not None
+            else None
+        )
+        self.obs_noise_std = rand_cfg.get("obs_noise_std", {})
+
+        curriculum_cfg = getattr(self.task_config, "curriculum_parameters", None)
+        self.curriculum_target_ranges = None
+        self.curriculum_stage_steps = None
+        self.curriculum_stage = 0
+        self.curriculum_stage_progress = 0
+        if curriculum_cfg:
+            ranges = curriculum_cfg.get("target_ranges")
+            if ranges:
+                self.curriculum_target_ranges = torch.tensor(
+                    ranges, device=self.device, dtype=torch.float32
+                )
+                self.current_target_range_tensor = self.curriculum_target_ranges[0].clone()
+            self.curriculum_stage_steps = int(curriculum_cfg.get("steps_per_stage", 0))
+
         self.counter = 0
         self.crash_distance_threshold = getattr(self.task_config, "crash_distance_threshold", 8.0)
         tilt_deg = getattr(self.task_config, "crash_tilt_threshold_deg", 90.0)
@@ -444,6 +481,9 @@ class PayloadCompensationTask(BaseTask):
         self.payload_manager.reset()
         self.sim_env.reset()
         self._initialize_vehicle_state()
+        self._randomize_target_positions()
+        self._apply_initial_state_noise()
+        self._log_debug_reset(env_tensor=None)
         return self.get_return_tuple()
 
     def reset_idx(self, env_ids):
@@ -452,6 +492,9 @@ class PayloadCompensationTask(BaseTask):
         self.payload_manager.reset(env_ids=env_tensor)
         self.sim_env.reset_idx(env_ids)
         self._initialize_vehicle_state(env_ids=env_tensor)
+        self._randomize_target_positions(env_tensor)
+        self._apply_initial_state_noise(env_tensor)
+        self._log_debug_reset(env_tensor)
 
     def render(self):
         return None
@@ -462,10 +505,13 @@ class PayloadCompensationTask(BaseTask):
         self.actions = actions
 
         self.payload_manager.step()
+        self._advance_curriculum_if_needed()
 
         self.controller_actions[:, 0:3] = self.target_position
         self.controller_actions[:, 3] = 0.0
-        self.controller_actions[:, 4:] = torch.clamp(self.actions, -1.0, 1.0)
+        clamped_actions = torch.clamp(self.actions, -1.0, 1.0)
+        self.controller_actions[:, 4] = clamped_actions[:, 0]
+        self.controller_actions[:, 5:] = clamped_actions[:, 1:]
 
         self.sim_env.step(actions=self.controller_actions)
 
@@ -486,7 +532,7 @@ class PayloadCompensationTask(BaseTask):
             self.crash_tilt_threshold_rad,
         )
         self.rewards[:] = base_rewards
-        self.rewards += self._compute_payload_penalties()
+        self.rewards += self._compute_payload_penalties(clamped_actions)
 
         self.truncations[:] = torch.where(
             self.sim_env.sim_steps > self.task_config.episode_len_steps, 1, 0
@@ -499,9 +545,10 @@ class PayloadCompensationTask(BaseTask):
         }
         return self.get_return_tuple()
 
-    def _compute_payload_penalties(self):
+    def _compute_payload_penalties(self, clamped_actions):
         reward_cfg = self.task_config.reward_parameters
         euler = self.obs_dict["robot_euler_angles"]
+        pos_error = self.target_position - self.obs_dict["robot_position"]
         roll_pitch_error = torch.norm(euler[:, 0:2], dim=1)
         base_penalty = -reward_cfg["attitude_penalty_coef"] * roll_pitch_error
 
@@ -513,8 +560,13 @@ class PayloadCompensationTask(BaseTask):
         )
         attitude_term = base_penalty * release_multiplier
 
+        torque_actions = clamped_actions[:, 1:]
         comp_penalty = -reward_cfg["comp_torque_penalty_coef"] * torch.sum(
-            self.actions**2, dim=1
+            torque_actions**2, dim=1
+        )
+
+        thrust_penalty = -reward_cfg.get("comp_thrust_penalty_coef", 0.0) * torch.abs(
+            clamped_actions[:, 0]
         )
 
         vel_coef = reward_cfg.get("velocity_penalty_coef", 0.0)
@@ -525,7 +577,70 @@ class PayloadCompensationTask(BaseTask):
         action_delta = self.actions - self.prev_actions
         smooth_penalty = -smooth_coef * torch.norm(action_delta, dim=1)
 
-        return attitude_term + comp_penalty + velocity_penalty + smooth_penalty
+        ang_coef = reward_cfg.get("angvel_penalty_coef", 0.0)
+        ang_penalty = -ang_coef * torch.norm(self.obs_dict["robot_body_angvel"], dim=1)
+
+        tilt_warn = reward_cfg.get("tilt_warning_deg", 0.0)
+        tilt_penalty = 0.0
+        if tilt_warn > 0.0:
+            tilt_warn_rad = np.deg2rad(float(tilt_warn))
+            tilt_penalty = reward_cfg.get("tilt_warning_penalty", 0.0) * (
+                (torch.abs(euler[:, 0]) > tilt_warn_rad)
+                | (torch.abs(euler[:, 1]) > tilt_warn_rad)
+            ).float()
+
+        height_warn = reward_cfg.get("height_warning", 0.0)
+        height_penalty = 0.0
+        if height_warn > 0.0:
+            height_penalty = reward_cfg.get("height_warning_penalty", 0.0) * (
+                self.obs_dict["robot_position"][:, 2] < height_warn
+            ).float()
+
+        release_limit = reward_cfg.get("release_tilt_limit_deg", 0.0)
+        release_penalty = 0.0
+        if release_limit > 0.0:
+            limit_rad = np.deg2rad(float(release_limit))
+            violation = (torch.abs(euler[:, 0]) > limit_rad) | (
+                torch.abs(euler[:, 1]) > limit_rad
+            )
+            release_penalty = reward_cfg.get("release_tilt_penalty", 0.0) * (
+                violation & self.payload_manager.just_released_flag
+            ).float()
+
+        stability_radius = float(reward_cfg.get("stability_radius", 0.0))
+        stability_penalty_coef = reward_cfg.get("stability_penalty", 0.0)
+        stability_vel_coef = reward_cfg.get("stability_velocity_penalty", 0.0)
+        stability_tilt_deg = float(reward_cfg.get("stability_tilt_deg", 0.0))
+        stability_term = torch.zeros_like(roll_pitch_error)
+        if stability_radius > 0.0:
+            pos_norm = torch.norm(pos_error, dim=1)
+            near_mask = (pos_norm < stability_radius).float()
+            stability_term = stability_penalty_coef * near_mask
+
+            if stability_tilt_deg > 0.0:
+                limit_rad = np.deg2rad(stability_tilt_deg)
+                tilt_violation = (
+                    (torch.abs(euler[:, 0]) > limit_rad)
+                    | (torch.abs(euler[:, 1]) > limit_rad)
+                ).float()
+                stability_term = stability_term * tilt_violation
+
+            if stability_vel_coef != 0.0:
+                vel_norm = torch.norm(self.obs_dict["robot_body_linvel"], dim=1)
+                stability_term += -stability_vel_coef * vel_norm * near_mask
+
+        return (
+            attitude_term
+            + comp_penalty
+            + thrust_penalty
+            + velocity_penalty
+            + ang_penalty
+            + smooth_penalty
+            + tilt_penalty
+            + height_penalty
+            + release_penalty
+            + stability_term
+        )
 
     def get_return_tuple(self):
         self.process_obs_for_task()
@@ -538,15 +653,18 @@ class PayloadCompensationTask(BaseTask):
         )
 
     def process_obs_for_task(self):
-        self.task_obs["observations"][:, 0:3] = (
-            self.target_position - self.obs_dict["robot_position"]
-        )
+        pos_error = self.target_position - self.obs_dict["robot_position"]
+        self.task_obs["observations"][:, 0:3] = pos_error
         self.task_obs["observations"][:, 3:7] = self.obs_dict["robot_orientation"]
         self.task_obs["observations"][:, 7:10] = self.obs_dict["robot_body_linvel"]
         self.task_obs["observations"][:, 10:13] = self.obs_dict["robot_body_angvel"]
 
+        euler = self.obs_dict["robot_euler_angles"]
+        self.task_obs["observations"][:, 13] = euler[:, 0]
+        self.task_obs["observations"][:, 14] = euler[:, 1]
+
         payload_obs = self.payload_manager.get_observation_features()
-        idx = 13
+        idx = 15
         self.task_obs["observations"][:, idx] = payload_obs["payload_mass"]
         idx += 1
         self.task_obs["observations"][:, idx : idx + 3] = payload_obs["com_offset"]
@@ -562,9 +680,121 @@ class PayloadCompensationTask(BaseTask):
         idx += 1
         self.task_obs["observations"][:, idx] = payload_obs["warning_flag"]
 
+        self._apply_observation_noise()
+
         self.task_obs["rewards"] = self.rewards
         self.task_obs["terminations"] = self.terminations
         self.task_obs["truncations"] = self.truncations
+
+    def _get_env_tensor(self, env_ids=None):
+        if env_ids is None:
+            return torch.arange(self.sim_env.num_envs, device=self.device, dtype=torch.long)
+        if isinstance(env_ids, torch.Tensor):
+            return env_ids.to(self.device).long()
+        return torch.as_tensor(env_ids, device=self.device, dtype=torch.long)
+
+    def _randomize_target_positions(self, env_ids=None):
+        range_tensor = self.current_target_range_tensor
+        if range_tensor is None:
+            return
+        env_tensor = self._get_env_tensor(env_ids)
+        if env_tensor.numel() == 0:
+            return
+        ranges = range_tensor.to(self.device)
+        lows = ranges[:, 0]
+        highs = ranges[:, 1]
+        span = highs - lows
+        samples = torch.rand((env_tensor.shape[0], 3), device=self.device) * span + lows
+        self.target_position[env_tensor] = samples
+
+    def _apply_initial_state_noise(self, env_ids=None):
+        has_pos_noise = torch.any(self.initial_position_noise > 0)
+        has_rot_noise = torch.any(self.initial_orientation_noise > 0)
+        if (not has_pos_noise and not has_rot_noise) or not hasattr(self.sim_env, "IGE_env"):
+            return
+        vec_root = getattr(self.sim_env.IGE_env, "vec_root_tensor", None)
+        if vec_root is None:
+            return
+        env_tensor = self._get_env_tensor(env_ids)
+        if env_tensor.numel() == 0:
+            return
+
+        if has_pos_noise:
+            noise = (torch.rand((env_tensor.shape[0], 3), device=self.device) * 2 - 1.0)
+            noise = noise * self.initial_position_noise
+            vec_root[env_tensor, 0, 0:3] += noise
+
+        if has_rot_noise:
+            angles = (torch.rand((env_tensor.shape[0], 3), device=self.device) * 2 - 1.0)
+            angles = angles * self.initial_orientation_noise
+            delta_quat = quat_from_euler_xyz_tensor(angles)
+            root_quat = vec_root[env_tensor, 0, 3:7]
+            vec_root[env_tensor, 0, 3:7] = quat_mul(delta_quat, root_quat)
+
+        gym = self.sim_env.IGE_env.gym
+        sim = self.sim_env.IGE_env.sim
+        gym.set_actor_root_state_tensor(
+            sim, gymtorch.unwrap_tensor(self.sim_env.IGE_env.unfolded_vec_root_tensor)
+        )
+
+    def _apply_observation_noise(self):
+        if not self.obs_noise_std:
+            return
+        obs = self.task_obs["observations"]
+        pos_std = float(self.obs_noise_std.get("position_error", 0.0))
+        if pos_std > 0:
+            obs[:, 0:3] += torch.randn_like(obs[:, 0:3]) * pos_std
+        lin_std = float(self.obs_noise_std.get("linear_velocity", 0.0))
+        if lin_std > 0:
+            obs[:, 7:10] += torch.randn_like(obs[:, 7:10]) * lin_std
+        ang_std = float(self.obs_noise_std.get("angular_velocity", 0.0))
+        if ang_std > 0:
+            obs[:, 10:13] += torch.randn_like(obs[:, 10:13]) * ang_std
+
+    def _advance_curriculum_if_needed(self):
+        if (
+            self.curriculum_target_ranges is None
+            or self.curriculum_stage_steps is None
+            or self.curriculum_stage_steps <= 0
+        ):
+            return
+        self.curriculum_stage_progress += self.sim_env.num_envs
+        if (
+            self.curriculum_stage < self.curriculum_target_ranges.shape[0] - 1
+            and self.curriculum_stage_progress >= self.curriculum_stage_steps
+        ):
+            self.curriculum_stage_progress = 0
+            self.curriculum_stage += 1
+            self.current_target_range_tensor = self.curriculum_target_ranges[
+                self.curriculum_stage
+            ].clone()
+            self._randomize_target_positions()
+
+    def _log_debug_reset(self, env_tensor):
+        # 仅记录前几次 reset，避免刷屏
+        if self._debug_reset_count >= 5:
+            return
+        env_ids = (
+            env_tensor.tolist()
+            if env_tensor is not None
+            else list(range(min(3, self.sim_env.num_envs)))
+        )
+        release_info = {
+            int(env_id): {
+                "order": self.payload_manager.release_orders[int(env_id)].tolist(),
+                "next_release": int(self.payload_manager.next_release_step[int(env_id)].item()),
+            }
+            for env_id in env_ids
+        }
+        target_samples = self.target_position[env_ids].detach().cpu().numpy().tolist()
+        logger.info(
+            "[DebugReset %d] env_ids=%s targets=%s release_info=%s",
+            self._debug_reset_count,
+            env_ids,
+            target_samples,
+            release_info,
+        )
+        self._debug_reset_count += 1
 
     def _initialize_vehicle_state(self, env_ids=None):
         if not hasattr(self.sim_env, "IGE_env"):

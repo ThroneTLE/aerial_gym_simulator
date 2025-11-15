@@ -46,10 +46,10 @@ params:
     learning_rate: 5e-5
     lr_schedule: adaptive
     kl_threshold: 0.016
-    save_best_after: 50
+    save_best_after: 10
     score_to_win: 100000
     grad_norm: 1.0
-    entropy_coef: 0.0001
+    entropy_coef: 0.001
     truncate_grads: True
     e_clip: 0.2
     clip_value: False
@@ -60,7 +60,7 @@ params:
     critic_coef: 2
     normalize_input: True
     bounds_loss_coef: 0.0001
-    max_epochs: 200
+    max_epochs: 2000
     normalize_value: True
     use_diagnostics: True
     value_bootstrap: True

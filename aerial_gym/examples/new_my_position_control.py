@@ -14,8 +14,14 @@ from aerial_gym.utils.math import get_euler_xyz_tensor
 import torch
 
 DEFAULT_CKPT = (
-    "aerial_gym/rl_training/rl_games/runs/gen_ppo_15-01-15-13/nn/gen_ppo.pth"
+    "aerial_gym/rl_training/rl_games/runs/payload_full_rl_test_15-12-17-21/nn/payload_full_rl_test.pth"
 )
+
+TASK_BY_ACTION_DIM = {
+    3: "payload_compensation_task",
+    4: "payload_compensation_task_full_rl",
+}
+ENV_ACTION_DIM = {name: dim for dim, name in TASK_BY_ACTION_DIM.items()}
 
 plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "Arial Unicode MS", "Noto Sans CJK SC"]
 plt.rcParams["axes.unicode_minus"] = False
@@ -52,14 +58,14 @@ def _str2bool(value):
 def parse_args():
     parser = argparse.ArgumentParser(description="Payload compensation policy rollout.")
     parser.add_argument("--num_envs", type=int, default=1, help="并行环境数量（建议 1 用于绘图）")
-    parser.add_argument("--steps", type=int, default=1600, help="仿真步数")
+    parser.add_argument("--steps", type=int, default=2500, help="仿真步数")
     parser.add_argument(
         "--headless",
         type=_str2bool,
         nargs="?",
         const=True,
-        default=True,
-        help="是否关闭可视化窗口（True/False），默认 True",
+        default=False,
+        help="是否关闭可视化窗口（True/False），默认 False",
     )
     parser.add_argument(
         "--checkpoint",
@@ -76,14 +82,33 @@ def parse_args():
     return parser.parse_args()
 
 
-def build_policy(config_path: str, checkpoint_path: str, obs_dim: int, action_dim: int, device: torch.device):
-    with open(config_path, "r") as f:
-        cfg = yaml.safe_load(f)
+def load_training_config(config_path: str):
+    # Explicit UTF-8 prevents yaml from choking on Chinese comments when locale defaults to ASCII
+    with open(config_path, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+
+def load_checkpoint(checkpoint_path: str):
+    ckpt = torch.load(checkpoint_path, map_location="cpu")
+    model_state = ckpt.get("model", {})
+    action_tensor = model_state.get("a2c_network.mu.weight")
+    if action_tensor is None:
+        raise RuntimeError("Checkpoint 缺少 a2c_network.mu.weight，无法推断动作维度。")
+    action_dim = action_tensor.shape[0]
+    return ckpt, action_dim
+
+
+def build_policy(
+    cfg: dict,
+    checkpoint_data: dict,
+    obs_dim: int,
+    action_dim: int,
+    device: torch.device,
+):
     hidden_units = cfg.get("params", {}).get("network", {}).get("mlp", {}).get("units", [256, 128, 64])
 
     policy = PolicyNetwork(obs_dim, action_dim, hidden_units).to(device)
-    ckpt = torch.load(checkpoint_path, map_location=device)
-    model_state = ckpt["model"]
+    model_state = checkpoint_data["model"]
 
     actor_state = {}
     for key, value in model_state.items():
@@ -177,16 +202,41 @@ def plot_results(z_history, euler_history, release_history):
     plt.show()
 
 
+def _resolve_env_name(cfg_env_name: str, checkpoint_action_dim: int) -> str:
+    cfg_expected_dim = ENV_ACTION_DIM.get(cfg_env_name)
+    if cfg_env_name and cfg_expected_dim == checkpoint_action_dim:
+        return cfg_env_name
+
+    guessed_env = TASK_BY_ACTION_DIM.get(checkpoint_action_dim)
+    if guessed_env:
+        if cfg_env_name and cfg_env_name != guessed_env:
+            print(
+                f"注意: YAML env_name={cfg_env_name} 与 checkpoint 推断值 {guessed_env} 不一致，使用后者"
+            )
+        return guessed_env
+
+    if cfg_env_name:
+        return cfg_env_name
+
+    return "payload_compensation_task"
+
+
 def main():
     args = parse_args()
     if not os.path.isfile(args.checkpoint):
         raise FileNotFoundError(f"找不到 checkpoint: {args.checkpoint}")
 
+    cfg = load_training_config(args.config) or {}
+    checkpoint_data, checkpoint_action_dim = load_checkpoint(args.checkpoint)
+
+    cfg_env_name = cfg.get("params", {}).get("config", {}).get("env_name")
+    env_name = _resolve_env_name(cfg_env_name, checkpoint_action_dim)
+
     original_argv = sys.argv
     sys.argv = [sys.argv[0]]
     try:
         task = task_registry.make_task(
-            "payload_compensation_task",
+            env_name,
             num_envs=args.num_envs,
             headless=args.headless,
         )
@@ -195,12 +245,18 @@ def main():
 
     obs_dim = task.task_config.observation_space_dim
     action_dim = task.task_config.action_space_dim
+    if action_dim != checkpoint_action_dim:
+        task.close()
+        raise RuntimeError(
+            f"任务 {env_name} 的动作维度 {action_dim} 与 checkpoint 的 {checkpoint_action_dim} 不匹配，"
+            "请检查 config 的 env_name 设置。"
+        )
     device = torch.device(task.device)
 
-    policy = build_policy(args.config, args.checkpoint, obs_dim, action_dim, device)
+    policy = build_policy(cfg, checkpoint_data, obs_dim, action_dim, device)
 
     print(
-        f"启动 payload_compensation_task：envs={task.sim_env.num_envs}, "
+        f"启动 {env_name}：envs={task.sim_env.num_envs}, "
         f"action_dim={action_dim}\n使用模型: {args.checkpoint}"
     )
 
@@ -230,7 +286,14 @@ def main():
                 payload_idx = int(task.payload_manager.last_release_index[env_id].item())
                 release_history.append((step, payload_idx))
 
-    task.close()
+    try:
+        task.close()
+    except AttributeError as exc:
+        print(f"警告: task.close() 失败 ({exc})，跳过显式销毁。")
+    finally:
+        del task
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
     print("仿真结束，开始绘图...")
     plot_results(z_history, euler_history, release_history)
 

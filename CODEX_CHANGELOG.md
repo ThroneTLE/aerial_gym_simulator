@@ -1,3 +1,10 @@
+## 工作理念与当前状态
+- 我们在 **aerial_gym_simulator** 中原型验证“母机挂载小机释放”场景，目标是通过 RL 学会补偿挂载造成的姿态扰动，并与传统 Lee 控制器对比。
+- 目前维护两套任务：`payload_compensation_task`（Lee 控制 + RL 补偿）和 `payload_compensation_task_full_rl`（纯 RL 姿态控制）。二者都通过 `PayloadManager` 注入随机/固定的载荷质量、质心偏移与释放节奏。
+- 奖励设计仍在迭代：我们引入了位置/姿态惩罚、动作平滑与速度惩罚，并可调 crash 阈值；但训练与回放的表现差异依旧需要关注，尤其是奖励尺度与终止逻辑要保持一致。
+- 训练采用 RL-Games PPO，大批并行环境（默认 2048）+ 长 episode（1800 步）；`score_to_win` 设得很高避免训练过早退出，`save_best_after` 负责保存当前最优模型。
+- 常见风险：play 环境与训练配置不一致（导致回放表现差）、reward 数值与真实稳定性脱节、以及终止条件修改后需重新训练。任何新策略或配置改动，都应同步更新 reward/crash 判据，并通过 TensorBoard（runs/<exp>/summaries）核对 episode/ reward 曲线。
+
 ## 2025-02-14
 - `aerial_gym/control/controllers/position_control.py`
   - 复制原 Lee 位置控制器的核心逻辑，派生出 `LeePositionControllerWithCompensation`，明确动作切分（前 4 维为 `[x,y,z,yaw]`，后 3 维为姿态力矩补偿），在 `update()` 中对补偿量裁剪/缩放后直接叠加至 `wrench[:,3:6]`，用于抵消悬挂载荷带来的额外外力矩。
@@ -7,6 +14,13 @@
 - `aerial_gym/control/__init__.py`
   - 引入新控制类与配置文件，在 `controller_registry` 中注册 `lee_position_control_with_compensation`，这样任务/机器人只需切换 `controller_name` 即可试用补偿版本。
 - `aerial_gym/task/payload_compensation_task/payload_compensation_task.py`
+  - 动作空间扩展：RL 现在输出推力补偿 + 3 轴力矩补偿，并在观测中显式提供滚/俯仰误差；任务同时支持目标/初始状态随机化与观测噪声。
+  - 奖励中加入推力/角速度惩罚、倾角/高度预警、稳定区自检以及载荷释放姿态约束。当前阶段为便于策略先学会稳态，默认随机化幅度及安全惩罚被调低、curriculum 暂停，后续可逐步恢复。
+  - 为排查开局崩溃问题，在 reset/reset_idx 中加入调试日志，记录前几次重置的目标采样与载荷释放顺序。
+- `aerial_gym/config/controller_config/lee_controller_with_comp_config.py`
+  - 控制器支持推力补偿维度：`num_actions`/`compensation_dims` 增至 4，并新增 `compensation_thrust_limit`。
+- `aerial_gym/control/controllers/position_control.py`
+  - `LeePositionControllerWithCompensation` 可同时接收推力与力矩补偿，基于配置限幅后直接加到力/力矩输出。
   - 新增完整任务，实现 PayloadManager（含质量/惯量更新、释放调度、预警、理想观测特征与等效重力力矩注入），并在 Task 中复用传统 Lee 位置指令 + RL 补偿输入（3 维），将扩展的 payload 状态写入观测、奖励中增加姿态/补偿能量惩罚。
 - `aerial_gym/config/task_config/payload_compensation_task_config.py`
   - 提供任务配置：指明补偿控制器、动作/观测维度、奖励系数以及 payload 的质量、偏移与释放节奏参数。
@@ -44,3 +58,14 @@
   - 定义上述任务的配置（观测维度、reward 参数、payload 释放设置），便于在 RL-Games 中直接训练/评估纯 RL 控制方案。
 - `aerial_gym/rl_training/rl_games/runner.py`
   - 在 `env_configurations` 中注册 `payload_compensation_task_full_rl`，可以通过 `--task payload_compensation_task_full_rl` 直接创建新环境进行训练/推理。
+- `aerial_gym/examples/new_my_position_control.py`
+  - 在 `task.close()` 处添加兜底逻辑，遇到 `EnvManager` 不支持 `delete_env` 时仅打印警告并清空 CUDA 显存，保证示例脚本自行完成资源清理。
+- `aerial_gym/examples/new_my_position_control.py`
+  - 默认将 `--headless` 设为 False，打开 Isaac Gym viewer 以便直接查看飞行效果，仍可通过命令行显式指定 True 进入无头模式。
+- `aerial_gym/config/task_config/payload_compensation_task_full_rl_config.py`
+  - 增加 `randomization_parameters`：包含初始状态扰动、随机目标范围、观测噪声与质量/惯量/推力抖动配置（默认只开启前三项），为提升策略鲁棒性提供统一入口。
+  - 当前为了排查问题，关闭所有随机项：`release_start_range`/`interval_range` 设为 `None`、初始/目标噪声设为 0、观测噪声清零，便于复现实验。
+  - 强化安全相关奖励：加大 `crash_penalty`，并新增倾角/高度预警惩罚、线/角速度平滑系数以及载荷释放姿态限制参数。
+- `aerial_gym/task/payload_compensation_task_full_rl/payload_compensation_task_full_rl.py`
+  - 读取上述随机化配置并在 reset/reset_idx 中重采样目标点、添加初始位置/姿态噪声，同时在 `process_obs_for_task()` 为位置/速度观测叠加噪声；质量/惯量/推力抖动配置仅记录，后续可扩展。
+  - 在 `step()` 中根据新参数追加安全惩罚：对临界倾角/高度、过大的线/角速度、以及释放瞬间超限姿态施加负奖励，使策略更警惕极端状态。
