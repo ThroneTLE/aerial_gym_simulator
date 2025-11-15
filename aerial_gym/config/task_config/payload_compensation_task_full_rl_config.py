@@ -3,32 +3,32 @@ class task_config:
     sim_name = "base_sim"
     env_name = "empty_env"
     robot_name = "base_quadrotor"
-    controller_name = "lee_position_control_with_compensation"
+    controller_name = "lee_position_control"
     args = {}
     num_envs = 1024
     use_warp = False
     headless = False
     device = "cuda:0"
 
-    observation_space_dim = 24  # 13 base + 11 payload features (for 4 payloads)
+    observation_space_dim = 24  # 13 base + 11 payload features
     privileged_observation_space_dim = 0
-    action_space_dim = 3  # compensation torques only
-    controller_action_dim = 7  # 4 Lee inputs + 3 compensation commands
-
+    action_space_dim = 4  # RL 输出 [x, y, z, yaw]
     episode_len_steps = 1800
     return_state_before_reset = False
 
     reward_parameters = {
-        "position_weight": 2.0,
-        "crash_penalty": -20.0,
-        "attitude_penalty_coef": 1.2,
-        "release_attitude_boost": 2.0,
-        "comp_torque_penalty_coef": 0.05,
-        "velocity_penalty_coef": 0.2,
-        "action_smoothness_coef": 0.05,
+        "pos_error_gain1": [2.0, 2.0, 2.0],
+        "pos_error_exp1": [1 / 3.5, 1 / 3.5, 1 / 3.5],
+        "pos_error_gain2": [2.0, 2.0, 2.0],
+        "pos_error_exp2": [2.0, 2.0, 2.0],
+        "dist_reward_coefficient": 7.5,
+        "max_dist": 15.0,
+        "action_diff_penalty_gain": [1.0, 1.0, 1.0],
+        "absolute_action_reward_gain": [2.0, 2.0, 2.0],
+        "crash_penalty": -100,
     }
 
-    crash_distance_threshold = 3.0  # meters
+    crash_distance_threshold = 3.0
     crash_tilt_threshold_deg = 55.0
 
     payload_parameters = {

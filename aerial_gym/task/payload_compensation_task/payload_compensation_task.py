@@ -46,6 +46,7 @@ class PayloadConfig:
     warning_steps: int
     release_start_range: Optional[Sequence[int]] = None
     release_interval_range: Optional[Sequence[int]] = None
+    randomize_release: bool = True
 
 
 class PayloadManager:
@@ -82,6 +83,7 @@ class PayloadManager:
         self.warning_steps = payload_cfg.warning_steps
         self.release_start_range = payload_cfg.release_start_range
         self.release_interval_range = payload_cfg.release_interval_range
+        self.randomize_release = payload_cfg.randomize_release
 
         self.last_release_index = torch.full(
             (self.num_envs,), -1, dtype=torch.long, device=self.device
@@ -190,9 +192,14 @@ class PayloadManager:
 
     def _assign_random_release_order(self, env_ids: torch.Tensor):
         for env_id in env_ids.long().tolist():
-            self.release_orders[env_id] = torch.randperm(
-                self.num_payloads, device=self.device, dtype=torch.long
-            )
+            if self.randomize_release:
+                self.release_orders[env_id] = torch.randperm(
+                    self.num_payloads, device=self.device, dtype=torch.long
+                )
+            else:
+                self.release_orders[env_id] = torch.arange(
+                    self.num_payloads, device=self.device, dtype=torch.long
+                )
 
     def _assign_random_release_start(self, env_ids: torch.Tensor):
         start_values = []
@@ -203,7 +210,7 @@ class PayloadManager:
         )
 
     def _sample_between(self, bounds: Optional[Sequence[int]], default: int) -> int:
-        if bounds is None:
+        if bounds is None or not self.randomize_release:
             return int(default)
         low, high = bounds
         if low > high:
@@ -401,6 +408,7 @@ class PayloadCompensationTask(BaseTask):
             warning_steps=self.task_config.payload_parameters["warning_steps"],
             release_start_range=self.task_config.payload_parameters.get("release_start_range"),
             release_interval_range=self.task_config.payload_parameters.get("release_interval_range"),
+            randomize_release=self.task_config.payload_parameters.get("randomize_release", True),
         )
         self.payload_manager = PayloadManager(self.sim_env, payload_cfg)
         self.payload_manager.reset()
@@ -408,6 +416,9 @@ class PayloadCompensationTask(BaseTask):
         self._initialize_vehicle_state()
 
         self.counter = 0
+        self.crash_distance_threshold = getattr(self.task_config, "crash_distance_threshold", 8.0)
+        tilt_deg = getattr(self.task_config, "crash_tilt_threshold_deg", 90.0)
+        self.crash_tilt_threshold_rad = np.deg2rad(tilt_deg)
 
     def _patch_pre_physics_step(self):
         robot_manager = self.sim_env.robot_manager
@@ -471,6 +482,8 @@ class PayloadCompensationTask(BaseTask):
             self.controller_actions,
             self.controller_actions,
             self.task_config.reward_parameters,
+            self.crash_distance_threshold,
+            self.crash_tilt_threshold_rad,
         )
         self.rewards[:] = base_rewards
         self.rewards += self._compute_payload_penalties()
@@ -504,7 +517,15 @@ class PayloadCompensationTask(BaseTask):
             self.actions**2, dim=1
         )
 
-        return attitude_term + comp_penalty
+        vel_coef = reward_cfg.get("velocity_penalty_coef", 0.0)
+        smooth_coef = reward_cfg.get("action_smoothness_coef", 0.0)
+        velocity_penalty = -vel_coef * torch.norm(
+            self.obs_dict["robot_body_linvel"], dim=1
+        )
+        action_delta = self.actions - self.prev_actions
+        smooth_penalty = -smooth_coef * torch.norm(action_delta, dim=1)
+
+        return attitude_term + comp_penalty + velocity_penalty + smooth_penalty
 
     def get_return_tuple(self):
         self.process_obs_for_task()
@@ -578,6 +599,8 @@ def compute_reward(
     current_action,
     prev_actions,
     parameter_dict,
+    crash_distance_threshold,
+    crash_tilt_threshold_rad,
 ):
     dist = torch.norm(pos_error, dim=1)
     pos_reward = exp_func(dist, 3.0, 8.0) + exp_func(dist, 2.0, 4.0)
@@ -596,7 +619,9 @@ def compute_reward(
     )
     total_reward[:] = curriculum_level_multiplier * total_reward
 
-    crashes[:] = torch.where(dist > 8.0, torch.ones_like(crashes), crashes)
+    crashes[:] = torch.where(dist > crash_distance_threshold, torch.ones_like(crashes), crashes)
+    tilt_angle = torch.acos(torch.clamp(ups[..., 2], -1.0, 1.0))
+    crashes[:] = torch.where(tilt_angle > crash_tilt_threshold_rad, torch.ones_like(crashes), crashes)
     total_reward[:] = torch.where(
         crashes > 0.0, parameter_dict["crash_penalty"] * torch.ones_like(total_reward), total_reward
     )

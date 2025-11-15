@@ -30,3 +30,17 @@
   - 新增 `_initialize_vehicle_state()`，在 `reset/reset_idx` 时将所有环境的机器人根状态重置为零姿态（单位四元数、零速度），以便复现实验基线并减少随机初态漂移；该函数通过 Isaac Gym root state tensor 写回，保证不会意外触发位置重置。
 - `aerial_gym/examples/new_my_position_control.py`
   - 释放日志包含环境 ID，便于区分不同环境的挂点事件。
+- `aerial_gym/examples/new_my_position_control.py`
+  - 重构为策略推理与可视化脚本：加载 RL-Games YAML + checkpoint，构建与训练一致的 MLP 策略网络、生成补偿动作，记录 Z 轴/姿态/释放历史，并使用与原位置控制示例一致的双子图+滑块界面绘制结果。
+- `aerial_gym/config/task_config/payload_compensation_task_config.py`
+  - 将 `position_weight` 从 0.5 提高到 2.0，使奖励更加关注位置误差，避免策略只靠姿态/补偿项刷分而忽略悬停误差。
+- `aerial_gym/config/task_config/payload_compensation_task_config.py`
+  - 新增 `crash_distance_threshold`、`crash_tilt_threshold_deg`、`randomize_release` 与速度/动作平滑惩罚系数，可按阶段选择固定释放并收紧崩溃条件。
+- `aerial_gym/task/payload_compensation_task/payload_compensation_task.py`
+  - `PayloadManager` 支持随机/固定释放模式，奖励函数引入速度与动作平滑惩罚，并根据配置阈值触发 crash，用以提升训练稳定性。
+- `aerial_gym/task/payload_compensation_task_full_rl/payload_compensation_task_full_rl.py`
+  - 新增 `PayloadCompensationTaskFullRL`，继承 PositionSetpointTask 并嵌入 payload 释放逻辑，让策略直接输出姿态指令同时获取扩展观测与更严格的 crash 判据。
+- `aerial_gym/config/task_config/payload_compensation_task_full_rl_config.py`
+  - 定义上述任务的配置（观测维度、reward 参数、payload 释放设置），便于在 RL-Games 中直接训练/评估纯 RL 控制方案。
+- `aerial_gym/rl_training/rl_games/runner.py`
+  - 在 `env_configurations` 中注册 `payload_compensation_task_full_rl`，可以通过 `--task payload_compensation_task_full_rl` 直接创建新环境进行训练/推理。
