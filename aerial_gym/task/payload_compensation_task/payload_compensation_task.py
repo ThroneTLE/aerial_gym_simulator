@@ -3,6 +3,7 @@ from typing import List, Optional, Sequence
 
 import numpy as np
 import torch
+import os
 from isaacgym import gymapi, gymtorch
 
 from aerial_gym.task.base_task import BaseTask
@@ -350,6 +351,7 @@ class PayloadCompensationTask(BaseTask):
 
         super().__init__(task_config)
         self.device = self.task_config.device
+        self.tb_writer = None
 
         for key in self.task_config.reward_parameters.keys():
             self.task_config.reward_parameters[key] = torch.tensor(
@@ -391,6 +393,7 @@ class PayloadCompensationTask(BaseTask):
         self.truncations = self.obs_dict["truncations"]
         self.rewards = torch.zeros(self.truncations.shape[0], device=self.device)
         self._debug_reset_count = 0
+        self._last_reward_components = {}
 
         self.observation_space_dim = self.task_config.observation_space_dim
         self.action_space_dim = self.task_config.action_space_dim
@@ -562,6 +565,8 @@ class PayloadCompensationTask(BaseTask):
         if reset_envs is not None and reset_envs.numel() > 0:
             self._refresh_env_state(env_ids=reset_envs, reset_payload_manager=True)
 
+        # Disable TB logging to avoid interfering with training
+
         self.infos = {
             "last_release_index": self.payload_manager.last_release_index.clone().detach().cpu(),
             "just_released": self.payload_manager.just_released_flag.clone().detach().cpu(),
@@ -573,6 +578,7 @@ class PayloadCompensationTask(BaseTask):
         euler = self.obs_dict["robot_euler_angles"]
         pos_error = self.target_position - self.obs_dict["robot_position"]
         roll_pitch_error = torch.norm(euler[:, 0:2], dim=1)
+        yaw_error = torch.abs(euler[:, 2])
         base_penalty = -reward_cfg["attitude_penalty_coef"] * roll_pitch_error
 
         release_multiplier = torch.ones_like(base_penalty)
@@ -594,14 +600,18 @@ class PayloadCompensationTask(BaseTask):
 
         vel_coef = reward_cfg.get("velocity_penalty_coef", 0.0)
         smooth_coef = reward_cfg.get("action_smoothness_coef", 0.0)
-        velocity_penalty = -vel_coef * torch.norm(
-            self.obs_dict["robot_body_linvel"], dim=1
-        )
+        velocity_penalty = -vel_coef * torch.norm(self.obs_dict["robot_body_linvel"], dim=1)
         action_delta = self.actions - self.prev_actions
         smooth_penalty = -smooth_coef * torch.norm(action_delta, dim=1)
 
         ang_coef = reward_cfg.get("angvel_penalty_coef", 0.0)
         ang_penalty = -ang_coef * torch.norm(self.obs_dict["robot_body_angvel"], dim=1)
+
+        yaw_penalty_coef = reward_cfg.get("yaw_penalty_coef", 0.0)
+        yaw_penalty = -yaw_penalty_coef * yaw_error
+
+        pos_penalty_coef = reward_cfg.get("position_error_penalty_coef", 0.0)
+        pos_penalty = -pos_penalty_coef * torch.norm(pos_error, dim=1)
 
         tilt_warn = reward_cfg.get("tilt_warning_deg", 0.0)
         tilt_penalty = 0.0
@@ -652,6 +662,27 @@ class PayloadCompensationTask(BaseTask):
                 vel_norm = torch.norm(self.obs_dict["robot_body_linvel"], dim=1)
                 stability_term += -stability_vel_coef * vel_norm * near_mask
 
+        # 仅保存 detach 后的均值，避免保留计算图
+        def _mean_detached(t):
+            if not torch.is_tensor(t):
+                t = torch.as_tensor(t, device=self.device)
+            return float(t.mean().item())
+
+        self._last_reward_components = {
+            "attitude": _mean_detached(attitude_term),
+            "position": _mean_detached(pos_penalty),
+            "yaw": _mean_detached(yaw_penalty),
+            "velocity": _mean_detached(velocity_penalty),
+            "angular_velocity": _mean_detached(ang_penalty),
+            "smooth": _mean_detached(smooth_penalty),
+            "comp_torque": _mean_detached(comp_penalty),
+            "comp_thrust": _mean_detached(thrust_penalty),
+            "stability": _mean_detached(stability_term),
+            "tilt_warn": _mean_detached(tilt_penalty),
+            "height_warn": _mean_detached(height_penalty),
+            "release_tilt": _mean_detached(release_penalty),
+        }
+
         return (
             attitude_term
             + comp_penalty
@@ -663,7 +694,31 @@ class PayloadCompensationTask(BaseTask):
             + height_penalty
             + release_penalty
             + stability_term
+            + pos_penalty
+            + yaw_penalty
         )
+
+    def _get_tb_log_dir(self) -> str:
+        # 1) 优先用环境变量显式指定
+        env_dir = os.environ.get("AERIAL_TB_LOGDIR")
+        if env_dir:
+            return env_dir
+        # 2) 尝试找到当前 runs/ 下最新的 summaries 目录，与 rl-games 默认输出靠近
+        runs_root = os.path.join(os.getcwd(), "runs")
+        latest = None
+        latest_mtime = -1
+        if os.path.isdir(runs_root):
+            for entry in os.listdir(runs_root):
+                summary_dir = os.path.join(runs_root, entry, "summaries")
+                if os.path.isdir(summary_dir):
+                    mtime = os.path.getmtime(summary_dir)
+                    if mtime > latest_mtime:
+                        latest_mtime = mtime
+                        latest = summary_dir
+        if latest:
+            return latest
+        # 3) 回退：默认写入 runs/reward_components
+        return os.path.join(runs_root, "reward_components")
 
     def get_return_tuple(self):
         self.process_obs_for_task()
