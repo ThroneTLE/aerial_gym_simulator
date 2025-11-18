@@ -82,7 +82,13 @@
 python -m aerial_gym.rl_training.rl_games.runner --train   --file aerial_gym/rl_training/rl_games/ppo_aerial_quad.yaml   --task payload_compensation_task   --experiment_name payload_comp_rl_stage1_resume   --checkpoint aerial_gym/rl_training/rl_games/runs/payload_comp_rl_stage1_15-17-18-20/nn/payload_comp_rl_stage1.pth   --headless True --num_envs 4096
 
 """
-python -m aerial_gym.rl_training.rl_games.runner --play   --file aerial_gym/rl_training/rl_games/ppo_aerial_quad.yaml   --task payload_compensation_task   --checkpoint runs/payload_comp_rl_stage2_resume_15-19-04-09/nn/payload_comp_rl_stage2_resume.pth   --headless False --num_envs 64
+python -m aerial_gym.rl_training.rl_games.runner --play   --file aerial_gym/rl_training/rl_games/ppo_aerial_quad.yaml   --task payload_compensation_task   --checkpoint runs/payload_comp_rl_stage3_4resume_16-09-26-53/nn/payload_comp_rl_stage3_4resume.pth  --headless False --num_envs 64
 
 """
-python -m aerial_gym.rl_training.rl_games.runner --train   --file aerial_gym/rl_training/rl_games/ppo_aerial_quad.yaml   --task payload_compensation_task   --experiment_name payload_comp_rl_stage1_resume   --checkpoint runs/payload_comp_rl_stage1_resume_15-18-47-44/nn/payload_comp_rl_stage1_resume.pth  --headless True --num_envs 4096
+python -m aerial_gym.rl_training.rl_games.runner --train   --file aerial_gym/rl_training/rl_games/ppo_aerial_quad.yaml   --task payload_compensation_task   --experiment_name payload_comp_rl_stage5_4resume   --checkpoint runs/payload_comp_rl_stage5_3resume_16-23-35-10/nn/payload_comp_rl_stage5_3resume.pth  --headless True --num_envs 8192
+
+export AERIAL_TB_LOGDIR=./runs/diagnostics_payload
+export AERIAL_TB_INTERVAL=100
+
+
+python -m aerial_gym.rl_training.rl_games.runner --train   --file aerial_gym/rl_training/rl_games/ppo_aerial_quad.yaml   --task payload_compensation_task   --experiment_name payload_comp_rl_stage5_3resume      --headless False --num_envs 8192 --headless True

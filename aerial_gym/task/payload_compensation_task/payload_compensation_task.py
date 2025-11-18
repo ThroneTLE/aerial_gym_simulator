@@ -4,6 +4,7 @@ from typing import List, Optional, Sequence
 import numpy as np
 import torch
 import os
+from datetime import datetime
 from isaacgym import gymapi, gymtorch
 from torch.utils.tensorboard import SummaryWriter
 
@@ -354,6 +355,8 @@ class PayloadCompensationTask(BaseTask):
         super().__init__(task_config)
         self.device = self.task_config.device
         log_dir = os.environ.get("AERIAL_TB_LOGDIR")
+        if log_dir:
+            log_dir = self._make_timestamped_log_dir(log_dir)
         self.tb_writer = SummaryWriter(log_dir=log_dir) if log_dir else None
         self.tb_log_interval = int(os.environ.get("AERIAL_TB_INTERVAL", "200"))
 
@@ -785,6 +788,24 @@ class PayloadCompensationTask(BaseTask):
             window_mask = torch.zeros_like(roll_pitch_error, dtype=torch.bool)
         if not torch.is_tensor(window_mask):
             window_mask = torch.as_tensor(window_mask, device=self.device)
+        window_mask = window_mask.to(self.device)
+        window_mask_float = window_mask.float()
+
+        comp_activation_coef = reward_cfg.get("comp_activation_bonus_coef", 0.0)
+        comp_activation_term = 0.0
+        if comp_activation_coef != 0.0:
+            comp_action_mag = torch.norm(torque_actions, dim=1)
+            comp_activation_term = comp_activation_coef * comp_action_mag * window_mask_float
+
+        if window_mask.any():
+            comp_scale = reward_cfg.get("comp_window_penalty_scale", 0.5)
+            vel_scale = reward_cfg.get("vel_window_penalty_scale", 0.5)
+            smooth_scale = reward_cfg.get("smooth_window_penalty_scale", 0.7)
+            comp_penalty = comp_penalty * (1.0 - window_mask_float + comp_scale * window_mask_float)
+            thrust_penalty = thrust_penalty * (1.0 - window_mask_float + comp_scale * window_mask_float)
+            velocity_penalty = velocity_penalty * (1.0 - window_mask_float + vel_scale * window_mask_float)
+            ang_penalty = ang_penalty * (1.0 - window_mask_float + vel_scale * window_mask_float)
+            smooth_penalty = smooth_penalty * (1.0 - window_mask_float + smooth_scale * window_mask_float)
 
         self._last_reward_components = {
             "attitude": _mean_detached(attitude_term),
@@ -795,6 +816,7 @@ class PayloadCompensationTask(BaseTask):
             "smooth": _mean_detached(smooth_penalty),
             "comp_torque": _mean_detached(comp_penalty),
             "comp_thrust": _mean_detached(thrust_penalty),
+            "comp_activation": _mean_detached(comp_activation_term),
             "stability": _mean_detached(stability_term),
             "tilt_warn": _mean_detached(tilt_penalty),
             "height_warn": _mean_detached(height_penalty),
@@ -819,13 +841,14 @@ class PayloadCompensationTask(BaseTask):
             + hover_term
             + pos_penalty
             + yaw_penalty
+            + comp_activation_term
         )
 
     def _get_tb_log_dir(self) -> str:
         # 1) 优先用环境变量显式指定
         env_dir = os.environ.get("AERIAL_TB_LOGDIR")
         if env_dir:
-            return env_dir
+            return self._make_timestamped_log_dir(env_dir)
         # 2) 尝试找到当前 runs/ 下最新的 summaries 目录，与 rl-games 默认输出靠近
         runs_root = os.path.join(os.getcwd(), "runs")
         latest = None
@@ -842,6 +865,11 @@ class PayloadCompensationTask(BaseTask):
             return latest
         # 3) 回退：默认写入 runs/reward_components
         return os.path.join(runs_root, "reward_components")
+
+    def _make_timestamped_log_dir(self, base_dir: str) -> str:
+        """Append timestamp to avoid overwriting existing diagnostics payload logs."""
+        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+        return f"{base_dir}_{ts}"
 
     def get_return_tuple(self):
         self.process_obs_for_task()

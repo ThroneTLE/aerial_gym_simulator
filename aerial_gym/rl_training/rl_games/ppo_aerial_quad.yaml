@@ -20,14 +20,20 @@ params:
         sigma_init:
           name: const_initializer
           val: 0
-        fixed_sigma: True
+        fixed_sigma: False  # checkpoint 中无 sigma 参数，关闭固定 logstd 以避免缺键
     mlp:
-      units: [256, 128, 64]
+      units: [256, 256, 128]  # 对齐 checkpoint 的更宽层
       d2rl: False
       activation: elu
       initializer:
         name: default
         scale: 2
+    rnn:
+      name: gru
+      units: 64  # 对齐 checkpoint：weight_ih size 192x128 => hidden_size=64
+      layers: 1
+      before_mlp: False
+      layer_norm: True  # layer_norm 权重/偏置维度 64
 
   config:
     env_name: payload_compensation_task      # 或 payload_compensation_task_full_rl
@@ -58,9 +64,9 @@ params:
     minibatch_size: 65536
     mini_epochs: 6
     critic_coef: 2
-    normalize_input: False
+    normalize_input: True  # checkpoint 包含 running_mean_std
     bounds_loss_coef: 0.0001
-    max_epochs: 10000
+    max_epochs: 160000
     normalize_value: True
     use_diagnostics: True
     value_bootstrap: True
