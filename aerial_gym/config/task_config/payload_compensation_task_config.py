@@ -45,6 +45,7 @@ class task_config:
         "stability_penalty": 0.0,
         "stability_velocity_penalty": 0.0,
         "position_error_penalty_coef": 0.0,
+        "z_error_penalty_coef": 1.0,
         "yaw_penalty_coef": 0.0,
         # Hover 奖励关闭
         "hover_bonus_radius": 0.0,
@@ -61,9 +62,9 @@ class task_config:
         "delta_error_bonus_clip": 0.0,
         # 奖励/惩罚仅在预警与释放后窗口内生效的步数
         "release_reward_window_steps": 300,
-        # 加速度惩罚：远离目标且加速度大时惩罚，窗口内生效
-        "accel_penalty_coef": 2.0,
-        "accel_penalty_distance": 0.8,
+        # 加速度惩罚：远离目标的加速度重罚，朝向目标的加速度随距离变近惩罚加重
+        "accel_penalty_away_coef": 2.5,
+        "accel_penalty_toward_coef": 0.02,
         # 补偿分段加重惩罚
         "comp_penalty_high_threshold": 1.1,  # 提高阈值，允许更大补偿
         "comp_torque_penalty_high_coef": 0.04,  # 降低高段惩罚

@@ -255,7 +255,7 @@ class PayloadManager:
 
             base_mass = float(self.base_mass[env_id].item())
             total_mass = base_mass + payload_mass_sum
-            #self._sync_controller_mass(env_id, total_mass)
+            self._sync_controller_mass(env_id, total_mass)
 
             inertia_np = self.base_inertia[env_id].cpu().numpy().copy()
             weighted_offset = np.zeros(3, dtype=np.float32)
@@ -688,18 +688,19 @@ class PayloadCompensationTask(BaseTask):
         thrust_excess = torch.clamp(thrust_abs - comp_high_thresh, min=0.0)
         thrust_penalty = -(thrust_coef * thrust_abs + thrust_high_coef * thrust_excess**2)
 
-        # 加速度惩罚：远离目标时加速度越大惩罚越多（窗口内生效）
-        accel_coef = reward_cfg.get("accel_penalty_coef", 0.0)
-        accel_dist_thresh = reward_cfg.get("accel_penalty_distance", 0.0)
+        # 加速度惩罚：远离目标的加速度始终重罚，朝向目标的加速度随距离变近惩罚加重
+        accel_away_coef = reward_cfg.get("accel_penalty_away_coef", 0.0)
+        accel_toward_coef = reward_cfg.get("accel_penalty_toward_coef", 0.0)
         accel_penalty = torch.zeros_like(thrust_penalty)
-        if accel_coef > 0.0:
+        if accel_away_coef > 0.0 or accel_toward_coef > 0.0:
             accel_vec = self.obs_dict["robot_body_linvel"] - self.prev_linvel
-            accel_mag = torch.norm(accel_vec, dim=1)
-            if accel_dist_thresh > 0.0:
-                accel_mask = (torch.norm(pos_error, dim=1) > accel_dist_thresh).float()
-                accel_penalty = -accel_coef * accel_mag * accel_mask
-            else:
-                accel_penalty = -accel_coef * accel_mag
+            dir_to_target = pos_error / (torch.norm(pos_error, dim=1, keepdim=True) + 1e-6)
+            accel_world = self.obs_dict.get("robot_linvel", self.obs_dict["robot_body_linvel"]) - self.prev_linvel
+            proj = torch.sum(accel_world * dir_to_target, dim=1)
+            dist = torch.norm(pos_error, dim=1) + 1e-6
+            toward_acc = torch.clamp(proj, min=0.0)
+            away_acc = torch.clamp(-proj, min=0.0)
+            accel_penalty = -(accel_away_coef * away_acc + accel_toward_coef * toward_acc / dist)
 
         vel_coef = reward_cfg.get("velocity_penalty_coef", 0.0)
         smooth_coef = reward_cfg.get("action_smoothness_coef", 0.0)
@@ -715,6 +716,8 @@ class PayloadCompensationTask(BaseTask):
 
         pos_penalty_coef = reward_cfg.get("position_error_penalty_coef", 0.0)
         pos_penalty = -pos_penalty_coef * torch.norm(pos_error, dim=1)
+        z_penalty_coef = reward_cfg.get("z_error_penalty_coef", 0.0)
+        z_penalty = -z_penalty_coef * torch.abs(pos_error[:, 2])
 
         tilt_warn = reward_cfg.get("tilt_warning_deg", 0.0)
         tilt_penalty = 0.0
@@ -856,9 +859,10 @@ class PayloadCompensationTask(BaseTask):
             ang_penalty = ang_penalty * (1.0 - window_mask_float + vel_scale * window_mask_float)
             smooth_penalty = smooth_penalty * (1.0 - window_mask_float + smooth_scale * window_mask_float)
 
-        self._last_reward_components = {
+        raw_components = {
             "attitude": _mean_detached(attitude_term),
             "position": _mean_detached(pos_penalty),
+            "z_position": _mean_detached(z_penalty),
             "yaw": _mean_detached(yaw_penalty),
             "velocity": _mean_detached(velocity_penalty),
             "angular_velocity": _mean_detached(ang_penalty),
@@ -874,6 +878,11 @@ class PayloadCompensationTask(BaseTask):
             "delta_error_bonus": _mean_detached(
                 torch.clamp_min(delta, 0.0) * bonus_coef * window_mask.float()
             ),
+            "acceleration": _mean_detached(accel_penalty),
+        }
+        # 过滤掉恒为零的条目，避免空白 TB 图
+        self._last_reward_components = {
+            k: v for k, v in raw_components.items() if abs(v) > 1e-9
         }
 
         return reward_window_mask_float * (
@@ -890,6 +899,7 @@ class PayloadCompensationTask(BaseTask):
             + stability_term
             + hover_term
             + pos_penalty
+            + z_penalty
             + yaw_penalty
             + comp_activation_term
         )
