@@ -255,7 +255,7 @@ class PayloadManager:
 
             base_mass = float(self.base_mass[env_id].item())
             total_mass = base_mass + payload_mass_sum
-            self._sync_controller_mass(env_id, total_mass)
+            #self._sync_controller_mass(env_id, total_mass)
 
             inertia_np = self.base_inertia[env_id].cpu().numpy().copy()
             weighted_offset = np.zeros(3, dtype=np.float32)
@@ -396,6 +396,8 @@ class PayloadCompensationTask(BaseTask):
         )
         # 记录上一帧的位置误差范数，用于计算误差缩小奖励
         self.prev_pos_dist = torch.zeros(self.sim_env.num_envs, device=self.device)
+        # 记录上一帧线速度，用于近似计算加速度惩罚
+        self.prev_linvel = torch.zeros_like(self.target_position)
 
         self.obs_dict = self.sim_env.get_obs()
         self.terminations = self.obs_dict["crashes"]
@@ -546,8 +548,24 @@ class PayloadCompensationTask(BaseTask):
         self.controller_actions[:, 0:3] = self.target_position
         self.controller_actions[:, 3] = 0.0
         clamped_actions = torch.clamp(self.actions, -1.0, 1.0)
-        self.controller_actions[:, 4] = clamped_actions[:, 0]
-        self.controller_actions[:, 5:] = clamped_actions[:, 1:]
+        # 补偿动作仅在预警/释放窗口内生效，窗口外置零
+        reward_params = self.task_config.reward_parameters
+        reward_window_steps = int(reward_params.get("release_reward_window_steps", 0))
+        # 窗口条件：预警期，或刚释放，或已释放过且仍在释放后窗口内
+        has_released = self.payload_manager.last_release_index >= 0
+        post_release_window = torch.zeros_like(self.payload_manager.step_counter, dtype=torch.bool)
+        if reward_window_steps > 0:
+            post_release_window = (has_released) & (self.payload_manager.step_counter < reward_window_steps)
+        reward_window_mask = (
+            self.payload_manager.release_warning_flag
+            | self.payload_manager.just_released_flag
+            | post_release_window
+        )
+        reward_window_mask_f = reward_window_mask.float()
+        comp_mask = reward_window_mask_f.view(-1, 1)
+
+        self.controller_actions[:, 4] = clamped_actions[:, 0] * comp_mask[:, 0]
+        self.controller_actions[:, 5:] = clamped_actions[:, 1:] * comp_mask
 
         self.sim_env.step(actions=self.controller_actions)
 
@@ -563,21 +581,20 @@ class PayloadCompensationTask(BaseTask):
             1.0,
             self.controller_actions,
             self.controller_actions,
-            self.task_config.reward_parameters,
+            reward_params,
             self.crash_distance_threshold,
             self.crash_tilt_threshold_rad,
         )
-        self.rewards[:] = base_rewards
+        self.rewards[:] = base_rewards * reward_window_mask_f
 
         # 额外奖励：在预警或释放后窗口内，鼓励距离误差减小
         dist_norm = torch.norm(self.target_position - self.obs_dict["robot_position"], dim=1)
         delta = self.prev_pos_dist - dist_norm
         self.prev_pos_dist = dist_norm
-        reward_params = self.task_config.reward_parameters
         bonus_coef = reward_params.get("delta_error_bonus_coef", 0.0)
         bonus_clip = reward_params.get("delta_error_bonus_clip", None)
         window_steps = int(reward_params.get("delta_error_window_steps", 0))
-        window_mask = self.payload_manager.release_warning_flag
+        window_mask = reward_window_mask
         if window_steps > 0:
             window_mask = window_mask | (self.payload_manager.step_counter < window_steps)
         delta_for_log = delta
@@ -590,8 +607,18 @@ class PayloadCompensationTask(BaseTask):
             delta_for_log = delta_clamped
 
         self.rewards += self._compute_payload_penalties(
-            clamped_actions, delta=delta_for_log, bonus_coef=bonus_coef, window_mask=window_mask
+            clamped_actions,
+            delta=delta_for_log,
+            bonus_coef=bonus_coef,
+            window_mask=window_mask,
+            reward_window_mask=reward_window_mask,
         )
+
+        # 将奖励严格限制在补偿窗口内
+        self.rewards *= reward_window_mask_f
+
+        # 更新上一帧速度，用于下一步的加速度估计
+        self.prev_linvel = self.obs_dict["robot_body_linvel"].detach()
 
         self.truncations[:] = torch.where(
             self.sim_env.sim_steps > self.task_config.episode_len_steps, 1, 0
@@ -627,7 +654,9 @@ class PayloadCompensationTask(BaseTask):
             self.tb_writer.flush()
         return self.get_return_tuple()
 
-    def _compute_payload_penalties(self, clamped_actions, delta=None, bonus_coef=0.0, window_mask=None):
+    def _compute_payload_penalties(
+        self, clamped_actions, delta=None, bonus_coef=0.0, window_mask=None, reward_window_mask=None
+    ):
         reward_cfg = self.task_config.reward_parameters
         euler = self.obs_dict["robot_euler_angles"]
         pos_error = self.target_position - self.obs_dict["robot_position"]
@@ -658,6 +687,19 @@ class PayloadCompensationTask(BaseTask):
         thrust_high_coef = reward_cfg.get("comp_thrust_penalty_high_coef", thrust_coef)
         thrust_excess = torch.clamp(thrust_abs - comp_high_thresh, min=0.0)
         thrust_penalty = -(thrust_coef * thrust_abs + thrust_high_coef * thrust_excess**2)
+
+        # 加速度惩罚：远离目标时加速度越大惩罚越多（窗口内生效）
+        accel_coef = reward_cfg.get("accel_penalty_coef", 0.0)
+        accel_dist_thresh = reward_cfg.get("accel_penalty_distance", 0.0)
+        accel_penalty = torch.zeros_like(thrust_penalty)
+        if accel_coef > 0.0:
+            accel_vec = self.obs_dict["robot_body_linvel"] - self.prev_linvel
+            accel_mag = torch.norm(accel_vec, dim=1)
+            if accel_dist_thresh > 0.0:
+                accel_mask = (torch.norm(pos_error, dim=1) > accel_dist_thresh).float()
+                accel_penalty = -accel_coef * accel_mag * accel_mask
+            else:
+                accel_penalty = -accel_coef * accel_mag
 
         vel_coef = reward_cfg.get("velocity_penalty_coef", 0.0)
         smooth_coef = reward_cfg.get("action_smoothness_coef", 0.0)
@@ -791,6 +833,13 @@ class PayloadCompensationTask(BaseTask):
         window_mask = window_mask.to(self.device)
         window_mask_float = window_mask.float()
 
+        if reward_window_mask is None:
+            reward_window_mask = window_mask
+        if not torch.is_tensor(reward_window_mask):
+            reward_window_mask = torch.as_tensor(reward_window_mask, device=self.device)
+        reward_window_mask = reward_window_mask.to(self.device)
+        reward_window_mask_float = reward_window_mask.float()
+
         comp_activation_coef = reward_cfg.get("comp_activation_bonus_coef", 0.0)
         comp_activation_term = 0.0
         if comp_activation_coef != 0.0:
@@ -827,10 +876,11 @@ class PayloadCompensationTask(BaseTask):
             ),
         }
 
-        return (
+        return reward_window_mask_float * (
             attitude_term
             + comp_penalty
             + thrust_penalty
+            + accel_penalty
             + velocity_penalty
             + ang_penalty
             + smooth_penalty
