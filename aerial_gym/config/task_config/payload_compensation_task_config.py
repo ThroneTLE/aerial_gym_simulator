@@ -19,8 +19,8 @@ class task_config:
     return_state_before_reset = False
 
     reward_parameters = {
-        # 仅关注释放期的姿态/角速度/速度抑制
-        "position_weight": 0.0,
+        # 重新激活位置奖励，引导回目标
+        "position_weight": 2.0,
         # 在警告期/释放扰动下可轻微减弱
         "crash_penalty": -120.0,
         "attitude_penalty_coef": 1.0,
@@ -29,9 +29,9 @@ class task_config:
         "comp_torque_penalty_coef": 0.01,  #0.02
         "comp_thrust_penalty_coef": 0.02,
         # 放松速度/角速度惩罚，专注抑制释放瞬间动量
-        "velocity_penalty_coef": 0.4,
-        "angvel_penalty_coef": 0.15,
-        "action_smoothness_coef": 0.0,
+        "velocity_penalty_coef": 0.1,
+        "angvel_penalty_coef": 0.0,  #调味了0，因为大了可能有害，角速度是力矩积分后的结果，具有物理上的滞后性
+        "action_smoothness_coef": 0.1, #可调0.01，后期根据实际情况调整训练，抑制高频动作
         "tilt_warning_deg": 0.0,
         "tilt_warning_penalty": 0.0,
         # 高度相关奖励/惩罚关闭
@@ -62,9 +62,9 @@ class task_config:
         "delta_error_bonus_clip": 0.0,
         # 奖励/惩罚仅在预警与释放后窗口内生效的步数
         "release_reward_window_steps": 200,
-        # 加速度惩罚：远离目标的加速度重罚，朝向目标的加速度随距离变近惩罚加重
-        "accel_penalty_away_coef": 2.5,
-        "accel_penalty_toward_coef": 0.000,
+        # 关闭方向性加速度塑形
+        "accel_penalty_away_coef": 0.0,
+        "accel_penalty_toward_coef": 0.0,
         # 补偿分段加重惩罚
         "comp_penalty_high_threshold": 0.9,  # 提高阈值，允许更大补偿
         "comp_torque_penalty_high_coef": 0.04,  # 降低高段惩罚0.04
@@ -74,8 +74,8 @@ class task_config:
         "vel_window_penalty_scale": 0.35,
         "smooth_window_penalty_scale": 0.6,
         "comp_activation_bonus_coef": 0.0,
-        # 朝远离目标方向的速度惩罚系数（>0 表示扣分）
-        "vel_away_penalty_coef": 1.5,
+        # 方向性速度惩罚关闭
+        "vel_away_penalty_coef": 0.0,
         # 超阈角度指数惩罚，默认 5° 之后快速增大
         "tilt_excess_threshold_deg": 3.0,
         "tilt_excess_coef": 1.5,
@@ -97,7 +97,7 @@ class task_config:
         "release_interval": 300,
         "release_start_range": [200, 400],
         "release_interval_range": [200, 400],
-        "warning_steps": 120,
+        "warning_steps": 20,
         "randomize_release": False,
         "log_release_events": False,
     }
