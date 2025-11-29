@@ -1,7 +1,7 @@
 import argparse
 import os
 import sys
-from typing import List, Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
@@ -12,23 +12,31 @@ from aerial_gym.registry.task_registry import task_registry
 from aerial_gym.utils.math import get_euler_xyz_tensor
 
 import torch
+"""
+conda run --no-capture-output -n aerialgym python aerial_gym/examples/new_my_position_control.py   --num_envs 1 --steps 2000 --headless False   --checkpoint runs/payload_comp_NEW_1_1_28-00-45-48/nn/payload_comp_NEW_1_1.pth 
 
+"""
 DEFAULT_CKPT = (
-    "aerial_gym/rl_training/rl_games/runs/payload_full_rl_test_15-12-17-21/nn/payload_full_rl_test.pth"
+    "/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/runs/payload_comp_NEW_4_1_28-21-39-46/nn/payload_comp_NEW_4_1.pth"
 )
 
-TASK_BY_ACTION_DIM = {
-    3: "payload_compensation_task",
-    4: "payload_compensation_task_full_rl",
-}
-ENV_ACTION_DIM = {name: dim for dim, name in TASK_BY_ACTION_DIM.items()}
+# Demo 默认使用训练 YAML 指定的任务；仅在缺少配置时退回补偿任务。
+DEFAULT_ENV_NAME = "payload_compensation_task"
 
 plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "Arial Unicode MS", "Noto Sans CJK SC"]
 plt.rcParams["axes.unicode_minus"] = False
 
 
 class PolicyNetwork(torch.nn.Module):
-    def __init__(self, obs_dim: int, action_dim: int, hidden_units: Sequence[int]):
+    def __init__(
+        self,
+        obs_dim: int,
+        action_dim: int,
+        hidden_units: Sequence[int],
+        rnn_cfg: dict,
+        num_envs: int,
+        device: torch.device,
+    ):
         super().__init__()
         layers: List[torch.nn.Module] = []
         in_dim = obs_dim
@@ -36,11 +44,77 @@ class PolicyNetwork(torch.nn.Module):
             layers.append(torch.nn.Linear(in_dim, units))
             layers.append(torch.nn.ELU())
             in_dim = units
-        self.actor_mlp = torch.nn.Sequential(*layers)
-        self.mu = torch.nn.Linear(in_dim, action_dim)
+        if layers:
+            self.actor_mlp = torch.nn.Sequential(*layers)
+            mlp_out_dim = in_dim
+        else:
+            self.actor_mlp = torch.nn.Identity()
+            mlp_out_dim = obs_dim
+
+        rnn_name = (rnn_cfg or {}).get("name", "").lower()
+        self.uses_rnn = rnn_name == "gru" and rnn_cfg.get("units", 0) > 0
+        self.before_mlp = bool((rnn_cfg or {}).get("before_mlp", False)) if self.uses_rnn else False
+        self.layer_norm_after_rnn = bool((rnn_cfg or {}).get("layer_norm", False)) if self.uses_rnn else False
+        self.hidden_state: Optional[torch.Tensor] = None
+        self.num_envs = num_envs
+
+        if self.uses_rnn:
+            hidden_size = int(rnn_cfg.get("units", mlp_out_dim))
+            self.rnn = torch.nn.GRU(
+                input_size=obs_dim if self.before_mlp else mlp_out_dim,
+                hidden_size=hidden_size,
+                num_layers=int(rnn_cfg.get("layers", 1)),
+                batch_first=True,
+            )
+            if self.layer_norm_after_rnn:
+                self.layer_norm = torch.nn.LayerNorm(hidden_size)
+            self.final_feature_dim = mlp_out_dim if self.before_mlp else hidden_size
+        else:
+            self.final_feature_dim = mlp_out_dim
+
+        self.mu = torch.nn.Linear(self.final_feature_dim, action_dim)
+        self.to(device)
+        self.reset_hidden_state(device=device)
+
+    def reset_hidden_state(self, env_ids=None, device=None):
+        if not self.uses_rnn:
+            return
+        dev = device or (self.hidden_state.device if self.hidden_state is not None else next(self.parameters()).device)
+        if self.hidden_state is None or self.hidden_state.shape[1] != self.num_envs or self.hidden_state.device != dev:
+            self.hidden_state = torch.zeros(self.rnn.num_layers, self.num_envs, self.rnn.hidden_size, device=dev)
+            return
+        if env_ids is None:
+            self.hidden_state.zero_()
+        else:
+            idx = torch.as_tensor(env_ids, device=self.hidden_state.device, dtype=torch.long)
+            if idx.numel() > 0:
+                self.hidden_state[:, idx, :] = 0.0
+
+    def _ensure_hidden(self, batch_size: int, device: torch.device):
+        if not self.uses_rnn:
+            return
+        if self.hidden_state is None or self.hidden_state.shape[1] != batch_size or self.hidden_state.device != device:
+            self.hidden_state = torch.zeros(self.rnn.num_layers, batch_size, self.rnn.hidden_size, device=device)
 
     def forward(self, obs: torch.Tensor) -> torch.Tensor:
-        x = self.actor_mlp(obs)
+        x = obs
+        if self.uses_rnn and self.before_mlp:
+            self._ensure_hidden(x.shape[0], x.device)
+            rnn_out, self.hidden_state = self.rnn(x.unsqueeze(1), self.hidden_state)
+            self.hidden_state = self.hidden_state.detach()
+            features = rnn_out.squeeze(1)
+            if self.layer_norm_after_rnn:
+                features = self.layer_norm(features)
+            x = self.actor_mlp(features)
+        else:
+            x = self.actor_mlp(x)
+            if self.uses_rnn:
+                self._ensure_hidden(x.shape[0], x.device)
+                rnn_out, self.hidden_state = self.rnn(x.unsqueeze(1), self.hidden_state)
+                self.hidden_state = self.hidden_state.detach()
+                x = rnn_out.squeeze(1)
+                if self.layer_norm_after_rnn:
+                    x = self.layer_norm(x)
         return self.mu(x)
 
 
@@ -57,7 +131,7 @@ def _str2bool(value):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Payload compensation policy rollout.")
-    parser.add_argument("--num_envs", type=int, default=1, help="并行环境数量（建议 1 用于绘图）")
+    parser.add_argument("--num_envs", type=int, default=200, help="并行环境数量（建议 1 用于绘图）")
     parser.add_argument("--steps", type=int, default=2500, help="仿真步数")
     parser.add_argument(
         "--headless",
@@ -104,16 +178,23 @@ def build_policy(
     obs_dim: int,
     action_dim: int,
     device: torch.device,
+    num_envs: int,
 ):
-    hidden_units = cfg.get("params", {}).get("network", {}).get("mlp", {}).get("units", [256, 128, 64])
+    network_cfg = cfg.get("params", {}).get("network", {})
+    hidden_units = network_cfg.get("mlp", {}).get("units", [256, 128, 64])
+    rnn_cfg = network_cfg.get("rnn", {})
 
-    policy = PolicyNetwork(obs_dim, action_dim, hidden_units).to(device)
+    policy = PolicyNetwork(obs_dim, action_dim, hidden_units, rnn_cfg, num_envs, device)
     model_state = checkpoint_data["model"]
 
     actor_state = {}
     for key, value in model_state.items():
-        if key.startswith("a2c_network.actor_mlp") or key.startswith("a2c_network.mu"):
-            new_key = key.replace("a2c_network.", "")
+        if not key.startswith("a2c_network."):
+            continue
+        new_key = key.replace("a2c_network.", "", 1)
+        if new_key.startswith("rnn.rnn."):
+            new_key = new_key.replace("rnn.rnn.", "rnn.", 1)
+        if new_key.startswith(("actor_mlp", "mu", "rnn", "layer_norm")):
             actor_state[new_key] = value
 
     missing = set(policy.state_dict().keys()) - set(actor_state.keys())
@@ -121,6 +202,7 @@ def build_policy(
         raise RuntimeError(f"Checkpoint缺少以下权重: {missing}")
     policy.load_state_dict(actor_state)
     policy.eval()
+    policy.reset_hidden_state()
     return policy
 
 
@@ -202,23 +284,10 @@ def plot_results(z_history, euler_history, release_history):
     plt.show()
 
 
-def _resolve_env_name(cfg_env_name: str, checkpoint_action_dim: int) -> str:
-    cfg_expected_dim = ENV_ACTION_DIM.get(cfg_env_name)
-    if cfg_env_name and cfg_expected_dim == checkpoint_action_dim:
-        return cfg_env_name
-
-    guessed_env = TASK_BY_ACTION_DIM.get(checkpoint_action_dim)
-    if guessed_env:
-        if cfg_env_name and cfg_env_name != guessed_env:
-            print(
-                f"注意: YAML env_name={cfg_env_name} 与 checkpoint 推断值 {guessed_env} 不一致，使用后者"
-            )
-        return guessed_env
-
+def _resolve_env_name(cfg_env_name: Optional[str]) -> str:
     if cfg_env_name:
         return cfg_env_name
-
-    return "payload_compensation_task"
+    return DEFAULT_ENV_NAME
 
 
 def main():
@@ -230,7 +299,7 @@ def main():
     checkpoint_data, checkpoint_action_dim = load_checkpoint(args.checkpoint)
 
     cfg_env_name = cfg.get("params", {}).get("config", {}).get("env_name")
-    env_name = _resolve_env_name(cfg_env_name, checkpoint_action_dim)
+    env_name = _resolve_env_name(cfg_env_name)
 
     original_argv = sys.argv
     sys.argv = [sys.argv[0]]
@@ -253,7 +322,9 @@ def main():
         )
     device = torch.device(task.device)
 
-    policy = build_policy(cfg, checkpoint_data, obs_dim, action_dim, device)
+    policy = build_policy(
+        cfg, checkpoint_data, obs_dim, action_dim, device, task.sim_env.num_envs
+    )
 
     print(
         f"启动 {env_name}：envs={task.sim_env.num_envs}, "
@@ -261,6 +332,7 @@ def main():
     )
 
     task_obs, rewards, terms, truncs, infos = task.reset()
+    policy.reset_hidden_state()
 
     z_history: List[float] = []
     euler_history: List[np.ndarray] = []
@@ -273,6 +345,13 @@ def main():
             )
             actions = torch.clamp(policy(obs_tensor), -1.0, 1.0)
             task_obs, rewards, terms, truncs, infos = task.step(actions)
+
+            if policy.uses_rnn:
+                done_tensor = torch.as_tensor(terms, device=device).bool()
+                trunc_tensor = torch.as_tensor(truncs, device=device).bool()
+                reset_envs = torch.nonzero(done_tensor | trunc_tensor, as_tuple=False).squeeze(-1)
+                if reset_envs.numel() > 0:
+                    policy.reset_hidden_state(env_ids=reset_envs.tolist())
 
             env_id = 0
             pos = task.obs_dict["robot_position"][env_id].detach().cpu().numpy()

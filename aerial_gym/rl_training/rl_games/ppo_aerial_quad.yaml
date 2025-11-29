@@ -49,9 +49,9 @@ params:
     gamma: 0.99
     tau: 0.95
     ppo: True
-    learning_rate: 5e-2
+    learning_rate: 5e-4
     lr_schedule: adaptive
-    kl_threshold: 0.016
+    kl_threshold: 0.01
     save_best_after: 10
     score_to_win: 100000
     grad_norm: 1.0
@@ -61,7 +61,7 @@ params:
     clip_value: False
     num_actors: 2048
     horizon_length: 128
-    minibatch_size: 65536
+    minibatch_size:  65536 #131072 #65536
     mini_epochs: 6
     critic_coef: 2
     normalize_input: True  # checkpoint 包含 running_mean_std

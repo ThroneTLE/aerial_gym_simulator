@@ -33,7 +33,7 @@ PAYLOAD_OFFSETS = [
     np.array([-0.4, 0.4, -0.4], dtype=np.float32),
     np.array([-0.4, -0.4, -0.4], dtype=np.float32),
 ]
-PAYLOAD_MASS = 0.025  # kg
+PAYLOAD_MASS = 0.02  # kg
 RELEASE_START_STEP = 400
 RELEASE_INTERVAL = 200
 

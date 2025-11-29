@@ -15,7 +15,7 @@ class task_config:
     action_space_dim = 4  # thrust + 3 compensation torques
     controller_action_dim = 8  # 4 Lee inputs + thrust + 3 torque compensation commands
 
-    episode_len_steps = 2000
+    episode_len_steps = 3000
     return_state_before_reset = False
 
     reward_parameters = {
@@ -26,7 +26,7 @@ class task_config:
         "attitude_penalty_coef": 1.0,
         "release_attitude_boost": 2.0,
         # 先减轻惩罚以鼓励探索补偿动作
-        "comp_torque_penalty_coef": 0.02,
+        "comp_torque_penalty_coef": 0.01,  #0.02
         "comp_thrust_penalty_coef": 0.02,
         # 放松速度/角速度惩罚，专注抑制释放瞬间动量
         "velocity_penalty_coef": 0.4,
@@ -45,7 +45,7 @@ class task_config:
         "stability_penalty": 0.0,
         "stability_velocity_penalty": 0.0,
         "position_error_penalty_coef": 0.0,
-        "z_error_penalty_coef": 1.0,
+        "z_error_penalty_coef": 0.0,
         "yaw_penalty_coef": 0.0,
         # Hover 奖励关闭
         "hover_bonus_radius": 0.0,
@@ -53,7 +53,7 @@ class task_config:
         "hover_bonus_velocity": 0.0,
         "hover_bonus": 0.0,
         # When a payload was just released, temporarily boost stability incentives.
-        "release_stability_steps": 30,
+        "release_stability_steps": 50,
         "release_hover_boost": 2.0,
         "release_angvel_boost": 1.5,
         # 奖励距离误差缩小量，仅在预警/释放窗口内生效
@@ -61,19 +61,25 @@ class task_config:
         "delta_error_window_steps": 0,
         "delta_error_bonus_clip": 0.0,
         # 奖励/惩罚仅在预警与释放后窗口内生效的步数
-        "release_reward_window_steps": 300,
+        "release_reward_window_steps": 200,
         # 加速度惩罚：远离目标的加速度重罚，朝向目标的加速度随距离变近惩罚加重
         "accel_penalty_away_coef": 2.5,
-        "accel_penalty_toward_coef": 0.02,
+        "accel_penalty_toward_coef": 0.000,
         # 补偿分段加重惩罚
-        "comp_penalty_high_threshold": 1.1,  # 提高阈值，允许更大补偿
-        "comp_torque_penalty_high_coef": 0.04,  # 降低高段惩罚
+        "comp_penalty_high_threshold": 0.9,  # 提高阈值，允许更大补偿
+        "comp_torque_penalty_high_coef": 0.04,  # 降低高段惩罚0.04
         "comp_thrust_penalty_high_coef": 0.04,
         # 预警/释放窗口内额外放松惩罚、鼓励动作
         "comp_window_penalty_scale": 0.35,
         "vel_window_penalty_scale": 0.35,
         "smooth_window_penalty_scale": 0.6,
         "comp_activation_bonus_coef": 0.0,
+        # 朝远离目标方向的速度惩罚系数（>0 表示扣分）
+        "vel_away_penalty_coef": 1.5,
+        # 超阈角度指数惩罚，默认 5° 之后快速增大
+        "tilt_excess_threshold_deg": 3.0,
+        "tilt_excess_coef": 1.5,
+        "tilt_excess_exp": 0.45,
     }
 
     crash_distance_threshold = 5.0  # meters

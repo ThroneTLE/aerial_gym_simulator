@@ -1140,6 +1140,25 @@ def compute_reward(
     crashes[:] = torch.where(dist > crash_distance_threshold, torch.ones_like(crashes), crashes)
     tilt_angle = torch.acos(torch.clamp(ups[..., 2], -1.0, 1.0))
     crashes[:] = torch.where(tilt_angle > crash_tilt_threshold_rad, torch.ones_like(crashes), crashes)
+
+    # 远离目标方向的速度惩罚：速度在 pos_error 方向上的正投影
+    vel_away_coef = float(parameter_dict.get("vel_away_penalty_coef", 0.0))
+    if vel_away_coef != 0.0:
+        dir_vec = torch.zeros_like(pos_error)
+        nonzero = dist > 1e-6
+        dir_vec[nonzero] = pos_error[nonzero] / dist[nonzero].unsqueeze(1)
+        v_away = torch.sum(lin_vels * dir_vec, dim=1)
+        v_away = torch.clamp(v_away, min=0.0)
+        total_reward -= vel_away_coef * v_away
+
+    tilt_excess_coef = float(parameter_dict.get("tilt_excess_coef", 0.0))
+    tilt_excess_exp = float(parameter_dict.get("tilt_excess_exp", 0.0))
+    tilt_excess_threshold = float(parameter_dict.get("tilt_excess_threshold_deg", 0.0))
+    if tilt_excess_coef != 0.0 and tilt_excess_exp > 0.0 and tilt_excess_threshold > 0.0:
+        threshold_rad = np.deg2rad(tilt_excess_threshold)
+        excess = torch.clamp(tilt_angle - threshold_rad, min=0.0)
+        if torch.any(excess > 0):
+            total_reward -= tilt_excess_coef * (torch.exp(tilt_excess_exp * excess) - 1.0)
     total_reward[:] = torch.where(
         crashes > 0.0, parameter_dict["crash_penalty"] * torch.ones_like(total_reward), total_reward
     )
