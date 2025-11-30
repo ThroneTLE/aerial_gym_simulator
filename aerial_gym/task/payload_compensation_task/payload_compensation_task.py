@@ -23,6 +23,14 @@ from aerial_gym.utils.math import (
 logger = CustomLogger("payload_compensation_task")
 
 
+def _mean_detached(t, device=None):
+    if not torch.is_tensor(t):
+        t = torch.as_tensor(t, device=device)
+    if t.numel() == 0:
+        return 0.0
+    return float(t.mean().item())
+
+
 def _mat33_to_np(mat: gymapi.Mat33) -> np.ndarray:
     return np.array(
         [
@@ -548,32 +556,26 @@ class PayloadCompensationTask(BaseTask):
         self.controller_actions[:, 0:3] = self.target_position
         self.controller_actions[:, 3] = 0.0
         clamped_actions = torch.clamp(self.actions, -1.0, 1.0)
-        # 补偿动作仅在预警/释放窗口内生效，窗口外置零
+        # 基础奖励/补偿常开，不再使用窗口掩码
         reward_params = self.task_config.reward_parameters
         reward_window_steps = int(reward_params.get("release_reward_window_steps", 0))
-        # 窗口条件：预警期，或刚释放，或已释放过且仍在释放后窗口内
-        has_released = self.payload_manager.last_release_index >= 0
-        post_release_window = torch.zeros_like(self.payload_manager.step_counter, dtype=torch.bool)
-        if reward_window_steps > 0:
-            post_release_window = (has_released) & (self.payload_manager.step_counter < reward_window_steps)
-        reward_window_mask = (
-            self.payload_manager.release_warning_flag
-            | self.payload_manager.just_released_flag
-            | post_release_window
+        reward_window_mask = torch.ones_like(
+            self.payload_manager.release_warning_flag, dtype=torch.bool, device=self.device
         )
         reward_window_mask_f = reward_window_mask.float()
-        comp_mask = reward_window_mask_f.view(-1, 1)
 
-        self.controller_actions[:, 4] = clamped_actions[:, 0] * comp_mask[:, 0]
-        self.controller_actions[:, 5:] = clamped_actions[:, 1:] * comp_mask
+        self.controller_actions[:, 4] = clamped_actions[:, 0]
+        self.controller_actions[:, 5:] = clamped_actions[:, 1:]
 
         self.sim_env.step(actions=self.controller_actions)
 
+        pos_error_body = quat_apply_inverse(
+            self.obs_dict["robot_vehicle_orientation"],
+            (self.target_position - self.obs_dict["robot_position"]),
+        )
+
         base_rewards, self.terminations[:] = compute_reward(
-            quat_apply_inverse(
-                self.obs_dict["robot_vehicle_orientation"],
-                (self.target_position - self.obs_dict["robot_position"]),
-            ),
+            pos_error_body,
             self.obs_dict["robot_linvel"],
             self.obs_dict["robot_orientation"],
             self.obs_dict["robot_body_angvel"],
@@ -585,7 +587,7 @@ class PayloadCompensationTask(BaseTask):
             self.crash_distance_threshold,
             self.crash_tilt_threshold_rad,
         )
-        self.rewards[:] = base_rewards * reward_window_mask_f
+        self.rewards[:] = base_rewards
 
         # 额外奖励：在预警或释放后窗口内，鼓励距离误差减小
         dist_norm = torch.norm(self.target_position - self.obs_dict["robot_position"], dim=1)
@@ -594,9 +596,9 @@ class PayloadCompensationTask(BaseTask):
         bonus_coef = reward_params.get("delta_error_bonus_coef", 0.0)
         bonus_clip = reward_params.get("delta_error_bonus_clip", None)
         window_steps = int(reward_params.get("delta_error_window_steps", 0))
-        window_mask = reward_window_mask
+        window_mask = torch.zeros_like(self.payload_manager.step_counter, dtype=torch.bool)
         if window_steps > 0:
-            window_mask = window_mask | (self.payload_manager.step_counter < window_steps)
+            window_mask = self.payload_manager.step_counter < window_steps
         delta_for_log = delta
         if bonus_coef != 0.0:
             delta_clamped = torch.clamp_min(delta, 0.0)
@@ -606,6 +608,16 @@ class PayloadCompensationTask(BaseTask):
             self.rewards += bonus
             delta_for_log = delta_clamped
 
+        # 记录位置相关奖励分量，便于 TB 观察
+        dist = torch.norm(pos_error_body, dim=1)
+        pos_reward = exp_func(dist, 3.0, 8.0) + exp_func(dist, 2.0, 4.0)
+        dist_reward = (20 - dist) / 40.0
+        ups = quat_axis(self.obs_dict["robot_orientation"], 2)
+        tiltage = torch.abs(1 - ups[..., 2])
+        up_reward = 0.2 / (0.1 + tiltage * tiltage)
+        spinnage = torch.norm(self.obs_dict["robot_body_angvel"], dim=1)
+        ang_vel_reward = (1.0 / (1.0 + spinnage * spinnage)) * 3
+
         self.rewards += self._compute_payload_penalties(
             clamped_actions,
             delta=delta_for_log,
@@ -614,8 +626,19 @@ class PayloadCompensationTask(BaseTask):
             reward_window_mask=reward_window_mask,
         )
 
-        # 将奖励严格限制在补偿窗口内
-        self.rewards *= reward_window_mask_f
+        # 补充 TB 记录：位置/姿态基础项（均为 batch 均值）
+        if hasattr(self, "_last_reward_components") and isinstance(self._last_reward_components, dict):
+            self._last_reward_components.update(
+                {
+                    "pos_reward": _mean_detached(pos_reward),
+                    "dist_reward": _mean_detached(dist_reward),
+                    "pos_weighted": _mean_detached(
+                        reward_params["position_weight"] * (pos_reward + dist_reward)
+                    ),
+                    "up_reward": _mean_detached(pos_reward * up_reward),
+                    "ang_vel_reward": _mean_detached(pos_reward * ang_vel_reward),
+                }
+            )
 
         # 更新上一帧速度，用于下一步的加速度估计
         self.prev_linvel = self.obs_dict["robot_body_linvel"].detach()
@@ -641,9 +664,9 @@ class PayloadCompensationTask(BaseTask):
             self.tb_writer.flush()
 
             self.infos = {
-            "last_release_index": self.payload_manager.last_release_index.clone().detach().cpu(),
-            "just_released": self.payload_manager.just_released_flag.clone().detach().cpu(),
-        }
+                "last_release_index": self.payload_manager.last_release_index.clone().detach().cpu(),
+                "just_released": self.payload_manager.just_released_flag.clone().detach().cpu(),
+            }
 
             # 动作饱和率监控（补偿通道接近 -1/1 的占比）
             sat_mask = torch.abs(clamped_actions) >= 0.99
@@ -819,12 +842,6 @@ class PayloadCompensationTask(BaseTask):
                 hover_term = hover_term * (1.0 + (release_hover_boost - 1.0) * post_release_mask * decay)
             if release_angvel_boost != 1.0:
                 ang_penalty = ang_penalty * (1.0 + (release_angvel_boost - 1.0) * post_release_mask * decay)
-
-        # 仅保存 detach 后的均值，避免保留计算图
-        def _mean_detached(t):
-            if not torch.is_tensor(t):
-                t = torch.as_tensor(t, device=self.device)
-            return float(t.mean().item())
 
         # Default delta/window tracking for logging if caller passes nothing.
         if delta is None:

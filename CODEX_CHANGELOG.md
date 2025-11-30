@@ -85,7 +85,7 @@ python -m aerial_gym.rl_training.rl_games.runner --train   --file aerial_gym/rl_
 python -m aerial_gym.rl_training.rl_games.runner --play   --file aerial_gym/rl_training/rl_games/ppo_aerial_quad.yaml   --task payload_compensation_task   --checkpoint runs/payload_comp_rl_stagetestresume_18-19-25-04/nn/payload_comp_rl_stagetestresume.pth --headless False --num_envs 64
 
 """
-python -m aerial_gym.rl_training.rl_games.runner --train   --file aerial_gym/rl_training/rl_games/ppo_aerial_quad.yaml   --task payload_compensation_task   --experiment_name payload_comp_rl_stage5_4resume   --checkpoint runs/payload_comp_rl_stage5_3resume_16-23-35-10/nn/payload_comp_rl_stage5_3resume.pth  --headless True --num_envs 8192
+python -m aerial_gym.rl_training.rl_games.runner --train   --file aerial_gym/rl_training/rl_games/ppo_aerial_quad.yaml   --task payload_compensation_task   --experiment_name 3_2   --checkpoint runs/3_1_29-21-55-55/nn/3_1_ep_976_rew_100322.28.pth  --headless True --num_envs 8192
 
 export AERIAL_TB_LOGDIR=./runs/diagnostics_payload
 export AERIAL_TB_INTERVAL=100

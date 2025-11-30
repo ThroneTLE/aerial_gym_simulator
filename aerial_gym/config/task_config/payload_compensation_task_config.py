@@ -20,18 +20,18 @@ class task_config:
 
     reward_parameters = {
         # 重新激活位置奖励，引导回目标
-        "position_weight": 2.0,
+        "position_weight": 4.0,
         # 在警告期/释放扰动下可轻微减弱
         "crash_penalty": -120.0,
-        "attitude_penalty_coef": 1.0,
-        "release_attitude_boost": 2.0,
+        "attitude_penalty_coef": 0.010,
+        "release_attitude_boost": 1.0,
         # 先减轻惩罚以鼓励探索补偿动作
         "comp_torque_penalty_coef": 0.01,  #0.02
         "comp_thrust_penalty_coef": 0.02,
         # 放松速度/角速度惩罚，专注抑制释放瞬间动量
         "velocity_penalty_coef": 0.1,
         "angvel_penalty_coef": 0.0,  #调味了0，因为大了可能有害，角速度是力矩积分后的结果，具有物理上的滞后性
-        "action_smoothness_coef": 0.1, #可调0.01，后期根据实际情况调整训练，抑制高频动作
+        "action_smoothness_coef": 0.01, #可调0.01，后期根据实际情况调整训练，抑制高频动作
         "tilt_warning_deg": 0.0,
         "tilt_warning_penalty": 0.0,
         # 高度相关奖励/惩罚关闭
@@ -65,21 +65,21 @@ class task_config:
         # 关闭方向性加速度塑形
         "accel_penalty_away_coef": 0.0,
         "accel_penalty_toward_coef": 0.0,
-        # 补偿分段加重惩罚
-        "comp_penalty_high_threshold": 0.9,  # 提高阈值，允许更大补偿
-        "comp_torque_penalty_high_coef": 0.04,  # 降低高段惩罚0.04
-        "comp_thrust_penalty_high_coef": 0.04,
+        # 补偿分段加重惩罚关闭
+        "comp_penalty_high_threshold": 1.0,
+        "comp_torque_penalty_high_coef": 0.0,
+        "comp_thrust_penalty_high_coef": 0.0,
         # 预警/释放窗口内额外放松惩罚、鼓励动作
-        "comp_window_penalty_scale": 0.35,
-        "vel_window_penalty_scale": 0.35,
-        "smooth_window_penalty_scale": 0.6,
+        "comp_window_penalty_scale": 1, #0.35
+        "vel_window_penalty_scale": 1, #0.35
+        "smooth_window_penalty_scale": 1, #0.6
         "comp_activation_bonus_coef": 0.0,
         # 方向性速度惩罚关闭
         "vel_away_penalty_coef": 0.0,
         # 超阈角度指数惩罚，默认 5° 之后快速增大
-        "tilt_excess_threshold_deg": 3.0,
-        "tilt_excess_coef": 1.5,
-        "tilt_excess_exp": 0.45,
+        "tilt_excess_threshold_deg": 0.0,
+        "tilt_excess_coef": 0.0,
+        "tilt_excess_exp": 0.0,
     }
 
     crash_distance_threshold = 5.0  # meters

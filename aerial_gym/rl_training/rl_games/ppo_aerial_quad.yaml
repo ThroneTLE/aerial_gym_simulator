@@ -1,78 +1,80 @@
 params:
-  seed: 8
+  seed: 8  # 训练随机种子（>0 生效，控制初始化/采样顺序，便于复现实验）
   algo:
-    name: a2c_continuous
+    name: a2c_continuous  # rl-games 连续动作 A2C/PPO 算法入口（同一个实现支持 PPO），配置 ppo: True 时走 PPO 分支
 
   model:
-    name: continuous_a2c_logstd
+    name: continuous_a2c_logstd  # 连续动作模型，策略输出均值+可学习 logstd
 
-  load_checkpoint: False
+  load_checkpoint: False  # 是否从已有 checkpoint 恢复（True 时需指定路径）
 
   network:
-    name: actor_critic
-    separate: False
+    name: actor_critic  # 策略/价值双头网络（共享主干 + 两个头）
+    separate: False  # False=共享主干；True=actor/critic 各自独立主干（更耗显存，梯度解耦）
     space:
       continuous:
-        mu_activation: None
-        sigma_activation: None
+        mu_activation: None  # 动作均值激活（None=线性输出，利于外部限幅）
+        sigma_activation: None  # logstd 激活（通常保持线性，方便直接学习 logstd）
         mu_init:
-          name: default
+          name: default  # 均值初始化方式（rl-games 内置）
         sigma_init:
-          name: const_initializer
-          val: 0
-        fixed_sigma: False  # checkpoint 中无 sigma 参数，关闭固定 logstd 以避免缺键
+          name: const_initializer  # logstd 初始化方式
+          val: -2.0  # 初始 logstd 常数（log 标度；-2 ≈ std 0.135）
+        fixed_sigma: False  # 启用可学习 logstd
+        min_logstd: -4.0  # clamp 下限（约 std 0.018），防止过度收紧
+        max_logstd: 1.0   # clamp 上限（约 std 2.72），防止噪声无上限飙升
     mlp:
-      units: [256, 256, 128]  # 对齐 checkpoint 的更宽层
-      d2rl: False
-      activation: elu
+      units: [256, 256, 128]  # MLP 隐层宽度（逐层）
+      d2rl: False  # 是否使用 D2RL 结构（在输入拼接上一层输出，通常可提升稳定性但加大计算）
+      activation: elu  # 隐层激活函数（ELU）
       initializer:
-        name: default
-        scale: 2
+        name: default  # 权重初始化方案（rl-games 内置，Xavier 类）
+        scale: 2  # 初始化缩放系数（越大初始方差越大）
     rnn:
-      name: gru
-      units: 64  # 对齐 checkpoint：weight_ih size 192x128 => hidden_size=64
-      layers: 1
-      before_mlp: False
-      layer_norm: True  # layer_norm 权重/偏置维度 64
+      name: gru  # RNN 类型（GRU）
+      units: 64  # GRU 隐状态维度
+      layers: 1  # GRU 堆叠层数
+      before_mlp: False  # True=RNN 在 MLP 之前；False=MLP 之后（常用）
+      layer_norm: True  # 对 GRU 层做 layer norm（稳定训练）
 
   config:
-    env_name: payload_compensation_task      # 或 payload_compensation_task_full_rl
+    env_name: payload_compensation_task      # 任务名（可切换为 payload_compensation_task_full_rl）
     env_config:
-      num_envs: 2048
-      headless: True
+      num_envs: 2048  # 并行环境数量（决定一次采样的宽度）
+      headless: True  # 关闭渲染
 
-    name: gen_ppo
+    name: gen_ppo  # 实验名称（日志/ckpt 前缀）
     reward_shaper:
-      scale_value: 1.0
+      scale_value: 0.5  # 全局奖励缩放，减小梯度/价值量级（过大易爆，过小学得慢）
 
-    normalize_advantage: True
-    gamma: 0.99
-    tau: 0.95
-    ppo: True
-    learning_rate: 5e-4
-    lr_schedule: adaptive
-    kl_threshold: 0.01
-    save_best_after: 10
-    score_to_win: 100000
-    grad_norm: 1.0
-    entropy_coef: 0.0001
-    truncate_grads: True
-    e_clip: 0.2
-    clip_value: False
-    num_actors: 2048
-    horizon_length: 128
-    minibatch_size:  65536 #131072 #65536
-    mini_epochs: 6
-    critic_coef: 2
-    normalize_input: True  # checkpoint 包含 running_mean_std
-    bounds_loss_coef: 0.0001
-    max_epochs: 160000
-    normalize_value: True
-    use_diagnostics: True
-    value_bootstrap: True
-    use_smooth_clamp: False
+    normalize_advantage: True  # 归一化 advantage（降低方差）
+    gamma: 0.99  # 折扣因子（越小越短视）
+    tau: 0.95  # GAE 衰减（越小 bias 高/variance 低）
+    ppo: True  # 开启 PPO 裁剪模式
+    learning_rate: 2e-4  # 初始学习率（步幅大小）
+    lr_schedule: adaptive  # 基于 KL 的自适应 LR 调度
+    kl_threshold: 0.01  # KL 超过阈值会降低 LR/回滚（越小越保守，clip_frac/KL 尖峰更少但收敛慢）
+    save_best_after: 10  # 从第 N 个 epoch 后开始记录最佳
+    score_to_win: 100000000  # 达到该分数视为“成功”停止条件
+    grad_norm: 1.0  # 全局梯度裁剪范数上限（防止梯度爆炸；过小会限制学习）
+    entropy_coef: 0.000001  # 熵系数（鼓励探索，防止过早收敛；过大动作噪声重，过小易收敛到尖锐策略）
+    truncate_grads: True  # 是否截断梯度（RNN 训练时常开，避免反向过长）
+    e_clip: 0.1  # PPO 裁剪范围，越小更新越保守（clip_frac 会下降，步子变小）
+    clip_value: False  # 是否对 value 也做裁剪（True 可稳 value，可能引入偏差）
+    num_actors: 2048  # 参与采样的环境/actor 数
+    horizon_length: 128  # 每个 actor 收集的 rollout 长度
+    minibatch_size:  65536 #131072 #65536  32768  # 单次优化用的样本数（越大梯度方差低但显存/时间更高）
+    mini_epochs: 3  # 每批数据重复训练次数（过高易过拟合、KL 抬升；过低步子小）
+    critic_coef: 1  # 价值损失权重（相对策略损失；大则稳定优势但可能拖慢策略更新）
+    normalize_input: True  # 对观察做 running_mean_std 归一化（减少量纲差异，提升稳定性）
+    bounds_loss_coef: 0.0001  # 动作越界惩罚系数（动作超出 [-1,1] 时的惩罚强度）
+    max_epochs: 160000  # 最大训练 epoch 数（训练上限）
+    normalize_value: True  # 对 value 做 running_mean_std 归一化（减小价值尺度漂移）
+    use_diagnostics: True  # 输出诊断指标到日志（TB/文本）
+    value_bootstrap: True  # 终止时是否用 value 做 bootstrap（True 可减小方差，但对非终止型截断需注意偏差）
+    use_smooth_clamp: False  # 是否对 value 误差做平滑截断（防止 value_loss 尖峰）
 
     player:
-      render: False
-      deterministic: True
-      games_num: 100000
+      render: False  # 测试/推理是否渲染
+      deterministic: True  # 测试时是否去掉探索噪声（True=使用均值动作）
+      games_num: 100000  # 评估局数上限（rl-games 需要的占位）
