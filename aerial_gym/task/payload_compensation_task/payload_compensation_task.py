@@ -361,6 +361,8 @@ class PayloadCompensationTask(BaseTask):
         self.device = self.task_config.device
         self.teacher_mode = getattr(self.task_config, "teacher_mode", False)
         self.dagger_frac = float(getattr(self.task_config, "dagger_frac", 0.0))
+        self._dagger_init_frac = self.dagger_frac
+        self._dagger_updates = 0
         self.dagger_decay_reward = float(getattr(self.task_config, "dagger_decay_reward", 0.0))
         self.dagger_decay_rate = float(getattr(self.task_config, "dagger_decay_rate", 1.0))
         self.dagger_min_frac = float(getattr(self.task_config, "dagger_min_frac", 0.0))
@@ -574,15 +576,11 @@ class PayloadCompensationTask(BaseTask):
         self._advance_curriculum_if_needed()
         if self.teacher_mode:
             self._update_teacher_residual()
-            # 按回合或固定步数衰减 DAgger 比例
-            if self.dagger_decay_reward > 0 and self.counter > 0:
-                if (
-                    self.counter % self.task_config.episode_len_steps == 0
-                    or self.counter % self.tb_log_interval == 0
-                ):
-                    self.dagger_frac = max(
-                        self.dagger_min_frac, self.dagger_frac * self.dagger_decay_rate
-                    )
+            # 按回合衰减 DAgger 比例（类似 SB3 BC alpha^updates）
+            if self.counter > 0 and self.counter % self.task_config.episode_len_steps == 0:
+                self._dagger_updates += 1
+                target_frac = self._dagger_init_frac * (self.dagger_decay_rate ** self._dagger_updates)
+                self.dagger_frac = max(self.dagger_min_frac, target_frac)
             # DAgger 风格：用教师动作与策略残差混合，早期偏向教师
             dagger_frac = max(0.0, min(1.0, self.dagger_frac))
             if dagger_frac > 0.0:

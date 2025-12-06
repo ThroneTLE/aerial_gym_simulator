@@ -54,13 +54,13 @@ params:
     gamma: 0.99  # 折扣因子（越小越短视）
     tau: 0.95  # GAE 衰减（越小 bias 高/variance 低）
     ppo: True  # 开启 PPO 裁剪模式
-    learning_rate: 2e-4  # 初始学习率（步幅大小）
+    learning_rate: 2e-5  # 初始学习率（步幅大小）
     lr_schedule: adaptive  # 基于 KL 的自适应 LR 调度
     kl_threshold: 0.01  # KL 超过阈值会降低 LR/回滚（越小越保守，clip_frac/KL 尖峰更少但收敛慢）
     save_best_after: 10  # 从第 N 个 epoch 后开始记录最佳
     score_to_win: 100000000  # 达到该分数视为“成功”停止条件
     grad_norm: 1.0  # 全局梯度裁剪范数上限（防止梯度爆炸；过小会限制学习）
-    entropy_coef: 0.000001  # 熵系数（鼓励探索，防止过早收敛；过大动作噪声重，过小易收敛到尖锐策略）
+    entropy_coef: 0.000000  # 熵系数（鼓励探索，防止过早收敛；过大动作噪声重，过小易收敛到尖锐策略）
     truncate_grads: True  # 是否截断梯度（RNN 训练时常开，避免反向过长）
     e_clip: 0.2  # PPO 裁剪范围，越小更新越保守（clip_frac 会下降，步子变小）
     clip_value: False  # 是否对 value 也做裁剪（True 可稳 value，可能引入偏差）

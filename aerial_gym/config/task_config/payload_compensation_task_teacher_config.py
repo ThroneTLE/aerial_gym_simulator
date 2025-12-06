@@ -1,6 +1,6 @@
 class task_config:
     seed = 1
-    sim_name = "base_sim"
+    sim_name = "base_sim_2ms"
     env_name = "empty_env"
     robot_name = "base_quadrotor"
     controller_name = "lee_position_control_with_compensation"
@@ -15,12 +15,12 @@ class task_config:
     privileged_observation_space_dim = 52
     action_space_dim = 4  # thrust + 3 compensation torques
     controller_action_dim = 8  # 4 Lee inputs + thrust + 3 torque compensation commands
-    dagger_frac = 1.0
-    dagger_decay_reward = 40000.0  # 均值奖励达到此值后开始衰减
-    dagger_decay_rate = 0.99999      # 每步衰减系数
+    dagger_frac = 0.9          # 初始教师动作占比
+    dagger_decay_reward = 15000.0  # 均值奖励达到此值后开始衰减
+    dagger_decay_rate = 0.9999      # 每步衰减系数
     dagger_min_frac = 0.1          # 衰减下限（保留少量教师）
 
-    episode_len_steps = 1500
+    episode_len_steps = 300
     return_state_before_reset = False
     teacher_mode = True  # 启用特权/模仿
 
@@ -88,11 +88,11 @@ class task_config:
             [-0.4, -0.4, -0.4],
         ],
         "release_start": 100,
-        "release_interval": 200,
-        "release_start_range": [200, 400],
-        "release_interval_range": [200, 400],
+        "release_interval": 300,
+        "release_start_range": [80, 120],
+        "release_interval_range": [400, 500],
         "warning_steps": 50,
-        "randomize_release":   False,  # 初始验证先固定
+        "randomize_release":   True,  # 初始验证先固定
         "log_release_events": False,
     }
 

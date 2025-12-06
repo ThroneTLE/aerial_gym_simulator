@@ -133,7 +133,7 @@ python -m aerial_gym.rl_training.rl_games.runner \
   --experiment_name teacher_residual_stage1 \
   --num_envs 1024 \
   --headless False \
-  --checkpoint runs/teacher_residual_stage1_06-06-48-09/nn/teacher_residual_stage1.pth
+  --checkpoint runs/teacher_residual_stage1_06-22-18-25/nn/teacher_residual_stage1.pth 
 
 
 ## 2025-02-21 Teacher 残差原型
