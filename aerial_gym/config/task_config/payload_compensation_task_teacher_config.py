@@ -15,12 +15,14 @@ class task_config:
     privileged_observation_space_dim = 52
     action_space_dim = 4  # thrust + 3 compensation torques
     controller_action_dim = 8  # 4 Lee inputs + thrust + 3 torque compensation commands
-    dagger_frac = 0.9          # 初始教师动作占比
+    dagger_frac = 0.8          # 初始教师动作占比
     dagger_decay_reward = 15000.0  # 均值奖励达到此值后开始衰减
-    dagger_decay_rate = 0.9999      # 每步衰减系数
+    dagger_decay_rate = 0.999      # 每步衰减系数
     dagger_min_frac = 0.1          # 衰减下限（保留少量教师）
+    imitation_err_threshold = 0.3  # 仅当误差低于该阈值才衰减
+    fix_yaw_residual_zero = True   # 教师残差的 yaw 力矩固定为 0
 
-    episode_len_steps = 300
+    episode_len_steps = 1500
     return_state_before_reset = False
     teacher_mode = True  # 启用特权/模仿
 
@@ -87,10 +89,10 @@ class task_config:
             [-0.4, 0.4, -0.4],
             [-0.4, -0.4, -0.4],
         ],
-        "release_start": 100,
+        "release_start": 50,
         "release_interval": 300,
-        "release_start_range": [80, 120],
-        "release_interval_range": [400, 500],
+        "release_start_range": [50, 100],
+        "release_interval_range": [300, 350],
         "warning_steps": 50,
         "randomize_release":   True,  # 初始验证先固定
         "log_release_events": False,

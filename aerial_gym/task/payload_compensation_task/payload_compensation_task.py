@@ -363,6 +363,8 @@ class PayloadCompensationTask(BaseTask):
         self.dagger_frac = float(getattr(self.task_config, "dagger_frac", 0.0))
         self._dagger_init_frac = self.dagger_frac
         self._dagger_updates = 0
+        self.imitation_err_threshold = float(getattr(self.task_config, "imitation_err_threshold", 1e9))
+        self.fix_yaw_residual_zero = bool(getattr(self.task_config, "fix_yaw_residual_zero", False))
         self.dagger_decay_reward = float(getattr(self.task_config, "dagger_decay_reward", 0.0))
         self.dagger_decay_rate = float(getattr(self.task_config, "dagger_decay_rate", 1.0))
         self.dagger_min_frac = float(getattr(self.task_config, "dagger_min_frac", 0.0))
@@ -578,9 +580,14 @@ class PayloadCompensationTask(BaseTask):
             self._update_teacher_residual()
             # 按回合衰减 DAgger 比例（类似 SB3 BC alpha^updates）
             if self.counter > 0 and self.counter % self.task_config.episode_len_steps == 0:
-                self._dagger_updates += 1
-                target_frac = self._dagger_init_frac * (self.dagger_decay_rate ** self._dagger_updates)
-                self.dagger_frac = max(self.dagger_min_frac, target_frac)
+                # 仅在模仿误差足够低时衰减
+                current_err = torch.norm(
+                    torch.clamp(self.actions, -1.0, 1.0) - self.teacher_residual, dim=1
+                ).mean().item()
+                if current_err <= self.imitation_err_threshold:
+                    self._dagger_updates += 1
+                    target_frac = self._dagger_init_frac * (self.dagger_decay_rate ** self._dagger_updates)
+                    self.dagger_frac = max(self.dagger_min_frac, target_frac)
             # DAgger 风格：用教师动作与策略残差混合，早期偏向教师
             dagger_frac = max(0.0, min(1.0, self.dagger_frac))
             if dagger_frac > 0.0:
@@ -663,7 +670,7 @@ class PayloadCompensationTask(BaseTask):
         # 模仿专家残差（仅 Teacher 模式生效）
         imitation_w = float(reward_params.get("imitation_weight", 0.0))
         if self.teacher_mode and imitation_w > 0.0:
-            imit_penalty = torch.sum((clamped_actions - self.teacher_residual) ** 2, dim=1)
+            imit_penalty = torch.mean((clamped_actions - self.teacher_residual) ** 2, dim=1)
             self.rewards -= imitation_w * imit_penalty
 
         # 补充 TB 记录：位置/姿态基础项（均为 batch 均值）
@@ -1144,6 +1151,8 @@ class PayloadCompensationTask(BaseTask):
         torque_limits = self.comp_torque_limits.view(1, 3).clamp(min=1e-6)
         total_tau = -tau_payload + tau_inertia
         residual[:, 1:] = torch.clamp(total_tau / torque_limits, -1.0, 1.0)
+        if self.fix_yaw_residual_zero:
+            residual[:, 3] = 0.0
         # thrust 补偿：名义控制未包含载荷质量，补齐 payload 重力
         mass_delta = self.payload_manager.current_payload_mass  # 真实-名义
         if self.comp_thrust_limit > 1e-6:
