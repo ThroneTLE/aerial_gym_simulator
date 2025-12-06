@@ -10,6 +10,8 @@ from torch.utils.tensorboard import SummaryWriter
 
 from aerial_gym.task.base_task import BaseTask
 from aerial_gym.sim.sim_builder import SimBuilder
+from aerial_gym.config.controller_config import lee_controller_with_comp_config
+from aerial_gym.config.robot_config.base_quad_config import BaseQuadCfg
 from aerial_gym.utils.logging import CustomLogger
 from aerial_gym.utils.math import (
     quat_apply_inverse,
@@ -127,6 +129,8 @@ class PayloadManager:
         self.base_mass = torch.zeros(self.num_envs, device=self.device)
         self.base_inertia = torch.zeros((self.num_envs, 3, 3), device=self.device)
         self._cache_rigid_body_props()
+        # 保留名义惯量副本（用于 tau_inertia 计算）
+        self.base_inertia_nominal = self.base_inertia.clone()
 
         self.controller_mass_tensor = self.controller.mass
         self.robot_masses = env_manager.robot_manager.robot_masses
@@ -263,8 +267,6 @@ class PayloadManager:
 
             base_mass = float(self.base_mass[env_id].item())
             total_mass = base_mass + payload_mass_sum
-            self._sync_controller_mass(env_id, total_mass)
-
             inertia_np = self.base_inertia[env_id].cpu().numpy().copy()
             weighted_offset = np.zeros(3, dtype=np.float32)
             for idx, attached_flag in enumerate(attached.tolist()):
@@ -287,11 +289,6 @@ class PayloadManager:
             self.gym.set_actor_rigid_body_properties(
                 self.env_handles[env_id], self.robot_handles[env_id], props, recomputeInertia=False
             )
-
-    def _sync_controller_mass(self, env_id: int, new_mass: float):
-        if isinstance(self.controller_mass_tensor, torch.Tensor):
-            self.controller_mass_tensor[env_id, 0] = new_mass
-        self.robot_masses[env_id] = new_mass
 
     def compute_world_torque(self) -> torch.Tensor:
         payload_mass = self.attached_mask.sum(dim=1) * self.payload_mass
@@ -362,6 +359,11 @@ class PayloadCompensationTask(BaseTask):
 
         super().__init__(task_config)
         self.device = self.task_config.device
+        self.teacher_mode = getattr(self.task_config, "teacher_mode", False)
+        self.dagger_frac = float(getattr(self.task_config, "dagger_frac", 0.0))
+        self.dagger_decay_reward = float(getattr(self.task_config, "dagger_decay_reward", 0.0))
+        self.dagger_decay_rate = float(getattr(self.task_config, "dagger_decay_rate", 1.0))
+        self.dagger_min_frac = float(getattr(self.task_config, "dagger_min_frac", 0.0))
         log_dir = os.environ.get("AERIAL_TB_LOGDIR")
         if log_dir:
             log_dir = self._make_timestamped_log_dir(log_dir)
@@ -398,6 +400,20 @@ class PayloadCompensationTask(BaseTask):
             device=self.device,
             requires_grad=False,
         )
+        # Teacher 模式：残差目标与补偿限幅
+        self.teacher_residual = torch.zeros(
+            (self.sim_env.num_envs, self.task_config.action_space_dim), device=self.device
+        )
+        self.comp_thrust_limit = getattr(
+            lee_controller_with_comp_config.control, "compensation_thrust_limit", 0.3
+        )
+        torque_limits = getattr(
+            lee_controller_with_comp_config.control, "compensation_torque_limits", [0.5, 0.5, 0.1]
+        )
+        self.comp_torque_limits = torch.as_tensor(torque_limits, device=self.device)
+        # 教师模式：特权向量（动力/混控/载荷等），raw 形式输出，由策略侧可训练编码器处理
+        self.priv_vec_dim = 52
+        self.priv_embed_dim = self.priv_vec_dim
 
         self.target_position = torch.zeros(
             (self.sim_env.num_envs, 3), device=self.device, requires_grad=False
@@ -406,6 +422,8 @@ class PayloadCompensationTask(BaseTask):
         self.prev_pos_dist = torch.zeros(self.sim_env.num_envs, device=self.device)
         # 记录上一帧线速度，用于近似计算加速度惩罚
         self.prev_linvel = torch.zeros_like(self.target_position)
+        # Teacher 模式下缓存最后一次 payload torque
+        self._last_tau_payload = torch.zeros((self.sim_env.num_envs, 3), device=self.device)
 
         self.obs_dict = self.sim_env.get_obs()
         self.terminations = self.obs_dict["crashes"]
@@ -456,6 +474,8 @@ class PayloadCompensationTask(BaseTask):
         self._initialize_vehicle_state()
 
         rand_cfg = getattr(self.task_config, "randomization_parameters", None) or {}
+        if not isinstance(rand_cfg, dict):
+            rand_cfg = {}
         self.initial_position_noise = torch.tensor(
             rand_cfg.get("initial_position_noise", [0.0, 0.0, 0.0]), device=self.device
         )
@@ -552,6 +572,22 @@ class PayloadCompensationTask(BaseTask):
 
         self.payload_manager.step()
         self._advance_curriculum_if_needed()
+        if self.teacher_mode:
+            self._update_teacher_residual()
+            # 按回合或固定步数衰减 DAgger 比例
+            if self.dagger_decay_reward > 0 and self.counter > 0:
+                if (
+                    self.counter % self.task_config.episode_len_steps == 0
+                    or self.counter % self.tb_log_interval == 0
+                ):
+                    self.dagger_frac = max(
+                        self.dagger_min_frac, self.dagger_frac * self.dagger_decay_rate
+                    )
+            # DAgger 风格：用教师动作与策略残差混合，早期偏向教师
+            dagger_frac = max(0.0, min(1.0, self.dagger_frac))
+            if dagger_frac > 0.0:
+                actions = dagger_frac * self.teacher_residual + (1.0 - dagger_frac) * actions
+                self.actions = actions
 
         self.controller_actions[:, 0:3] = self.target_position
         self.controller_actions[:, 3] = 0.0
@@ -626,6 +662,12 @@ class PayloadCompensationTask(BaseTask):
             reward_window_mask=reward_window_mask,
         )
 
+        # 模仿专家残差（仅 Teacher 模式生效）
+        imitation_w = float(reward_params.get("imitation_weight", 0.0))
+        if self.teacher_mode and imitation_w > 0.0:
+            imit_penalty = torch.sum((clamped_actions - self.teacher_residual) ** 2, dim=1)
+            self.rewards -= imitation_w * imit_penalty
+
         # 补充 TB 记录：位置/姿态基础项（均为 batch 均值）
         if hasattr(self, "_last_reward_components") and isinstance(self._last_reward_components, dict):
             self._last_reward_components.update(
@@ -674,7 +716,22 @@ class PayloadCompensationTask(BaseTask):
             self.tb_writer.add_scalar("actions/saturation_rate", sat_rate, self.counter)
             comp_sat = sat_mask[:, 1:].float().mean().item()
             self.tb_writer.add_scalar("actions/comp_saturation_rate", comp_sat, self.counter)
+            # 模仿误差监控（仅教师模式）
+            if self.teacher_mode:
+                imit_err = torch.norm(clamped_actions - self.teacher_residual, dim=1).mean().item()
+                self.tb_writer.add_scalar("imitation/err", imit_err, self.counter)
             self.tb_writer.flush()
+        # 记录/打印当前 dagger_frac，便于逐“epoch”（tb_log_interval）观察
+        if self.teacher_mode:
+            if self.tb_writer is not None:
+                self.tb_writer.add_scalar("imitation/dagger_frac", self.dagger_frac, self.counter)
+            if self.counter % self.tb_log_interval == 0:
+                print(f"[DaggerFrac] step={self.counter} frac={self.dagger_frac:.4f}")
+            if self.tb_writer is not None:
+                self.tb_writer.flush()
+        else:
+            if self.tb_writer is not None:
+                self.tb_writer.flush()
         return self.get_return_tuple()
 
     def _compute_payload_penalties(
@@ -987,6 +1044,78 @@ class PayloadCompensationTask(BaseTask):
 
         self._apply_observation_noise()
 
+        if self.teacher_mode:
+            # 特权向量：当前载荷 + 动力/混控参数（尽可能填充可用字段）
+            priv_vec = torch.zeros((self.sim_env.num_envs, self.priv_vec_dim), device=self.device)
+            # 0: payload mass
+            priv_vec[:, 0] = payload_obs["payload_mass"]
+            # 1-3: COM offset
+            priv_vec[:, 1:4] = payload_obs["com_offset"]
+            # 4-6: base inertia diag
+            base_inertia_diag = torch.diagonal(self.payload_manager.base_inertia, dim1=1, dim2=2)
+            if base_inertia_diag.shape[0] >= self.sim_env.num_envs:
+                priv_vec[:, 4:7] = base_inertia_diag[: self.sim_env.num_envs]
+            # 7-9: last payload torque
+            priv_vec[:, 7:10] = self._last_tau_payload
+            # 10: thrust_to_torque_ratio
+            priv_vec[:, 10] = getattr(
+                BaseQuadCfg.control_allocator_config.motor_model_config, "thrust_to_torque_ratio", 0.0
+            )
+            # 11-12: thrust constant min/max
+            priv_vec[:, 11] = getattr(
+                BaseQuadCfg.control_allocator_config.motor_model_config, "motor_thrust_constant_min", 0.0
+            )
+            priv_vec[:, 12] = getattr(
+                BaseQuadCfg.control_allocator_config.motor_model_config, "motor_thrust_constant_max", 0.0
+            )
+            # 13: max_thrust
+            priv_vec[:, 13] = getattr(
+                BaseQuadCfg.control_allocator_config.motor_model_config, "max_thrust", 0.0
+            )
+            # 14: max_thrust_rate
+            priv_vec[:, 14] = getattr(
+                BaseQuadCfg.control_allocator_config.motor_model_config, "max_thrust_rate", 0.0
+            )
+            # 15-18: time constants inc/dec min/max
+            priv_vec[:, 15] = getattr(
+                BaseQuadCfg.control_allocator_config.motor_model_config, "motor_time_constant_increasing_min", 0.0
+            )
+            priv_vec[:, 16] = getattr(
+                BaseQuadCfg.control_allocator_config.motor_model_config, "motor_time_constant_increasing_max", 0.0
+            )
+            priv_vec[:, 17] = getattr(
+                BaseQuadCfg.control_allocator_config.motor_model_config, "motor_time_constant_decreasing_min", 0.0
+            )
+            priv_vec[:, 18] = getattr(
+                BaseQuadCfg.control_allocator_config.motor_model_config, "motor_time_constant_decreasing_max", 0.0
+            )
+            # 19: min_thrust
+            priv_vec[:, 19] = getattr(
+                BaseQuadCfg.control_allocator_config.motor_model_config, "min_thrust", 0.0
+            )
+            # 20-43: allocation matrix (flatten 24)
+            alloc = np.array(BaseQuadCfg.control_allocator_config.allocation_matrix, dtype=np.float32).flatten()
+            alloc_t = torch.as_tensor(alloc, device=self.device)
+            end_alloc = 20 + alloc_t.numel()
+            if end_alloc <= self.priv_vec_dim:
+                priv_vec[:, 20:end_alloc] = alloc_t
+            # 44-49: disturbance max force/torque
+            disturb = BaseQuadCfg.disturbance.max_force_and_torque_disturbance
+            disturb_t = torch.as_tensor(disturb, device=self.device, dtype=torch.float32)
+            start_disturb = 44
+            end_disturb = start_disturb + disturb_t.numel()
+            if end_disturb <= self.priv_vec_dim:
+                priv_vec[:, start_disturb:end_disturb] = disturb_t
+            # 50: prob_apply_disturbance
+            if 50 < self.priv_vec_dim:
+                priv_vec[:, 50] = getattr(BaseQuadCfg.disturbance, "prob_apply_disturbance", 0.0)
+            # 其余预留字段保持 0
+            # raw 特权直接输出，由策略侧编码
+            priv_embed = priv_vec
+            self.task_obs["priviliged_obs"] = priv_vec
+            if self.observation_space_dim >= self.task_obs["observations"].shape[1] + self.priv_embed_dim:
+                self.task_obs["observations"][:, -self.priv_embed_dim :] = priv_embed
+
         self.task_obs["rewards"] = self.rewards
         self.task_obs["terminations"] = self.terminations
         self.task_obs["truncations"] = self.truncations
@@ -997,6 +1126,44 @@ class PayloadCompensationTask(BaseTask):
         if isinstance(env_ids, torch.Tensor):
             return env_ids.to(self.device).long()
         return torch.as_tensor(env_ids, device=self.device, dtype=torch.long)
+
+    def _update_teacher_residual(self):
+        """Compute teacher residual (normalized) using privileged mass/COM."""
+        orientations = self.obs_dict["robot_orientation"]
+        tau_payload = self.payload_manager.compute_body_torque(orientations)
+        self._last_tau_payload = tau_payload.detach()
+        residual = torch.zeros_like(self.teacher_residual)
+        # 惯量差补偿：使用 gyroscopic 项近似 tau_true - tau_base
+        angvel = self.obs_dict["robot_body_angvel"]
+        I_true = self._compute_true_inertia()
+        I_nom = self.payload_manager.base_inertia_nominal
+        Iw_true = torch.bmm(I_true, angvel.unsqueeze(-1)).squeeze(-1)
+        Iw_nom = torch.bmm(I_nom, angvel.unsqueeze(-1)).squeeze(-1)
+        gyro_true = torch.cross(angvel, Iw_true, dim=1)
+        gyro_nom = torch.cross(angvel, Iw_nom, dim=1)
+        tau_inertia = gyro_true - gyro_nom
+
+        torque_limits = self.comp_torque_limits.view(1, 3).clamp(min=1e-6)
+        total_tau = -tau_payload + tau_inertia
+        residual[:, 1:] = torch.clamp(total_tau / torque_limits, -1.0, 1.0)
+        # thrust 补偿：名义控制未包含载荷质量，补齐 payload 重力
+        mass_delta = self.payload_manager.current_payload_mass  # 真实-名义
+        if self.comp_thrust_limit > 1e-6:
+            thrust_extra = torch.abs(self.payload_manager.gravity[2]) * mass_delta
+            residual[:, 0] = torch.clamp(thrust_extra / self.comp_thrust_limit, -1.0, 1.0)
+        self.teacher_residual = residual
+
+    def _compute_true_inertia(self):
+        """Recompute true inertia tensor from base + attached payloads."""
+        inertia = self.payload_manager.base_inertia_nominal.clone()
+        attached = self.payload_manager.attached_mask
+        for idx in range(self.payload_manager.num_payloads):
+            mask = attached[:, idx].float().unsqueeze(-1)
+            offset = self.payload_manager.offsets[idx].unsqueeze(0)  # (1,3)
+            point_I = point_mass_inertia(self.payload_manager.payload_mass, offset.squeeze(0).cpu().numpy())
+            point_I = torch.as_tensor(point_I, device=self.device, dtype=torch.float32).unsqueeze(0)
+            inertia += point_I * mask.view(-1, 1, 1)
+        return inertia
 
     def _randomize_target_positions(self, env_ids=None):
         range_tensor = self.current_target_range_tensor
