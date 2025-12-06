@@ -1,0 +1,33 @@
+simulation:
+  seed: 1
+  sim_dt: 0.002
+  max_t: 5.0
+  num_envs: 300
+  num_threads: 10
+  com_latency: 5.0e-3 # simulated communication latency (s)
+
+observation_space:
+  history_len: 100
+  state_obs_size: 8
+  act_size: 4
+  env_obs_size: 34
+  latent_size: 8
+
+rewards:
+  yaw_vel_coeff: -0.2 # for yaw rate tracking
+  pitch_vel_coeff: -0.2 # for pitch rate tracking
+  roll_vel_coeff: -0.2 # for roll rate tracking
+  lin_accel_coeff: -0.01 # for linear acceleration
+  survive_coeff: 10 # reward coeff for survive
+  oscillate_coeff : -0.06 # reward coeff for oscillation
+  crash_coeff: -10 # reward coeff for crash
+  names:
+    [
+      "roll_vel_penalty",
+      "pitch_vel_penalty",
+      "yaw_vel_penalty",
+      "lin_accel_penalty",
+      "survive_reward",
+      "oscillate_reward",
+      "total",
+    ]

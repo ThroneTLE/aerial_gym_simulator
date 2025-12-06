@@ -100,3 +100,51 @@ clip_frac/1：roll 方向补偿力矩 τx。
 clip_frac/2：pitch 方向补偿力矩 τy。
 clip_frac/3：yaw 方向补偿力矩 τz。
 clip_frac/4、clip_frac/5：策略网络中连续动作分布的 log-std 参数（RL-Games 把它们也当作可训练参数来更新，所以同样记录裁剪比例）。
+
+
+python -m aerial_gym.examples.teacher_expert_demo --steps 2000 --device cuda:0 --headless False
+
+
+python -m aerial_gym.rl_training.rl_games.runner \
+  --train \
+  --file aerial_gym/rl_training/rl_games/ppo_aerial_quad.yaml \
+  --task payload_compensation_task \
+  --experiment_name teacher_residual_stage1 \
+  --num_envs 1024 \
+  --headless True
+
+# 训练或示例前设置混合比例（0~1），越高越偏向专家
+export AERIAL_DAGGER_FRAC=0.7
+
+python -m aerial_gym.rl_training.rl_games.runner \
+  --train \
+  --file aerial_gym/rl_training/rl_games/ppo_aerial_quad.yaml \
+  --task payload_compensation_task_teacher \
+  --experiment_name teacher_residual_stage1 \
+  --num_envs 8192 \
+  --headless True \
+  --checkpoint runs/teacher_residual_stage1_06-06-48-09/nn/teacher_residual_stage1.pth
+
+
+python -m aerial_gym.rl_training.rl_games.runner \
+  --play \
+  --file aerial_gym/rl_training/rl_games/ppo_aerial_quad.yaml \
+  --task payload_compensation_task_teacher \
+  --experiment_name teacher_residual_stage1 \
+  --num_envs 1024 \
+  --headless False \
+  --checkpoint runs/teacher_residual_stage1_06-06-48-09/nn/teacher_residual_stage1.pth
+
+
+## 2025-02-21 Teacher 残差原型
+- `aerial_gym/config/task_config/payload_compensation_task_config.py` 增加 `imitation_weight`（默认为 0）供模仿项权重使用。
+- 新增 `aerial_gym/config/task_config/payload_compensation_task_teacher_config.py`：开启 `teacher_mode`，观测维度为 29+52（raw 特权拼接到 obs），特权 obs_dim=52，由策略侧可训练编码器处理，增加 `dagger_frac=0.7` 作为教师混合比例。
+- `aerial_gym/task/payload_compensation_task/payload_compensation_task.py`：
+  - 引入 `teacher_mode` 开关与补偿限幅缓存（从 `lee_controller_with_comp_config` 读取）。
+  - 特权向量扩展为 52 维（质量/COM/基惯量对角/最近一次 payload torque/推力常数/时间常数/分配矩阵/扰动上限等），raw 输出到 `priviliged_obs` 并拼接到 observations，编码由策略侧完成。
+  - 计算教师残差目标：补偿 thrust=payload 质量×|g|，torque=payload 力矩（body），按限幅归一化到 [-1,1]。
+  - 奖励中加入模仿项：`imitation_weight * ||action - teacher_residual||^2`（负向），仅在 teacher_mode 且权重>0 时生效。
+- `aerial_gym/rl_training/rl_games/ppo_aerial_quad.yaml`：
+  - 为 log_std 增加上下限配置：`fixed_sigma: False`，`min_logstd/max_logstd`，限制噪声放大。
+  - 保留初始 logstd=-2.0 并添加注释，说明噪声 clamp 目的。
+- 新增 `aerial_gym/examples/teacher_expert_demo.py`：使用教师残差直接作为动作跑若干步，打印位移漂移，用于快速 sanity check。

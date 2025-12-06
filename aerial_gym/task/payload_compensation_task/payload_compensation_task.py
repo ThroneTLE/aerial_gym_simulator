@@ -726,7 +726,7 @@ class PayloadCompensationTask(BaseTask):
             if self.tb_writer is not None:
                 self.tb_writer.add_scalar("imitation/dagger_frac", self.dagger_frac, self.counter)
             if self.counter % self.tb_log_interval == 0:
-                print(f"[DaggerFrac] step={self.counter} frac={self.dagger_frac:.4f}")
+                print(f"[DaggerFrac] step={self.counter} frac={self.dagger_frac:.8f}")
             if self.tb_writer is not None:
                 self.tb_writer.flush()
         else:

@@ -9,6 +9,7 @@ properly when loading.
 """
 
 from rl_games.common import a2c_common
+from aerial_gym.rl_training.rl_games.nn import privileged_actor_critic  # noqa: F401
 
 
 def _patch_a2c_base():

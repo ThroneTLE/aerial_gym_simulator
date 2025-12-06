@@ -13,15 +13,15 @@ from aerial_gym.utils.math import get_euler_xyz_tensor
 
 import torch
 """
-conda run --no-capture-output -n aerialgym python aerial_gym/examples/new_my_position_control.py   --num_envs 1 --steps 2000 --headless False   --checkpoint runs/payload_comp_NEW_1_1_28-00-45-48/nn/payload_comp_NEW_1_1.pth 
+conda run --no-capture-output -n aerialgym python aerial_gym/examples/new_my_position_control.py   --num_envs 1 --steps 2000 --headless False   --checkpoint runs/teacher_residual_stage1_06-06-48-09/nn/teacher_residual_stage1.pth
 
 """
 DEFAULT_CKPT = (
-    "/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/runs/payload_comp_NEW_4_1_28-21-39-46/nn/payload_comp_NEW_4_1.pth"
+    "runs/teacher_residual_stage1_06-06-48-09/nn/teacher_residual_stage1.pth"
 )
 
 # Demo 默认使用训练 YAML 指定的任务；仅在缺少配置时退回补偿任务。
-DEFAULT_ENV_NAME = "payload_compensation_task"
+DEFAULT_ENV_NAME = "payload_compensation_task_teacher"
 
 plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "Arial Unicode MS", "Noto Sans CJK SC"]
 plt.rcParams["axes.unicode_minus"] = False
@@ -298,8 +298,8 @@ def main():
     cfg = load_training_config(args.config) or {}
     checkpoint_data, checkpoint_action_dim = load_checkpoint(args.checkpoint)
 
-    cfg_env_name = cfg.get("params", {}).get("config", {}).get("env_name")
-    env_name = _resolve_env_name(cfg_env_name)
+    # 演示强制使用教师任务，以匹配教师 checkpoint 的 obs 维度
+    env_name = DEFAULT_ENV_NAME
 
     original_argv = sys.argv
     sys.argv = [sys.argv[0]]
