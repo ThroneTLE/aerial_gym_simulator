@@ -57,7 +57,7 @@ params:
     learning_rate: 2e-5  # 初始学习率（步幅大小）
     lr_schedule: adaptive  # 基于 KL 的自适应 LR 调度
     kl_threshold: 0.01  # KL 超过阈值会降低 LR/回滚（越小越保守，clip_frac/KL 尖峰更少但收敛慢）
-    save_best_after: 10  # 从第 N 个 epoch 后开始记录最佳
+    save_best_after: 1  # 从第 N 个 epoch 后开始记录最佳
     score_to_win: 100000000  # 达到该分数视为“成功”停止条件
     grad_norm: 1.0  # 全局梯度裁剪范数上限（防止梯度爆炸；过小会限制学习）
     entropy_coef: 0.000000  # 熵系数（鼓励探索，防止过早收敛；过大动作噪声重，过小易收敛到尖锐策略）
@@ -69,7 +69,7 @@ params:
     minibatch_size:  65536 #131072 #65536  32768  # 单次优化用的样本数（越大梯度方差低但显存/时间更高）
     mini_epochs: 4  # 每批数据重复训练次数（过高易过拟合、KL 抬升；过低步子小）
     critic_coef: 2  # 价值损失权重（相对策略损失；大则稳定优势但可能拖慢策略更新）
-    normalize_input: True  # 对观察做 running_mean_std 归一化（减少量纲差异，提升稳定性）
+    normalize_input: False  # 关闭 running_mean_std，使用固定归一化（见 AERIAL_FIXED_OBS_NORM）
     bounds_loss_coef: 0.0001  # 动作越界惩罚系数（动作超出 [-1,1] 时的惩罚强度）
     max_epochs: 160000  # 最大训练 epoch 数（训练上限）
     normalize_value: True  # 对 value 做 running_mean_std 归一化（减小价值尺度漂移）

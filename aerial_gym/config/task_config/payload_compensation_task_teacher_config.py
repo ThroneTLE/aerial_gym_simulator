@@ -10,16 +10,17 @@ class task_config:
     headless = True
     device = "cuda:0"
 
-    # 额外 52 维特权向量（动力/混控/载荷等），直接拼接到 obs，由策略侧可训练编码器处理
-    observation_space_dim = 81  # 29 基础 + 52 特权
+    # 特权 raw 仅放入 priviliged_obs，由策略侧 encoder 压到 8 维；obs 只保留基础 29 维
+    observation_space_dim = 29
     privileged_observation_space_dim = 52
     action_space_dim = 4  # thrust + 3 compensation torques
     controller_action_dim = 8  # 4 Lee inputs + thrust + 3 torque compensation commands
-    dagger_frac = 0.8          # 初始教师动作占比
+    dagger_frac = 0.7          # 初始教师动作占比
     dagger_decay_reward = 15000.0  # 均值奖励达到此值后开始衰减
-    dagger_decay_rate = 0.999      # 每步衰减系数
+    dagger_decay_rate = 0.99      # 每步衰减系数
     dagger_min_frac = 0.1          # 衰减下限（保留少量教师）
     imitation_err_threshold = 0.3  # 仅当误差低于该阈值才衰减
+    dagger_use_postmix_err = True  # 使用混合后的 imitation err 作为衰减判定，和 TB 曲线一致
     fix_yaw_residual_zero = True   # 教师残差的 yaw 力矩固定为 0
 
     episode_len_steps = 1500

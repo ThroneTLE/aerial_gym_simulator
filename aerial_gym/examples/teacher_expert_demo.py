@@ -14,10 +14,13 @@ def run_demo(steps=2000, headless=False, device="cuda:0"):
     env = PayloadCompensationTask(cfg)
     obs, *_ = env.reset()
     positions = []
+    max_residual = torch.zeros(env.task_config.action_space_dim, device=device)
     for _ in range(steps):
         # 在 Teacher 模式下，env 内部会更新 teacher_residual；直接用它作为动作输入
         if hasattr(env, "teacher_residual"):
             actions = env.teacher_residual.clone()
+            # 跟踪残差各通道的绝对最大值（归一化到 [-1,1]）
+            max_residual = torch.maximum(max_residual, torch.max(torch.abs(actions), dim=0).values)
         else:
             actions = torch.zeros((env.task_config.num_envs, env.task_config.action_space_dim), device=device)
         obs, rewards, terms, truncs, infos = env.step(actions)
@@ -26,6 +29,21 @@ def run_demo(steps=2000, headless=False, device="cuda:0"):
     positions = np.array(positions)
     drift = np.linalg.norm(positions - positions[0], axis=1)
     print(f"Max drift over {steps} steps (env0): {drift.max():.4f} m")
+    # 将归一化残差还原到物理量级（力/力矩），便于了解补偿需求峰值
+    comp_thrust_limit = float(env.comp_thrust_limit)
+    comp_torque_limits = env.comp_torque_limits.detach().cpu().numpy()
+    max_residual_np = max_residual.detach().cpu().numpy()
+    max_thrust_comp = max_residual_np[0] * comp_thrust_limit
+    max_torque_comp = max_residual_np[1:] * comp_torque_limits
+    print(
+        "Max teacher residual (|.|, normalized): "
+        f"thrust={max_residual_np[0]:.3f}, torque={max_residual_np[1:]}",
+    )
+    print(
+        "Approx physical compensation peak: "
+        f"thrust={max_thrust_comp:.4f} (same unit as comp_thrust_limit), "
+        f"torque={max_torque_comp} (same unit as comp_torque_limits)",
+    )
 
 
 if __name__ == "__main__":

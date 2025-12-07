@@ -365,6 +365,9 @@ class PayloadCompensationTask(BaseTask):
         self._dagger_updates = 0
         self.imitation_err_threshold = float(getattr(self.task_config, "imitation_err_threshold", 1e9))
         self.fix_yaw_residual_zero = bool(getattr(self.task_config, "fix_yaw_residual_zero", False))
+        self.dagger_use_postmix_err = bool(getattr(self.task_config, "dagger_use_postmix_err", False))
+        self._last_policy_imitation_err = 0.0
+        self._last_decay_imitation_err = 0.0
         self.dagger_decay_reward = float(getattr(self.task_config, "dagger_decay_reward", 0.0))
         self.dagger_decay_rate = float(getattr(self.task_config, "dagger_decay_rate", 1.0))
         self.dagger_min_frac = float(getattr(self.task_config, "dagger_min_frac", 0.0))
@@ -570,6 +573,14 @@ class PayloadCompensationTask(BaseTask):
         return None
 
     def step(self, actions):
+        # 保证外部传入的动作在正确设备/类型上（避免 CPU→GPU 混合引发 device mismatch）
+        if not torch.is_tensor(actions):
+            actions = torch.as_tensor(actions, device=self.device, dtype=torch.float32)
+        else:
+            if actions.device != self.device:
+                actions = actions.to(self.device)
+            if actions.dtype != torch.float32:
+                actions = actions.float()
         self.counter += 1
         self.prev_actions[:] = self.actions
         self.actions = actions
@@ -578,20 +589,32 @@ class PayloadCompensationTask(BaseTask):
         self._advance_curriculum_if_needed()
         if self.teacher_mode:
             self._update_teacher_residual()
+            clamped_policy_actions = torch.clamp(self.actions, -1.0, 1.0)
+            policy_imitation_err = torch.norm(
+                clamped_policy_actions - self.teacher_residual, dim=1
+            ).mean().item()
+            self._last_policy_imitation_err = policy_imitation_err
+            decay_err = policy_imitation_err
+            if self.dagger_use_postmix_err:
+                mixed_preview = self.dagger_frac * self.teacher_residual + (1.0 - self.dagger_frac) * clamped_policy_actions
+                decay_err = torch.norm(mixed_preview - self.teacher_residual, dim=1).mean().item()
+            self._last_decay_imitation_err = decay_err
             # 按回合衰减 DAgger 比例（类似 SB3 BC alpha^updates）
             if self.counter > 0 and self.counter % self.task_config.episode_len_steps == 0:
-                # 仅在模仿误差足够低时衰减
-                current_err = torch.norm(
-                    torch.clamp(self.actions, -1.0, 1.0) - self.teacher_residual, dim=1
-                ).mean().item()
-                if current_err <= self.imitation_err_threshold:
+                # 仅在模仿误差足够低时衰减（可选使用混合后的误差）
+                if decay_err <= self.imitation_err_threshold:
+                    prev_frac = self.dagger_frac
                     self._dagger_updates += 1
                     target_frac = self._dagger_init_frac * (self.dagger_decay_rate ** self._dagger_updates)
                     self.dagger_frac = max(self.dagger_min_frac, target_frac)
+                    print(
+                        f"[DaggerDecay] step={self.counter} err={decay_err:.4f} "
+                        f"raw={policy_imitation_err:.4f} frac={prev_frac:.3f}->{self.dagger_frac:.3f}"
+                    )
             # DAgger 风格：用教师动作与策略残差混合，早期偏向教师
             dagger_frac = max(0.0, min(1.0, self.dagger_frac))
             if dagger_frac > 0.0:
-                actions = dagger_frac * self.teacher_residual + (1.0 - dagger_frac) * actions
+                actions = dagger_frac * self.teacher_residual + (1.0 - dagger_frac) * clamped_policy_actions
                 self.actions = actions
 
         self.controller_actions[:, 0:3] = self.target_position
@@ -725,6 +748,8 @@ class PayloadCompensationTask(BaseTask):
             if self.teacher_mode:
                 imit_err = torch.norm(clamped_actions - self.teacher_residual, dim=1).mean().item()
                 self.tb_writer.add_scalar("imitation/err", imit_err, self.counter)
+                self.tb_writer.add_scalar("imitation/policy_err_raw", self._last_policy_imitation_err, self.counter)
+                self.tb_writer.add_scalar("imitation/err_for_decay", self._last_decay_imitation_err, self.counter)
             self.tb_writer.flush()
         # 记录/打印当前 dagger_frac，便于逐“epoch”（tb_log_interval）观察
         if self.teacher_mode:
@@ -1116,10 +1141,7 @@ class PayloadCompensationTask(BaseTask):
                 priv_vec[:, 50] = getattr(BaseQuadCfg.disturbance, "prob_apply_disturbance", 0.0)
             # 其余预留字段保持 0
             # raw 特权直接输出，由策略侧编码
-            priv_embed = priv_vec
             self.task_obs["priviliged_obs"] = priv_vec
-            if self.observation_space_dim >= self.task_obs["observations"].shape[1] + self.priv_embed_dim:
-                self.task_obs["observations"][:, -self.priv_embed_dim :] = priv_embed
 
         self.task_obs["rewards"] = self.rewards
         self.task_obs["terminations"] = self.terminations

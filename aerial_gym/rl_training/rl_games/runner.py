@@ -29,7 +29,10 @@ class ExtractObsWrapper(gym.Wrapper):
 
     def reset(self, **kwargs):
         observations, *_ = super().reset(**kwargs)
-        return observations["observations"]
+        return {
+            "obs": observations["observations"],
+            "privileged_obs": observations.get("priviliged_obs", None),
+        }
 
     def step(self, action):
         observations, rewards, terminated, truncated, infos = super().step(action)
@@ -41,7 +44,10 @@ class ExtractObsWrapper(gym.Wrapper):
         )
 
         return (
-            observations["observations"],
+            {
+                "obs": observations["observations"],
+                "privileged_obs": observations.get("priviliged_obs", None),
+            },
             rewards,
             dones,
             infos,
