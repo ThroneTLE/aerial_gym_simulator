@@ -725,6 +725,14 @@ class PayloadCompensationTask(BaseTask):
             and self._last_reward_components
             and self.counter % self.tb_log_interval == 0
         ):
+            # 扰动掩码（预警或刚释放），用于分段统计
+            disturb_mask = (self.payload_manager.release_warning_flag | self.payload_manager.just_released_flag).float()
+            disturb_count = disturb_mask.mean().item()
+            safe_mask = 1.0 - disturb_mask
+            def _masked_mean(x, mask):
+                denom = mask.sum()
+                return (x * mask).sum() / (denom + 1e-6)
+
             # 额外诊断：观测/动作范数，便于定位模仿误差飙升原因
             obs_base_norm = torch.norm(self.task_obs["observations"], dim=1).mean().item()
             self.tb_writer.add_scalar("debug/obs_base_norm", obs_base_norm, self.counter)
@@ -737,6 +745,24 @@ class PayloadCompensationTask(BaseTask):
             if self.teacher_mode and hasattr(self, "teacher_residual"):
                 teacher_norm = torch.norm(self.teacher_residual, dim=1).mean().item()
                 self.tb_writer.add_scalar("debug/teacher_action_norm", teacher_norm, self.counter)
+            # 分段诊断：扰动 vs 平稳
+            if disturb_count > 0.0:
+                self.tb_writer.add_scalar("disturbance/rate", disturb_count, self.counter)
+                # 奖励分段
+                r = self.rewards.detach()
+                self.tb_writer.add_scalar("reward/disturb_mean", _masked_mean(r, disturb_mask).item(), self.counter)
+                self.tb_writer.add_scalar("reward/normal_mean", _masked_mean(r, safe_mask).item(), self.counter)
+                # 模仿误差分段
+                imit_err = torch.norm(clamped_actions - self.teacher_residual, dim=1) if self.teacher_mode else None
+                if imit_err is not None:
+                    self.tb_writer.add_scalar("imitation/err_disturb", _masked_mean(imit_err, disturb_mask).item(), self.counter)
+                    self.tb_writer.add_scalar("imitation/err_normal", _masked_mean(imit_err, safe_mask).item(), self.counter)
+                # 动作/观测范数分段
+                self.tb_writer.add_scalar("debug/policy_action_norm_disturb", _masked_mean(torch.norm(clamped_actions, dim=1), disturb_mask).item(), self.counter)
+                self.tb_writer.add_scalar("debug/policy_action_norm_normal", _masked_mean(torch.norm(clamped_actions, dim=1), safe_mask).item(), self.counter)
+                self.tb_writer.add_scalar("debug/obs_base_norm_disturb", _masked_mean(torch.norm(self.task_obs["observations"], dim=1), disturb_mask).item(), self.counter)
+                if self.teacher_mode and "priviliged_obs" in self.task_obs:
+                    self.tb_writer.add_scalar("debug/priv_norm_disturb", _masked_mean(torch.norm(self.task_obs["priviliged_obs"], dim=1), disturb_mask).item(), self.counter)
 
             total_mean = float(self.rewards.mean().item()) if torch.is_tensor(self.rewards) else 0.0
             denom = total_mean if abs(total_mean) > 1e-6 else 1e-6
@@ -749,6 +775,9 @@ class PayloadCompensationTask(BaseTask):
             self.infos = {
                 "last_release_index": self.payload_manager.last_release_index.clone().detach().cpu(),
                 "just_released": self.payload_manager.just_released_flag.clone().detach().cpu(),
+                "is_disturbance": (
+                    self.payload_manager.release_warning_flag | self.payload_manager.just_released_flag
+                ).clone().detach().cpu(),
             }
 
             # 动作饱和率监控（补偿通道接近 -1/1 的占比）

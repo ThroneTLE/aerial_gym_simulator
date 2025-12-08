@@ -17,6 +17,7 @@ from rl_games.common import env_configurations, vecenv
 
 import torch
 import distutils
+from aerial_gym.rl_training.rl_games.custom_losses import weighted_imitation_loss
 
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 # import warnings

@@ -54,7 +54,7 @@ params:
     gamma: 0.99  # 折扣因子（越小越短视）
     tau: 0.95  # GAE 衰减（越小 bias 高/variance 低）
     ppo: True  # 开启 PPO 裁剪模式
-    learning_rate: 2e-6  # 初始学习率（步幅大小）
+    learning_rate: 2e-4  # 初始学习率（步幅大小）
     lr_schedule: adaptive  # 基于 KL 的自适应 LR 调度
     kl_threshold: 0.01  # KL 超过阈值会降低 LR/回滚（越小越保守，clip_frac/KL 尖峰更少但收敛慢）
     save_best_after: 1  # 从第 N 个 epoch 后开始记录最佳
@@ -68,6 +68,8 @@ params:
     horizon_length: 128  # 每个 actor 收集的 rollout 长度
     minibatch_size:  65536 #131072 #65536  32768  # 单次优化用的样本数（越大梯度方差低但显存/时间更高）
     mini_epochs: 10  # 每批数据重复训练次数（过高易过拟合、KL 抬升；过低步子小）
+    # 扰动样本优势加权（权重=1+coef*mask，mask 来自 infos['is_disturbance']）
+    disturbance_adv_weight: 5.0
     critic_coef: 2  # 价值损失权重（相对策略损失；大则稳定优势但可能拖慢策略更新）
     normalize_input: True  # base obs 用 running_mean_std；privileged_obs 用固定归一化（见 AERIAL_FIXED_OBS_NORM）
     bounds_loss_coef: 0.0001  # 动作越界惩罚系数（动作超出 [-1,1] 时的惩罚强度）
