@@ -6,8 +6,8 @@
 ## 输入通道
 
 - `obs`：基础 29 维（不再包含特权 raw）。
-- `privileged_obs`：特权 raw 52 维（单独传给 encoder）。
-- 网络内部：`base_dim=29`，`priv_dim=52`，encoder 输出 `priv_embed_dim=8`，与 base 拼成 37 维送干路。
+- `privileged_obs`：特权 raw 41 维（单独传给 encoder）。
+- 网络内部：`base_dim=29`，`priv_dim=41`，encoder 输出 `priv_embed_dim=8`，与 base 拼成 37 维送干路。
 
 ```
 env -> {obs:29, privileged_obs:52}

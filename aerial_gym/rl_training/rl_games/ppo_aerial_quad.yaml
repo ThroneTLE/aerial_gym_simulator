@@ -69,7 +69,7 @@ params:
     minibatch_size:  65536 #131072 #65536  32768  # 单次优化用的样本数（越大梯度方差低但显存/时间更高）
     mini_epochs: 4  # 每批数据重复训练次数（过高易过拟合、KL 抬升；过低步子小）
     critic_coef: 2  # 价值损失权重（相对策略损失；大则稳定优势但可能拖慢策略更新）
-    normalize_input: False  # 关闭 running_mean_std，使用固定归一化（见 AERIAL_FIXED_OBS_NORM）
+    normalize_input: True  # base obs 用 running_mean_std；privileged_obs 用固定归一化（见 AERIAL_FIXED_OBS_NORM）
     bounds_loss_coef: 0.0001  # 动作越界惩罚系数（动作超出 [-1,1] 时的惩罚强度）
     max_epochs: 160000  # 最大训练 epoch 数（训练上限）
     normalize_value: True  # 对 value 做 running_mean_std 归一化（减小价值尺度漂移）
@@ -81,3 +81,6 @@ params:
       render: False  # 测试/推理是否渲染
       deterministic: True  # 测试时是否去掉探索噪声（True=使用均值动作）
       games_num: 100000  # 评估局数上限（rl-games 需要的占位）
+
+  # dt 从 0.01 -> 0.002，按 5x 放大 rollout 步数以保持物理时间长度
+  horizon_length: 640

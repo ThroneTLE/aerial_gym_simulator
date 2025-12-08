@@ -418,8 +418,8 @@ class PayloadCompensationTask(BaseTask):
             lee_controller_with_comp_config.control, "compensation_torque_limits", [0.5, 0.5, 0.1]
         )
         self.comp_torque_limits = torch.as_tensor(torque_limits, device=self.device)
-        # 教师模式：特权向量（动力/混控/载荷等），raw 形式输出，由策略侧可训练编码器处理
-        self.priv_vec_dim = 52
+        # 教师模式：特权向量（载荷/惯量/扰动/分配矩阵等），raw 形式输出，由策略侧可训练编码器处理
+        self.priv_vec_dim = 41
         self.priv_embed_dim = self.priv_vec_dim
 
         self.target_position = torch.zeros(
@@ -1088,70 +1088,40 @@ class PayloadCompensationTask(BaseTask):
         self._apply_observation_noise()
 
         if self.teacher_mode:
-            # 特权向量：当前载荷 + 动力/混控参数（尽可能填充可用字段）
+            # 特权向量：当前载荷 + 惯量/扰动/分配矩阵（去掉电机模型超大值，保持慢变量）
             priv_vec = torch.zeros((self.sim_env.num_envs, self.priv_vec_dim), device=self.device)
+            idx = 0
             # 0: payload mass
-            priv_vec[:, 0] = payload_obs["payload_mass"]
+            priv_vec[:, idx] = payload_obs["payload_mass"]
+            idx += 1
             # 1-3: COM offset
-            priv_vec[:, 1:4] = payload_obs["com_offset"]
+            priv_vec[:, idx : idx + 3] = payload_obs["com_offset"]
+            idx += 3
             # 4-6: base inertia diag
             base_inertia_diag = torch.diagonal(self.payload_manager.base_inertia, dim1=1, dim2=2)
             if base_inertia_diag.shape[0] >= self.sim_env.num_envs:
-                priv_vec[:, 4:7] = base_inertia_diag[: self.sim_env.num_envs]
+                priv_vec[:, idx : idx + 3] = base_inertia_diag[: self.sim_env.num_envs]
+            idx += 3
             # 7-9: last payload torque
-            priv_vec[:, 7:10] = self._last_tau_payload
-            # 10: thrust_to_torque_ratio
-            priv_vec[:, 10] = getattr(
-                BaseQuadCfg.control_allocator_config.motor_model_config, "thrust_to_torque_ratio", 0.0
-            )
-            # 11-12: thrust constant min/max
-            priv_vec[:, 11] = getattr(
-                BaseQuadCfg.control_allocator_config.motor_model_config, "motor_thrust_constant_min", 0.0
-            )
-            priv_vec[:, 12] = getattr(
-                BaseQuadCfg.control_allocator_config.motor_model_config, "motor_thrust_constant_max", 0.0
-            )
-            # 13: max_thrust
-            priv_vec[:, 13] = getattr(
-                BaseQuadCfg.control_allocator_config.motor_model_config, "max_thrust", 0.0
-            )
-            # 14: max_thrust_rate
-            priv_vec[:, 14] = getattr(
-                BaseQuadCfg.control_allocator_config.motor_model_config, "max_thrust_rate", 0.0
-            )
-            # 15-18: time constants inc/dec min/max
-            priv_vec[:, 15] = getattr(
-                BaseQuadCfg.control_allocator_config.motor_model_config, "motor_time_constant_increasing_min", 0.0
-            )
-            priv_vec[:, 16] = getattr(
-                BaseQuadCfg.control_allocator_config.motor_model_config, "motor_time_constant_increasing_max", 0.0
-            )
-            priv_vec[:, 17] = getattr(
-                BaseQuadCfg.control_allocator_config.motor_model_config, "motor_time_constant_decreasing_min", 0.0
-            )
-            priv_vec[:, 18] = getattr(
-                BaseQuadCfg.control_allocator_config.motor_model_config, "motor_time_constant_decreasing_max", 0.0
-            )
-            # 19: min_thrust
-            priv_vec[:, 19] = getattr(
-                BaseQuadCfg.control_allocator_config.motor_model_config, "min_thrust", 0.0
-            )
-            # 20-43: allocation matrix (flatten 24)
+            priv_vec[:, idx : idx + 3] = self._last_tau_payload
+            idx += 3
+            # 10-33: allocation matrix (flatten 24)
             alloc = np.array(BaseQuadCfg.control_allocator_config.allocation_matrix, dtype=np.float32).flatten()
             alloc_t = torch.as_tensor(alloc, device=self.device)
-            end_alloc = 20 + alloc_t.numel()
+            end_alloc = idx + alloc_t.numel()
             if end_alloc <= self.priv_vec_dim:
-                priv_vec[:, 20:end_alloc] = alloc_t
-            # 44-49: disturbance max force/torque
+                priv_vec[:, idx:end_alloc] = alloc_t
+            idx = end_alloc
+            # 34-39: disturbance max force/torque (6)
             disturb = BaseQuadCfg.disturbance.max_force_and_torque_disturbance
             disturb_t = torch.as_tensor(disturb, device=self.device, dtype=torch.float32)
-            start_disturb = 44
-            end_disturb = start_disturb + disturb_t.numel()
+            end_disturb = idx + disturb_t.numel()
             if end_disturb <= self.priv_vec_dim:
-                priv_vec[:, start_disturb:end_disturb] = disturb_t
-            # 50: prob_apply_disturbance
-            if 50 < self.priv_vec_dim:
-                priv_vec[:, 50] = getattr(BaseQuadCfg.disturbance, "prob_apply_disturbance", 0.0)
+                priv_vec[:, idx:end_disturb] = disturb_t
+            idx = end_disturb
+            # 40: prob_apply_disturbance
+            if idx < self.priv_vec_dim:
+                priv_vec[:, idx] = getattr(BaseQuadCfg.disturbance, "prob_apply_disturbance", 0.0)
             # 其余预留字段保持 0
             # raw 特权直接输出，由策略侧编码
             self.task_obs["priviliged_obs"] = priv_vec
