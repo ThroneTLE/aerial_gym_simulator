@@ -28,16 +28,18 @@ class task_config:
     return_state_before_reset = False
     teacher_mode = True  # 启用特权/模仿
 
+    # 奖励仿照 xadapt：存活奖励为主，角速度/线加速度/动作振荡惩罚，移除位置/补偿项，模仿不计入 reward
     reward_parameters = {
-        "position_weight": 4.0,
-        "crash_penalty": -120.0,
-        "attitude_penalty_coef": 0.010,
+        "position_weight": 0.0,
+        "crash_penalty": -10.0,
+        "attitude_penalty_coef": 0.0,
         "release_attitude_boost": 1.0,
-        "comp_torque_penalty_coef": 0.01,
-        "comp_thrust_penalty_coef": 0.02,
-        "velocity_penalty_coef": 0.1,
-        "angvel_penalty_coef": 0.1,
-        "action_smoothness_coef": 0.1,
+        "comp_torque_penalty_coef": 0.0,
+        "comp_thrust_penalty_coef": 0.0,
+        # 线速度惩罚关闭，改用线加速度惩罚
+        "velocity_penalty_coef": 0.0,
+        "angvel_penalty_coef": 0.2,
+        "action_smoothness_coef": 0.06,
         "tilt_warning_deg": 0.0,
         "tilt_warning_penalty": 0.0,
         "height_warning": 0.0,
@@ -63,7 +65,7 @@ class task_config:
         "delta_error_window_steps": 0,
         "delta_error_bonus_clip": 0.0,
         "release_reward_window_steps": 1000,
-        "accel_penalty_away_coef": 0.0,
+        "accel_penalty_away_coef": 0.01,
         "accel_penalty_toward_coef": 0.0,
         "comp_penalty_high_threshold": 1.0,
         "comp_torque_penalty_high_coef": 0.0,
@@ -76,8 +78,10 @@ class task_config:
         "tilt_excess_threshold_deg": 0.0,
         "tilt_excess_coef": 0.0,
         "tilt_excess_exp": 0.0,
-        # 模仿专家残差的权重
-        "imitation_weight": 32.0,
+        # 模仿不计入 reward，如需监督请在损失里加
+        "imitation_weight": 0.0,
+        # 存活奖励
+        "survive_bonus": 10.0,
     }
 
     crash_distance_threshold = 5.0
