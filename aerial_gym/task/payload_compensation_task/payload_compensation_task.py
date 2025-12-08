@@ -725,6 +725,19 @@ class PayloadCompensationTask(BaseTask):
             and self._last_reward_components
             and self.counter % self.tb_log_interval == 0
         ):
+            # 额外诊断：观测/动作范数，便于定位模仿误差飙升原因
+            obs_base_norm = torch.norm(self.task_obs["observations"], dim=1).mean().item()
+            self.tb_writer.add_scalar("debug/obs_base_norm", obs_base_norm, self.counter)
+            if self.teacher_mode and "priviliged_obs" in self.task_obs:
+                priv_norm = torch.norm(self.task_obs["priviliged_obs"], dim=1).mean().item()
+                self.tb_writer.add_scalar("debug/priv_norm", priv_norm, self.counter)
+            # 策略/教师动作范数
+            policy_norm = torch.norm(clamped_actions, dim=1).mean().item()
+            self.tb_writer.add_scalar("debug/policy_action_norm", policy_norm, self.counter)
+            if self.teacher_mode and hasattr(self, "teacher_residual"):
+                teacher_norm = torch.norm(self.teacher_residual, dim=1).mean().item()
+                self.tb_writer.add_scalar("debug/teacher_action_norm", teacher_norm, self.counter)
+
             total_mean = float(self.rewards.mean().item()) if torch.is_tensor(self.rewards) else 0.0
             denom = total_mean if abs(total_mean) > 1e-6 else 1e-6
             for name, mean_val in self._last_reward_components.items():
