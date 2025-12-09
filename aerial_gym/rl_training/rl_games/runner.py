@@ -79,10 +79,17 @@ class AERIALRLGPUEnv(vecenv.IVecEnv):
             -np.ones(self.env.task_config.action_space_dim),
             np.ones(self.env.task_config.action_space_dim),
         )
-        info["observation_space"] = spaces.Box(
-            np.ones(self.env.task_config.observation_space_dim) * -np.Inf,
-            np.ones(self.env.task_config.observation_space_dim) * np.Inf,
-        )
+        base_low = np.ones(self.env.task_config.observation_space_dim) * -np.Inf
+        base_high = np.ones(self.env.task_config.observation_space_dim) * np.Inf
+        base_box = spaces.Box(base_low, base_high)
+        priv_dim = getattr(self.env.task_config, "privileged_observation_space_dim", 0) or 0
+        if priv_dim > 0:
+            priv_low = np.ones(priv_dim) * -np.Inf
+            priv_high = np.ones(priv_dim) * np.Inf
+            priv_box = spaces.Box(priv_low, priv_high)
+            info["observation_space"] = spaces.Dict({"obs": base_box, "privileged_obs": priv_box})
+        else:
+            info["observation_space"] = base_box
         print(info["action_space"], info["observation_space"])
         return info
 

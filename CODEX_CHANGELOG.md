@@ -123,7 +123,7 @@ python -m aerial_gym.rl_training.rl_games.runner \
   --file aerial_gym/rl_training/rl_games/ppo_aerial_quad.yaml \
   --task payload_compensation_task_teacher \
   --experiment_name teacher_residual_stage1 \
-  --num_envs 8192 \
+  --num_envs 1024 \
   --headless True \
   --checkpoint runs/teacher_residual_stage1_07-09-09-59/nn/teacher_residual_stage1.pth
 
@@ -136,6 +136,9 @@ python -m aerial_gym.rl_training.rl_games.runner \
   --num_envs 1024 \
   --headless False \
   --checkpoint runs/teacher_residual_stage1_06-22-18-25/nn/teacher_residual_stage1.pth 
+
+普通模式（有编码器）：不设置变量或设 AERIAL_USE_PRIV_ENCODER=1。
+纯 29 基础观测：运行前设置 export AERIAL_USE_PRIV_ENCODER=0。
 
 
 ## 2025-02-21 Teacher 残差原型
