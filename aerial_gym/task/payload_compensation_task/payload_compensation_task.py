@@ -737,6 +737,11 @@ class PayloadCompensationTask(BaseTask):
             if self.teacher_mode and hasattr(self, "teacher_residual"):
                 teacher_norm = torch.norm(self.teacher_residual, dim=1).mean().item()
                 self.tb_writer.add_scalar("debug/teacher_action_norm", teacher_norm, self.counter)
+                # 范围检查，确认教师/策略动作尺度一致
+                self.tb_writer.add_scalar("debug/policy_action_min", clamped_actions.min().item(), self.counter)
+                self.tb_writer.add_scalar("debug/policy_action_max", clamped_actions.max().item(), self.counter)
+                self.tb_writer.add_scalar("debug/teacher_action_min", self.teacher_residual.min().item(), self.counter)
+                self.tb_writer.add_scalar("debug/teacher_action_max", self.teacher_residual.max().item(), self.counter)
 
             total_mean = float(self.rewards.mean().item()) if torch.is_tensor(self.rewards) else 0.0
             denom = total_mean if abs(total_mean) > 1e-6 else 1e-6
@@ -749,6 +754,10 @@ class PayloadCompensationTask(BaseTask):
             self.infos = {
                 "last_release_index": self.payload_manager.last_release_index.clone().detach().cpu(),
                 "just_released": self.payload_manager.just_released_flag.clone().detach().cpu(),
+                "is_disturbance": (
+                    self.payload_manager.release_warning_flag | self.payload_manager.just_released_flag
+                ).clone().detach().cpu(),
+                "teacher_actions": self.teacher_residual.clone().detach().cpu(),
             }
 
             # 动作饱和率监控（补偿通道接近 -1/1 的占比）

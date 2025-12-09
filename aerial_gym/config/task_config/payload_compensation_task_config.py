@@ -15,7 +15,7 @@ class task_config:
     action_space_dim = 4  # thrust + 3 compensation torques
     controller_action_dim = 8  # 4 Lee inputs + thrust + 3 torque compensation commands
 
-    episode_len_steps = 3000
+    episode_len_steps = 2000
     return_state_before_reset = False
 
     reward_parameters = {

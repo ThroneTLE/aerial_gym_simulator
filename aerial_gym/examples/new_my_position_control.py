@@ -17,7 +17,7 @@ conda run --no-capture-output -n aerialgym python aerial_gym/examples/new_my_pos
 
 """
 DEFAULT_CKPT = (
-    "runs/teacher_residual_stage1_07-09-09-59/nn/teacher_residual_stage1.pth"  # 修改为你的默认模型路径
+    "runs/teacher_residual_stage1_09-09-05-44/nn/teacher_residual_stage1.pth"  # 修改为你的默认模型路径
 )
 
 # Demo 默认使用训练 YAML 指定的任务；仅在缺少配置时退回补偿任务。
@@ -239,7 +239,7 @@ def _add_axis_sliders(fig, axes):
     return slider_x, slider_y
 
 
-def plot_results(z_history, euler_history, release_history):
+def plot_results(z_history, euler_history, release_history, policy_actions, teacher_actions=None):
     if not z_history:
         print("无可绘制数据。")
         return
@@ -281,6 +281,28 @@ def plot_results(z_history, euler_history, release_history):
     ax_euler.legend()
 
     _add_axis_sliders(fig, [ax_z, ax_euler])
+
+    # 补偿动作对比：策略输出 vs 教师残差（如有）
+    if policy_actions:
+        act_arr = np.vstack(policy_actions)
+        action_dim = act_arr.shape[1]
+        teacher_arr = np.vstack(teacher_actions) if teacher_actions is not None and len(teacher_actions) == len(policy_actions) else None
+        fig_act, axes = plt.subplots(action_dim, 1, figsize=(10, max(4, 2 * action_dim)), sharex=True)
+        if action_dim == 1:
+            axes = [axes]
+        labels = ["thrust"] + [f"torque_{i}" for i in range(1, action_dim)]
+        for i, ax in enumerate(axes):
+            ax.plot(steps, act_arr[:, i], label="policy", color="C0")
+            if teacher_arr is not None:
+                ax.plot(steps, teacher_arr[:, i], label="teacher", color="C1", linestyle="--")
+            for release_step, _ in release_history:
+                ax.axvline(release_step, color="r", linestyle=":", alpha=0.5)
+            ax.set_ylabel(labels[i])
+            ax.grid(True)
+            ax.legend()
+        axes[-1].set_xlabel("步数")
+        fig_act.suptitle("残差补偿对比（策略 vs 教师）")
+
     plt.show()
 
 
@@ -337,6 +359,8 @@ def main():
     z_history: List[float] = []
     euler_history: List[np.ndarray] = []
     release_history: List[Tuple[int, int]] = []
+    policy_actions: List[np.ndarray] = []
+    teacher_actions: List[np.ndarray] = []
 
     with torch.no_grad():
         for step in range(args.steps):
@@ -360,6 +384,9 @@ def main():
 
             z_history.append(pos[2])
             euler_history.append(euler)
+            policy_actions.append(actions[env_id].detach().cpu().numpy())
+            if hasattr(task, "teacher_residual"):
+                teacher_actions.append(task.teacher_residual[env_id].detach().cpu().numpy())
 
             if task.payload_manager.just_released_flag[env_id]:
                 payload_idx = int(task.payload_manager.last_release_index[env_id].item())
@@ -374,7 +401,7 @@ def main():
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
     print("仿真结束，开始绘图...")
-    plot_results(z_history, euler_history, release_history)
+    plot_results(z_history, euler_history, release_history, policy_actions, teacher_actions if teacher_actions else None)
 
 
 if __name__ == "__main__":
