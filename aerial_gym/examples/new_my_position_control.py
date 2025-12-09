@@ -12,12 +12,13 @@ from aerial_gym.registry.task_registry import task_registry
 from aerial_gym.utils.math import get_euler_xyz_tensor
 
 import torch
+from rl_games.algos_torch.moving_mean_std import GeneralizedMovingStats
 """
 conda run --no-capture-output -n aerialgym python aerial_gym/examples/new_my_position_control.py   --num_envs 1 --steps 2000 --headless False   --checkpoint runs/teacher_residual_stage1_06-06-48-09/nn/teacher_residual_stage1.pth
 
 """
 DEFAULT_CKPT = (
-    "runs/teacher_residual_stage1_09-09-05-44/nn/teacher_residual_stage1.pth"  # 修改为你的默认模型路径
+    "runs/teacher_residual_stage1_09-21-12-26/nn/teacher_residual_stage1.pth"  # 修改为你的默认模型路径
 )
 
 # Demo 默认使用训练 YAML 指定的任务；仅在缺少配置时退回补偿任务。
@@ -131,8 +132,8 @@ def _str2bool(value):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Payload compensation policy rollout.")
-    parser.add_argument("--num_envs", type=int, default=200, help="并行环境数量（建议 1 用于绘图）")
-    parser.add_argument("--steps", type=int, default=2500, help="仿真步数")
+    parser.add_argument("--num_envs", type=int, default=2048, help="并行环境数量（建议 1 用于绘图）")
+    parser.add_argument("--steps", type=int, default=2000, help="仿真步数")
     parser.add_argument(
         "--headless",
         type=_str2bool,
@@ -170,6 +171,54 @@ def load_checkpoint(checkpoint_path: str):
         raise RuntimeError("Checkpoint 缺少 a2c_network.mu.weight，无法推断动作维度。")
     action_dim = action_tensor.shape[0]
     return ckpt, action_dim
+
+
+def load_obs_rms(checkpoint_data: dict, obs_dim: int, device: torch.device):
+    """加载训练时的 running mean/std，并在推理时复用，避免分布偏移导致抖动。"""
+    rms_state = checkpoint_data.get("running_mean_std")
+    if rms_state is None:
+        return None
+    rms = GeneralizedMovingStats(obs_dim, impl="mean_std")
+    # 兼容旧格式（running_mean/running_var/count）与新格式（step/mean/sqrs）
+    if {"running_mean", "running_var", "count"} <= set(rms_state.keys()):
+        # running_var 是方差，sqrs = var + mean^2；count 记到 step 里
+        mean = rms_state["running_mean"]
+        var = rms_state["running_var"]
+        count = rms_state.get("count", torch.tensor([1.0]))
+        sqrs = var + mean * mean
+        compat_state = {
+            "step": torch.as_tensor(count, dtype=torch.int32).view(1),
+            "mean": mean,
+            "sqrs": sqrs,
+        }
+        rms.load_state_dict(compat_state, strict=False)
+    else:
+        try:
+            rms.load_state_dict(rms_state, strict=False)
+        except RuntimeError:
+            # 若形状不符，直接跳过归一化
+            return None
+    rms.to(device)
+    rms.eval()
+    return rms
+
+
+def _log_rms_stats(rms: Optional[GeneralizedMovingStats]):
+    if rms is None:
+        print("obs_rms: None（未找到训练时的 running_mean_std）")
+        return
+    with torch.no_grad():
+        mean = rms.mean.detach().cpu()
+        sqrs = rms.sqrs.detach().cpu()
+        step = int(rms.step.item()) if hasattr(rms, "step") else -1
+        var = torch.clamp_min(sqrs - mean * mean, 0.0)
+        std = torch.sqrt(var)
+        print(
+            "obs_rms: loaded, "
+            f"step={step}, "
+            f"mean[min,max]=({mean.min():.4f}, {mean.max():.4f}), "
+            f"std[min,max]=({std.min():.4f}, {std.max():.4f})"
+        )
 
 
 def build_policy(
@@ -319,6 +368,7 @@ def main():
 
     cfg = load_training_config(args.config) or {}
     checkpoint_data, checkpoint_action_dim = load_checkpoint(args.checkpoint)
+    obs_rms = None
 
     # 演示强制使用教师任务，以匹配教师 checkpoint 的 obs 维度
     env_name = DEFAULT_ENV_NAME
@@ -344,6 +394,10 @@ def main():
         )
     device = torch.device(task.device)
 
+    # 尝试加载训练时的 obs running mean/std，用于推理归一化，避免分布漂移
+    obs_rms = load_obs_rms(checkpoint_data, obs_dim, device)
+    _log_rms_stats(obs_rms)
+
     policy = build_policy(
         cfg, checkpoint_data, obs_dim, action_dim, device, task.sim_env.num_envs
     )
@@ -367,6 +421,9 @@ def main():
             obs_tensor = torch.as_tensor(
                 task.task_obs["observations"], device=device, dtype=torch.float32
             )
+            if obs_rms is not None:
+                # 仅归一化 base obs；privileged obs 由策略内部处理/固定归一化
+                obs_tensor = obs_rms(obs_tensor, denorm=False)
             actions = torch.clamp(policy(obs_tensor), -1.0, 1.0)
             task_obs, rewards, terms, truncs, infos = task.step(actions)
 

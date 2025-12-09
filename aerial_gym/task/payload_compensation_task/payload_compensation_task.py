@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import List, Optional, Sequence
 
+import atexit
 import numpy as np
 import torch
 import os
@@ -516,6 +517,7 @@ class PayloadCompensationTask(BaseTask):
         self.crash_distance_threshold = getattr(self.task_config, "crash_distance_threshold", 8.0)
         tilt_deg = getattr(self.task_config, "crash_tilt_threshold_deg", 90.0)
         self.crash_tilt_threshold_rad = np.deg2rad(tilt_deg)
+        self._init_rollout_logger()
 
     def _patch_pre_physics_step(self):
         robot_manager = self.sim_env.robot_manager
@@ -532,6 +534,7 @@ class PayloadCompensationTask(BaseTask):
         robot_manager.pre_physics_step = patched_pre_physics_step
 
     def close(self):
+        self._flush_rollout_logger()
         if hasattr(self, "sim_builder") and self.sim_builder is not None:
             self.sim_builder.delete_env()
 
@@ -633,6 +636,7 @@ class PayloadCompensationTask(BaseTask):
 
         self.sim_env.step(actions=self.controller_actions)
 
+        self._log_rollout(clamped_actions)
         pos_error_body = quat_apply_inverse(
             self.obs_dict["robot_vehicle_orientation"],
             (self.target_position - self.obs_dict["robot_position"]),
@@ -710,6 +714,16 @@ class PayloadCompensationTask(BaseTask):
                 }
             )
 
+        # 暴露扰动/教师信息供 BC/优势加权使用，独立于 TB 开关
+        disturb_flag = self.payload_manager.release_warning_flag | self.payload_manager.just_released_flag
+        self.infos = {
+            "last_release_index": self.payload_manager.last_release_index.clone(),
+            "just_released": self.payload_manager.just_released_flag.clone(),
+            "is_disturbance": disturb_flag.clone(),
+        }
+        if self.teacher_mode:
+            self.infos["teacher_actions"] = self.teacher_residual.clone()
+
         # 更新上一帧速度，用于下一步的加速度估计
         self.prev_linvel = self.obs_dict["robot_body_linvel"].detach()
 
@@ -750,15 +764,6 @@ class PayloadCompensationTask(BaseTask):
                 self.tb_writer.add_scalar(f"reward_components/{name}_ratio", mean_val / denom, self.counter)
             self.tb_writer.add_scalar("reward_components/total_reward", total_mean, self.counter)
             self.tb_writer.flush()
-
-            self.infos = {
-                "last_release_index": self.payload_manager.last_release_index.clone().detach().cpu(),
-                "just_released": self.payload_manager.just_released_flag.clone().detach().cpu(),
-                "is_disturbance": (
-                    self.payload_manager.release_warning_flag | self.payload_manager.just_released_flag
-                ).clone().detach().cpu(),
-                "teacher_actions": self.teacher_residual.clone().detach().cpu(),
-            }
 
             # 动作饱和率监控（补偿通道接近 -1/1 的占比）
             sat_mask = torch.abs(clamped_actions) >= 0.99
@@ -1262,6 +1267,76 @@ class PayloadCompensationTask(BaseTask):
                 self.curriculum_stage
             ].clone()
             self._randomize_target_positions()
+
+    def _init_rollout_logger(self):
+        path = os.environ.get("AERIAL_ROLLOUT_LOG")
+        if not path:
+            self._rollout_logger = None
+            return
+        max_steps = int(os.environ.get("AERIAL_ROLLOUT_STEPS", "4000"))
+        self._rollout_logger = {
+            "path": path,
+            "max_steps": max_steps,
+            "steps": [],
+            "z": [],
+            "euler": [],
+            "policy": [],
+            "teacher": [],
+            "just_released": [],
+            "last_release_index": [],
+        }
+        logger.info("[RolloutLog] enabled path=%s max_steps=%d (env0 only)", path, max_steps)
+        # 进程退出时也尝试刷盘，防止未显式 close 时丢数据
+        atexit.register(self._flush_rollout_logger)
+
+    def _log_rollout(self, clamped_actions):
+        log = getattr(self, "_rollout_logger", None)
+        if not log or len(log["steps"]) >= log["max_steps"]:
+            return
+        env_id = 0
+        log["steps"].append(int(self.counter))
+        pos = self.obs_dict["robot_position"][env_id]
+        log["z"].append(float(pos[2].item()))
+        euler = self.obs_dict["robot_euler_angles"][env_id].detach().cpu().numpy().astype(np.float32)
+        log["euler"].append(euler)
+        log["policy"].append(clamped_actions[env_id].detach().cpu().numpy().astype(np.float32))
+        if self.teacher_mode and hasattr(self, "teacher_residual"):
+            log["teacher"].append(self.teacher_residual[env_id].detach().cpu().numpy().astype(np.float32))
+        else:
+            log["teacher"].append(None)
+        log["just_released"].append(bool(self.payload_manager.just_released_flag[env_id].item()))
+        log["last_release_index"].append(int(self.payload_manager.last_release_index[env_id].item()))
+        if len(log["steps"]) >= log["max_steps"]:
+            self._flush_rollout_logger()
+
+    def _flush_rollout_logger(self):
+        log = getattr(self, "_rollout_logger", None)
+        if not log or len(log["steps"]) == 0:
+            return
+        path = log["path"]
+        directory = os.path.dirname(path)
+        if directory:
+            os.makedirs(directory, exist_ok=True)
+        data = {
+            "step": np.array(log["steps"], dtype=np.int64),
+            "z": np.array(log["z"], dtype=np.float32),
+            "euler": np.vstack(log["euler"]) if log["euler"] else np.empty((0, 3), dtype=np.float32),
+            "policy": np.vstack(log["policy"]) if log["policy"] else np.empty(
+                (0, self.task_config.action_space_dim), dtype=np.float32
+            ),
+            "just_released": np.array(log["just_released"], dtype=bool),
+            "last_release_index": np.array(log["last_release_index"], dtype=np.int64),
+        }
+        if log["teacher"] and any(t is not None for t in log["teacher"]):
+            filled = [
+                (t if t is not None else np.zeros(self.task_config.action_space_dim, dtype=np.float32))
+                for t in log["teacher"]
+            ]
+            data["teacher"] = np.vstack(filled)
+        np.savez(path, **data)
+        logger.info("[RolloutLog] saved %d steps to %s", len(log["steps"]), path)
+        # 防止重复写入
+        self._rollout_logger = None
 
     def _log_debug_reset(self, env_tensor):
         # 仅记录前几次 reset，避免刷屏

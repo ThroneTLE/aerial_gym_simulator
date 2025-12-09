@@ -15,10 +15,10 @@ class task_config:
     privileged_observation_space_dim = 41
     action_space_dim = 4  # thrust + 3 compensation torques
     controller_action_dim = 8  # 4 Lee inputs + thrust + 3 torque compensation commands
-    dagger_frac = 0.5          # 初始教师动作占比
+    dagger_frac = 0.0          # 初始教师动作占比
     dagger_decay_reward = 15000.0  # 均值奖励达到此值后开始衰减
     dagger_decay_rate = 0.99      # 每步衰减系数
-    dagger_min_frac = 0.1          # 衰减下限（保留少量教师）
+    dagger_min_frac = 0.0          # 衰减下限（保留少量教师）
     imitation_err_threshold = 0.5# 仅当误差低于该阈值才衰减
     dagger_use_postmix_err = True  # 使用混合后的 imitation err 作为衰减判定，和 TB 曲线一致
     fix_yaw_residual_zero = True   # 教师残差的 yaw 力矩固定为 0
@@ -37,8 +37,8 @@ class task_config:
         "comp_thrust_penalty_coef": 0.0,
         # 线速度惩罚关闭，改用线加速度惩罚
         "velocity_penalty_coef": 0.0,
-        "angvel_penalty_coef": 0.2,
-        "action_smoothness_coef": 0.06,
+        "angvel_penalty_coef": 0.005, #0.2
+        "action_smoothness_coef": 0.0001, #0.06
         "tilt_warning_deg": 0.0,
         "tilt_warning_penalty": 0.0,
         "height_warning": 0.0,
@@ -78,7 +78,7 @@ class task_config:
         "tilt_excess_coef": 0.0,
         "tilt_excess_exp": 0.0,
         # 模仿不计入 reward，如需监督请在损失里加
-        "imitation_weight": 2.0,
+        "imitation_weight": 8.0,
         # 存活奖励
         "survive_bonus": 10.0,
     }
@@ -99,7 +99,7 @@ class task_config:
         "release_start_range": [50, 100],
         "release_interval_range": [300, 350],
         "warning_steps": 100,
-        "randomize_release":   True,  # 初始验证先固定
+        "randomize_release":   False,  # 初始验证先固定
         "log_release_events": False,
     }
 

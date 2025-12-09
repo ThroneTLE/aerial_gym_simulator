@@ -11,7 +11,7 @@ params:
   network:
     name: privileged_actor_critic  # 特权编码器 + 策略/价值双头网络
     separate: False  # False=共享主干；True=actor/critic 各自独立主干（更耗显存，梯度解耦）
-    privileged_dim: 52  # 特权向量长度
+    privileged_dim: 41  # 特权向量长度
     privileged_embed: 8  # 编码后维度
     privileged_hidden: 128  # 编码器隐层宽度
     space:
@@ -22,9 +22,9 @@ params:
           name: default  # 均值初始化方式（rl-games 内置）
         sigma_init:
           name: const_initializer  # logstd 初始化方式
-          val: -2.0  # 初始 logstd 常数（log 标度；-2 ≈ std 0.135）
+          val: -1.0  # 初始 logstd 常数（log 标度；-2 ≈ std 0.135）
         fixed_sigma: False  # 启用可学习 logstd
-        min_logstd: -4.0  # clamp 下限（约 std 0.018），防止过度收紧
+        min_logstd: -4.5  # clamp 下限（约 std 0.018），防止过度收紧
         max_logstd: 1.0   # clamp 上限（约 std 2.72），防止噪声无上限飙升
     mlp:
       units: [256, 256, 128]  # MLP 隐层宽度（逐层）
@@ -69,9 +69,9 @@ params:
     minibatch_size:  65536 #131072 #65536  32768  # 单次优化用的样本数（越大梯度方差低但显存/时间更高）
     mini_epochs: 2  # 每批数据重复训练次数（过高易过拟合、KL 抬升；过低步子小）
     # 扰动样本优势加权（权重=1+coef*mask，mask 来自 infos['is_disturbance']）
-    disturbance_adv_weight: 5.0
+    disturbance_adv_weight: 0.0
     # BC/DAgger 模仿损失系数（从 bc_coef 衰减到 bc_min_coef，乘 bc_alpha）
-    bc_coef: 5.0
+    bc_coef: 100.0
     bc_alpha: 0.999
     bc_min_coef: 0.1
     critic_coef: 1  # 价值损失权重（相对策略损失；大则稳定优势但可能拖慢策略更新）

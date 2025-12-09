@@ -21,6 +21,8 @@ import distutils
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 # import warnings
 # warnings.filterwarnings("error")
+# 确保自定义网络提前注册到 rl-games 的 network_factory
+from aerial_gym.rl_training.rl_games.nn import privileged_actor_critic  # noqa: F401
 
 
 class ExtractObsWrapper(gym.Wrapper):
