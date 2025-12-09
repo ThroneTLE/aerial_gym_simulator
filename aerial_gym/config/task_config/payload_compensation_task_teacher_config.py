@@ -37,8 +37,8 @@ class task_config:
         "comp_thrust_penalty_coef": 0.0,
         # 线速度惩罚关闭，改用线加速度惩罚
         "velocity_penalty_coef": 0.0,
-        "angvel_penalty_coef": 0.000, #0.2
-        "action_smoothness_coef": 0.0000, #0.06
+        "angvel_penalty_coef": 0.500, #0.2
+        "action_smoothness_coef": 1.0000, #0.06
         "tilt_warning_deg": 0.0,
         "tilt_warning_penalty": 0.0,
         "height_warning": 0.0,
@@ -78,7 +78,7 @@ class task_config:
         "tilt_excess_coef": 0.0,
         "tilt_excess_exp": 0.0,
         # 模仿不计入 reward，如需监督请在损失里加
-        "imitation_weight": 16.0,
+        "imitation_weight": 8.0,
         # 存活奖励
         "survive_bonus": 10.0,
     }

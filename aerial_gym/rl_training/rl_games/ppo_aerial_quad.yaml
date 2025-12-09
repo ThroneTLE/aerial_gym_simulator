@@ -41,7 +41,7 @@ params:
       layer_norm: True  # 对 GRU 层做 layer norm（稳定训练）
 
   config:
-    env_name: payload_compensation_task      # 任务名（可切换为 payload_compensation_task_full_rl）
+    env_name: payload_compensation_task_teacher      # 任务名（可切换为 payload_compensation_task_full_rl）
     env_config:
       num_envs: 2048  # 并行环境数量（决定一次采样的宽度）
       headless: True  # 关闭渲染
@@ -58,6 +58,7 @@ params:
     lr_schedule: adaptive  # 基于 KL 的自适应 LR 调度
     kl_threshold: 0.01  # KL 超过阈值会降低 LR/回滚（越小越保守，clip_frac/KL 尖峰更少但收敛慢）
     save_best_after: 1  # 从第 N 个 epoch 后开始记录最佳
+    save_frequency: 10  # 每隔多少个 epoch 额外保存一次 checkpoint，便于事后挑选最小 imitation/err
     score_to_win: 100000000  # 达到该分数视为“成功”停止条件
     grad_norm: 1.0  # 全局梯度裁剪范数上限（防止梯度爆炸；过小会限制学习）
     entropy_coef: 0.000000  # 熵系数（鼓励探索，防止过早收敛；过大动作噪声重，过小易收敛到尖锐策略）
