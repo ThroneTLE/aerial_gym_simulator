@@ -24,7 +24,7 @@ params:
           name: const_initializer  # logstd 初始化方式
           val: -1.0  # 初始 logstd 常数（log 标度；-2 ≈ std 0.135）
         fixed_sigma: False  # 启用可学习 logstd
-        min_logstd: -4.5  # clamp 下限（约 std 0.018），防止过度收紧
+        min_logstd: -3.0  # clamp 下限（约 std 0.018），防止过度收紧
         max_logstd: 1.0   # clamp 上限（约 std 2.72），防止噪声无上限飙升
     mlp:
       units: [256, 256, 128]  # MLP 隐层宽度（逐层）
@@ -71,7 +71,7 @@ params:
     # 扰动样本优势加权（权重=1+coef*mask，mask 来自 infos['is_disturbance']）
     disturbance_adv_weight: 0.0
     # BC/DAgger 模仿损失系数（从 bc_coef 衰减到 bc_min_coef，乘 bc_alpha）
-    bc_coef: 100.0
+    bc_coef: 0.1
     bc_alpha: 0.999
     bc_min_coef: 0.1
     critic_coef: 1  # 价值损失权重（相对策略损失；大则稳定优势但可能拖慢策略更新）

@@ -352,7 +352,15 @@ def plot_results(z_history, euler_history, release_history, policy_actions, teac
         axes[-1].set_xlabel("步数")
         fig_act.suptitle("残差补偿对比（策略 vs 教师）")
 
-    plt.show()
+    save_path = os.environ.get("AERIAL_SAVE_PLOT")
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        fig.savefig(save_path, dpi=150, bbox_inches="tight")
+        if policy_actions:
+            fig_act.savefig(os.path.splitext(save_path)[0] + "_actions.png", dpi=150, bbox_inches="tight")
+        print(f"已保存绘图到 {save_path}")
+    else:
+        plt.show()
 
 
 def _resolve_env_name(cfg_env_name: Optional[str]) -> str:
