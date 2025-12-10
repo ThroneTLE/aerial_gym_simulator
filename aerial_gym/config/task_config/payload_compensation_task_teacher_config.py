@@ -32,12 +32,12 @@ class task_config:
         "position_weight": 0.0,
         "crash_penalty": -10.0,
         "attitude_penalty_coef": 0.0,
-        "release_attitude_boost": 1.0,
+        "release_attitude_boost": 0.0,
         "comp_torque_penalty_coef": 0.0,
         "comp_thrust_penalty_coef": 0.0,
         # 线速度惩罚关闭，改用线加速度惩罚
         "velocity_penalty_coef": 0.0,
-        "angvel_penalty_coef": 0.500, #0.2
+        "angvel_penalty_coef": 0.000, #0.2
         "action_smoothness_coef": 1.0000, #0.06
         "tilt_warning_deg": 0.0,
         "tilt_warning_penalty": 0.0,
@@ -57,9 +57,9 @@ class task_config:
         "hover_bonus_tilt_deg": 0.0,
         "hover_bonus_velocity": 0.0,
         "hover_bonus": 0.0,
-        "release_stability_steps": 50,
-        "release_hover_boost": 0.10,
-        "release_angvel_boost": 0.5,
+        "release_stability_steps": 50,#50
+        "release_hover_boost": 1.0,
+        "release_angvel_boost": 1.0,
         "delta_error_bonus_coef": 0.0,
         "delta_error_window_steps": 0,
         "delta_error_bonus_clip": 0.0,
@@ -78,7 +78,7 @@ class task_config:
         "tilt_excess_coef": 0.0,
         "tilt_excess_exp": 0.0,
         # 模仿不计入 reward，如需监督请在损失里加
-        "imitation_weight": 8.0,
+        "imitation_weight": 16.0,
         # 存活奖励
         "survive_bonus": 10.0,
     }
