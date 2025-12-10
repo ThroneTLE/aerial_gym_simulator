@@ -476,6 +476,18 @@ class PayloadCompensationTask(BaseTask):
             randomize_release=self.task_config.payload_parameters.get("randomize_release", True),
             log_release_events=self.task_config.payload_parameters.get("log_release_events", False),
         )
+        # 轻量比例缩放：让释放节奏随 episode_len_steps 拉伸/压缩，同时保留随机性
+        base_episode_len = float(self.task_config.payload_parameters.get("release_base_episode_len", 1500))
+        if base_episode_len > 1e-6:
+            scale = max(0.1, float(self.task_config.episode_len_steps) / base_episode_len)
+            payload_cfg.release_start = int(round(payload_cfg.release_start * scale))
+            payload_cfg.release_interval = int(round(payload_cfg.release_interval * scale))
+            if payload_cfg.release_start_range:
+                lo, hi = payload_cfg.release_start_range
+                payload_cfg.release_start_range = [int(round(lo * scale)), int(round(hi * scale))]
+            if payload_cfg.release_interval_range:
+                lo, hi = payload_cfg.release_interval_range
+                payload_cfg.release_interval_range = [int(round(lo * scale)), int(round(hi * scale))]
         self.payload_manager = PayloadManager(self.sim_env, payload_cfg)
         self.payload_manager.reset()
         self._patch_pre_physics_step()

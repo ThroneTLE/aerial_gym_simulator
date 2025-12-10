@@ -23,7 +23,7 @@ class task_config:
     dagger_use_postmix_err = True  # 使用混合后的 imitation err 作为衰减判定，和 TB 曲线一致
     fix_yaw_residual_zero = True   # 教师残差的 yaw 力矩固定为 0
 
-    episode_len_steps = 1500
+    episode_len_steps = 1000
     return_state_before_reset = False
     teacher_mode = True  # 启用特权/模仿
 
@@ -38,7 +38,7 @@ class task_config:
         # 线速度惩罚关闭，改用线加速度惩罚
         "velocity_penalty_coef": 0.0,
         "angvel_penalty_coef": 0.000, #0.2
-        "action_smoothness_coef": 1.0000, #0.06
+        "action_smoothness_coef": 0.0000, #0.06
         "tilt_warning_deg": 0.0,
         "tilt_warning_penalty": 0.0,
         "height_warning": 0.0,
@@ -78,13 +78,13 @@ class task_config:
         "tilt_excess_coef": 0.0,
         "tilt_excess_exp": 0.0,
         # 模仿不计入 reward，如需监督请在损失里加
-        "imitation_weight": 16.0,
+        "imitation_weight": 10.0,
         # 存活奖励
         "survive_bonus": 10.0,
     }
 
     crash_distance_threshold = 5.0
-    crash_tilt_threshold_deg = 20.0
+    crash_tilt_threshold_deg = 15.0
 
     payload_parameters = {
         "payload_mass": 0.02,
@@ -94,8 +94,8 @@ class task_config:
             [-0.4, 0.4, -0.4],
             [-0.4, -0.4, -0.4],
         ],
-        "release_start": 50,
-        "release_interval": 300,
+        "release_start": 50, #以1500为基准
+        "release_interval": 600,
         "release_start_range": [50, 100],
         "release_interval_range": [300, 350],
         "warning_steps": 100,
@@ -106,3 +106,11 @@ class task_config:
     randomization_parameters = False
 
     curriculum_parameters = None
+'''
+在你不改这些基准数值、只把 episode_len_steps 乘 5 的情况下，当前代码会自动按比例放大释放节奏（默认基准 1500）：
+
+缩放系数 scale = 7500/1500 = 5。
+release_start 从 50 → 250；release_interval 从 300 → 1500；range 也同步乘 5。
+randomize_release=False 时就是固定时刻：约 250、1750、3250、4750（4 个挂点）。
+warning_steps 不缩放，还是 100，相对整个回合的比例变小。
+所以不用改数值，释放时刻会被自动推迟/拉开，覆盖更长的 episode；如果希望预警窗口也按比例放大，可再把 warning_steps 乘同样的系数。'''
