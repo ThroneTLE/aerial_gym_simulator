@@ -18,7 +18,7 @@ conda run --no-capture-output -n aerialgym python aerial_gym/examples/new_my_pos
 
 """
 DEFAULT_CKPT = (
-    "runs/teacher_residual_stage1_10-10-24-59/nn/teacher_residual_stage1.pth"  # 修改为你的默认模型路径
+    "runs/teacher_residual_stage1_12-05-39-05/nn/teacher_residual_stage1.pth"  # 修改为你的默认模型路径
 )
 
 # Demo 默认使用训练 YAML 指定的任务；仅在缺少配置时退回补偿任务。
@@ -133,7 +133,7 @@ def _str2bool(value):
 def parse_args():
     parser = argparse.ArgumentParser(description="Payload compensation policy rollout.")
     parser.add_argument("--num_envs", type=int, default=2048, help="并行环境数量（建议 1 用于绘图）")
-    parser.add_argument("--steps", type=int, default=2000, help="仿真步数")
+    parser.add_argument("--steps", type=int, default=1000, help="仿真步数")
     parser.add_argument(
         "--headless",
         type=_str2bool,
@@ -288,7 +288,15 @@ def _add_axis_sliders(fig, axes):
     return slider_x, slider_y
 
 
-def plot_results(z_history, euler_history, release_history, policy_actions, teacher_actions=None):
+def plot_results(
+    z_history,
+    euler_history,
+    release_history,
+    policy_actions,
+    teacher_actions=None,
+    pos_history=None,
+    ideal_circle=None,
+):
     if not z_history:
         print("无可绘制数据。")
         return
@@ -330,6 +338,50 @@ def plot_results(z_history, euler_history, release_history, policy_actions, teac
     ax_euler.legend()
 
     _add_axis_sliders(fig, [ax_z, ax_euler])
+
+    # XY 轨迹与平移距离
+    if pos_history:
+        pos_arr = np.vstack(pos_history)
+        xy = pos_arr[:, :2]
+        r = np.linalg.norm(xy, axis=1)
+        fig_xy, (ax_xy, ax_r) = plt.subplots(1, 2, figsize=(13, 5))
+        ax_xy.plot(xy[:, 0], xy[:, 1], label="轨迹", color="C0")
+        ax_xy.scatter([0], [0], color="k", s=30, marker="x", label="原点")
+        if ideal_circle:
+            cx, cy, radius = ideal_circle
+            theta = np.linspace(0, 2 * np.pi, 200)
+            ax_xy.plot(cx + radius * np.cos(theta), cy + radius * np.sin(theta), "--", color="C1", alpha=0.6, label="理想圆轨迹")
+        for release_step, _ in release_history:
+            if 0 <= release_step < len(xy):
+                ax_xy.scatter(xy[release_step, 0], xy[release_step, 1], color="r", s=25, marker="o", alpha=0.6)
+        ax_xy.set_xlabel("X (m)")
+        ax_xy.set_ylabel("Y (m)")
+        ax_xy.set_title("XY 平面轨迹")
+        ax_xy.axis("equal")
+        ax_xy.grid(True)
+        ax_xy.legend()
+
+        ax_r.plot(steps, r, label="平移距离 |XY|", color="C2")
+        for release_step, _ in release_history:
+            ax_r.axvline(release_step, color="r", linestyle=":", alpha=0.5)
+        ax_r.set_xlabel("步数")
+        ax_r.set_ylabel("距离 (m)")
+        ax_r.set_title("XY 平移距离随时间")
+        ax_r.grid(True)
+        ax_r.legend()
+        # 评估跟踪误差（到理想圆的径向误差）
+        if ideal_circle:
+            cx, cy, radius = ideal_circle
+            radial = np.linalg.norm(xy - np.array([cx, cy]), axis=1)
+            radial_err = radial - radius
+            fig_err, ax_err = plt.subplots(1, 1, figsize=(10, 3))
+            ax_err.plot(steps, radial_err, color="C3")
+            for release_step, _ in release_history:
+                ax_err.axvline(release_step, color="r", linestyle=":", alpha=0.4)
+            ax_err.set_xlabel("步数")
+            ax_err.set_ylabel("径向误差 (m)")
+            ax_err.set_title("圆轨迹径向误差")
+            ax_err.grid(True)
 
     # 补偿动作对比：策略输出 vs 教师残差（如有）
     if policy_actions:
@@ -420,6 +472,7 @@ def main():
 
     z_history: List[float] = []
     euler_history: List[np.ndarray] = []
+    pos_history: List[np.ndarray] = []
     release_history: List[Tuple[int, int]] = []
     policy_actions: List[np.ndarray] = []
     teacher_actions: List[np.ndarray] = []
@@ -447,6 +500,7 @@ def main():
             quat = task.obs_dict["robot_orientation"][env_id : env_id + 1]
             euler = get_euler_xyz_tensor(quat)[0].detach().cpu().numpy()
 
+            pos_history.append(pos.copy())
             z_history.append(pos[2])
             euler_history.append(euler)
             policy_actions.append(actions[env_id].detach().cpu().numpy())
@@ -466,7 +520,22 @@ def main():
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
     print("仿真结束，开始绘图...")
-    plot_results(z_history, euler_history, release_history, policy_actions, teacher_actions if teacher_actions else None)
+    # 估计理想圆轨迹参数（基于任务配置，若有）
+    ideal_circle = None
+    traj_cfg = getattr(task.task_config, "trajectory_parameters", None) or {}
+    if str(traj_cfg.get("type", "")).lower() == "circle":
+        cx, cy, _ = traj_cfg.get("center", [0.0, 0.0, 0.0])
+        radius = float(traj_cfg.get("radius", 0.0))
+        ideal_circle = (cx, cy, radius)
+    plot_results(
+        z_history,
+        euler_history,
+        release_history,
+        policy_actions,
+        teacher_actions if teacher_actions else None,
+        pos_history=pos_history,
+        ideal_circle=ideal_circle,
+    )
 
 
 if __name__ == "__main__":

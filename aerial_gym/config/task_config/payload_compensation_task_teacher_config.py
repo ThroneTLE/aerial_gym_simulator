@@ -29,14 +29,14 @@ class task_config:
 
     # 奖励仿照 xadapt：存活奖励为主，角速度/线加速度/动作振荡惩罚，移除位置/补偿项，模仿不计入 reward
     reward_parameters = {
-        "position_weight": 0.0,
+        "position_weight": 10.0,
         "crash_penalty": -10.0,
         "attitude_penalty_coef": 0.0,
         "release_attitude_boost": 0.0,
         "comp_torque_penalty_coef": 0.0,
         "comp_thrust_penalty_coef": 0.0,
         # 线速度惩罚关闭，改用线加速度惩罚
-        "velocity_penalty_coef": 0.0,
+        "velocity_penalty_coef": 3.0,
         "angvel_penalty_coef": 0.000, #0.2
         "action_smoothness_coef": 0.0000, #0.06
         "tilt_warning_deg": 0.0,
@@ -78,7 +78,7 @@ class task_config:
         "tilt_excess_coef": 0.0,
         "tilt_excess_exp": 0.0,
         # 模仿不计入 reward，如需监督请在损失里加
-        "imitation_weight": 10.0,
+        "imitation_weight": 6.0,
         # 存活奖励
         "survive_bonus": 10.0,
     }
@@ -101,6 +101,16 @@ class task_config:
         "warning_steps": 100,
         "randomize_release":   False,  # 初始验证先固定
         "log_release_events": False,
+    }
+
+    # 轨迹配置：默认改为 XY 圆轨迹追踪
+    trajectory_parameters = {
+        "type": "circle",
+        "radius": 1.0,
+        "angular_speed_rad_per_step": 0.01,
+        "center": [0.0, 0.0, 0.0],
+        "z_height": 0.0,
+        "phase_random": True,
     }
 
     randomization_parameters = False

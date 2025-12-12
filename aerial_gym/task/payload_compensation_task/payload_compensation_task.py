@@ -426,6 +426,12 @@ class PayloadCompensationTask(BaseTask):
         self.target_position = torch.zeros(
             (self.sim_env.num_envs, 3), device=self.device, requires_grad=False
         )
+        # 可选轨迹（如圆形）；默认保持原地悬停
+        traj_cfg = getattr(self.task_config, "trajectory_parameters", None) or {}
+        self.trajectory_type = str(traj_cfg.get("type", "")).lower()
+        self.trajectory_cfg = traj_cfg
+        self.traj_step = torch.zeros(self.sim_env.num_envs, device=self.device)
+        self.traj_phase = torch.zeros(self.sim_env.num_envs, device=self.device)
         # 记录上一帧的位置误差范数，用于计算误差缩小奖励
         self.prev_pos_dist = torch.zeros(self.sim_env.num_envs, device=self.device)
         # 记录上一帧线速度，用于近似计算加速度惩罚
@@ -492,6 +498,7 @@ class PayloadCompensationTask(BaseTask):
         self.payload_manager.reset()
         self._patch_pre_physics_step()
         self._initialize_vehicle_state()
+        self._init_trajectory_state()
 
         rand_cfg = getattr(self.task_config, "randomization_parameters", None) or {}
         if not isinstance(rand_cfg, dict):
@@ -580,7 +587,10 @@ class PayloadCompensationTask(BaseTask):
             self.payload_manager.reset(env_ids=env_tensor)
 
         self._initialize_vehicle_state(env_ids=env_tensor)
+        self._reset_trajectory(env_tensor)
         self._randomize_target_positions(env_tensor)
+        # 轨迹模式下，立刻刷新目标，避免悬停与轨迹交替
+        self._update_trajectory_targets(env_tensor, advance=False)
         self._apply_initial_state_noise(env_tensor)
         self._log_debug_reset(env_tensor if env_tensor is not None else None)
 
@@ -599,6 +609,9 @@ class PayloadCompensationTask(BaseTask):
         self.counter += 1
         self.prev_actions[:] = self.actions
         self.actions = actions
+
+        # 若启用轨迹追踪（如圆形），持续推进目标点
+        self._update_trajectory_targets()
 
         self.payload_manager.step()
         self._advance_curriculum_if_needed()
@@ -1204,6 +1217,8 @@ class PayloadCompensationTask(BaseTask):
         return inertia
 
     def _randomize_target_positions(self, env_ids=None):
+        if self.trajectory_type:
+            return
         range_tensor = self.current_target_range_tensor
         if range_tensor is None:
             return
@@ -1279,6 +1294,51 @@ class PayloadCompensationTask(BaseTask):
                 self.curriculum_stage
             ].clone()
             self._randomize_target_positions()
+
+    def _init_trajectory_state(self):
+        if self.trajectory_type:
+            self._reset_trajectory()
+
+    def _reset_trajectory(self, env_ids=None):
+        if not self.trajectory_type:
+            return
+        env_tensor = self._get_env_tensor(env_ids)
+        if env_tensor.numel() == 0:
+            return
+        self.traj_step[env_tensor] = 0
+        if self.trajectory_type == "circle":
+            if self.trajectory_cfg.get("phase_random", False):
+                self.traj_phase[env_tensor] = torch.rand(env_tensor.shape[0], device=self.device) * (
+                    2 * np.pi
+                )
+            else:
+                self.traj_phase[env_tensor] = 0.0
+        self._update_trajectory_targets(env_tensor, advance=False)
+
+    def _update_trajectory_targets(self, env_ids=None, advance=True):
+        if self.trajectory_type != "circle":
+            return
+        env_tensor = self._get_env_tensor(env_ids)
+        if env_tensor.numel() == 0:
+            return
+        if advance:
+            self.traj_step[env_tensor] += 1
+        omega = float(self.trajectory_cfg.get("angular_speed_rad_per_step", 0.01))
+        radius = float(self.trajectory_cfg.get("radius", 0.5))
+        center = self.trajectory_cfg.get("center", [0.0, 0.0, 0.0])
+        center = torch.as_tensor(center, device=self.device, dtype=torch.float32).view(-1)
+        if center.numel() < 3:
+            pad = torch.zeros(3 - center.numel(), device=self.device)
+            center = torch.cat([center, pad])
+        z_height = self.trajectory_cfg.get("z_height", None)
+        if z_height is None:
+            z_height = float(center[2].item())
+        else:
+            z_height = float(z_height)
+        angles = self.traj_phase[env_tensor] + self.traj_step[env_tensor] * omega
+        self.target_position[env_tensor, 0] = center[0] + radius * torch.cos(angles)
+        self.target_position[env_tensor, 1] = center[1] + radius * torch.sin(angles)
+        self.target_position[env_tensor, 2] = z_height
 
     def _init_rollout_logger(self):
         path = os.environ.get("AERIAL_ROLLOUT_LOG")
