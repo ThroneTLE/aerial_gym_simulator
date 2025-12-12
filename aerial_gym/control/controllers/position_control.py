@@ -116,11 +116,17 @@ class LeePositionControllerWithCompensation(LeePositionController):
         # Run the standard Lee position control on the first four commands.
         wrench = super().update(base_actions)
 
-        # Scale and add compensation torques (Clamp to [-1, 1] to match usual action range).
+        # Scale compensation actions; interpret limits as总输出限幅（PD+补偿一起受限）。
         compensation_actions = torch.clamp(compensation_actions, -1.0, 1.0)
         thrust_action = compensation_actions[:, :1] * self.comp_thrust_limit
         torque_actions = compensation_actions[:, 1:] * self.comp_torque_limits
 
-        wrench[:, 2:3] += thrust_action
-        wrench[:, 3:6] += torque_actions
+        total_thrust = wrench[:, 2:3] + thrust_action
+        total_torque = wrench[:, 3:6] + torque_actions
+
+        total_thrust = torch.clamp(total_thrust, -self.comp_thrust_limit, self.comp_thrust_limit)
+        total_torque = torch.clamp(total_torque, -self.comp_torque_limits, self.comp_torque_limits)
+
+        wrench[:, 2:3] = total_thrust
+        wrench[:, 3:6] = total_torque
         return wrench

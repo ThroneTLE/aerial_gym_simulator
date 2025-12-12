@@ -650,15 +650,18 @@ class PayloadCompensationTask(BaseTask):
         total_norm = torch.clamp(base_pd_norm + residual_actions, -1.0, 1.0)
         self.prev_total_norm = total_norm.detach()
 
+        # 教师总输出（PD + 教师残差），用于模仿/DAgger
+        teacher_total_norm = None
         if self.teacher_mode:
+            teacher_total_norm = torch.clamp(base_pd_norm + self.teacher_residual, -1.0, 1.0)
             policy_imitation_err = torch.norm(
-                residual_actions - self.teacher_residual, dim=1
+                total_norm - teacher_total_norm, dim=1
             ).mean().item()
             self._last_policy_imitation_err = policy_imitation_err
             decay_err = policy_imitation_err
             if self.dagger_use_postmix_err:
-                mixed_preview = self.dagger_frac * self.teacher_residual + (1.0 - self.dagger_frac) * residual_actions
-                decay_err = torch.norm(mixed_preview - self.teacher_residual, dim=1).mean().item()
+                mixed_preview = self.dagger_frac * teacher_total_norm + (1.0 - self.dagger_frac) * total_norm
+                decay_err = torch.norm(mixed_preview - teacher_total_norm, dim=1).mean().item()
             self._last_decay_imitation_err = decay_err
             # 按回合衰减 DAgger 比例（类似 SB3 BC alpha^updates）
             if self.counter > 0 and self.counter % self.task_config.episode_len_steps == 0:
@@ -675,7 +678,9 @@ class PayloadCompensationTask(BaseTask):
             # DAgger 风格：用教师动作与策略残差混合，早期偏向教师
             dagger_frac = max(0.0, min(1.0, self.dagger_frac))
             if dagger_frac > 0.0:
-                residual_actions = dagger_frac * self.teacher_residual + (1.0 - dagger_frac) * residual_actions
+                mixed_total = dagger_frac * teacher_total_norm + (1.0 - dagger_frac) * total_norm
+                residual_actions = torch.clamp(mixed_total - base_pd_norm, -1.0, 1.0)
+                total_norm = torch.clamp(mixed_total, -1.0, 1.0)
         # 更新当前动作为“补偿残差”，供后续平滑/惩罚使用
         self.actions = residual_actions
 
@@ -770,7 +775,9 @@ class PayloadCompensationTask(BaseTask):
         # 模仿专家残差（仅 Teacher 模式生效）
         imitation_w = float(reward_params.get("imitation_weight", 0.0))
         if self.teacher_mode and imitation_w > 0.0:
-            imit_penalty = torch.mean((self.actions - self.teacher_residual) ** 2, dim=1)
+            teacher_total = torch.clamp(self.base_pd_norm + self.teacher_residual, -1.0, 1.0)
+            policy_total = torch.clamp(self.base_pd_norm + self.actions, -1.0, 1.0)
+            imit_penalty = torch.mean((policy_total - teacher_total) ** 2, dim=1)
             self.rewards -= imitation_w * imit_penalty
 
         # 补充 TB 记录：位置/姿态基础项（均为 batch 均值）
@@ -796,7 +803,8 @@ class PayloadCompensationTask(BaseTask):
             "is_disturbance": disturb_flag.clone(),
         }
         if self.teacher_mode:
-            self.infos["teacher_actions"] = self.teacher_residual.clone()
+            teacher_total = torch.clamp(self.base_pd_norm + self.teacher_residual, -1.0, 1.0)
+            self.infos["teacher_actions"] = teacher_total.clone()
 
         # 更新上一帧速度，用于下一步的加速度估计
         self.prev_linvel = self.obs_dict["robot_body_linvel"].detach()
@@ -823,13 +831,14 @@ class PayloadCompensationTask(BaseTask):
             policy_norm = torch.norm(self.actions, dim=1).mean().item()
             self.tb_writer.add_scalar("debug/policy_action_norm", policy_norm, self.counter)
             if self.teacher_mode and hasattr(self, "teacher_residual"):
-                teacher_norm = torch.norm(self.teacher_residual, dim=1).mean().item()
+                teacher_total = torch.clamp(self.base_pd_norm + self.teacher_residual, -1.0, 1.0)
+                teacher_norm = torch.norm(teacher_total, dim=1).mean().item()
                 self.tb_writer.add_scalar("debug/teacher_action_norm", teacher_norm, self.counter)
                 # 范围检查，确认教师/策略动作尺度一致
                 self.tb_writer.add_scalar("debug/policy_action_min", self.actions.min().item(), self.counter)
                 self.tb_writer.add_scalar("debug/policy_action_max", self.actions.max().item(), self.counter)
-                self.tb_writer.add_scalar("debug/teacher_action_min", self.teacher_residual.min().item(), self.counter)
-                self.tb_writer.add_scalar("debug/teacher_action_max", self.teacher_residual.max().item(), self.counter)
+                self.tb_writer.add_scalar("debug/teacher_action_min", teacher_total.min().item(), self.counter)
+                self.tb_writer.add_scalar("debug/teacher_action_max", teacher_total.max().item(), self.counter)
 
             total_mean = float(self.rewards.mean().item()) if torch.is_tensor(self.rewards) else 0.0
             denom = total_mean if abs(total_mean) > 1e-6 else 1e-6

@@ -77,7 +77,7 @@ params:
     bc_min_coef: 0.1
     critic_coef: 1  # 价值损失权重（相对策略损失；大则稳定优势但可能拖慢策略更新）
     normalize_input: True  # base obs 用 running_mean_std；privileged_obs 用固定归一化（见 AERIAL_FIXED_OBS_NORM）
-    bounds_loss_coef: 0.1  # 动作越界惩罚系数（动作超出 [-1,1] 时的惩罚强度）
+    bounds_loss_coef: 0.0001  # 动作越界惩罚系数（动作超出 [-1,1] 时的惩罚强度）
     max_epochs: 16000  # 最大训练 epoch 数（训练上限）
     normalize_value: True  # 对 value 做 running_mean_std 归一化（减小价值尺度漂移）
     use_diagnostics: True  # 输出诊断指标到日志（TB/文本）
