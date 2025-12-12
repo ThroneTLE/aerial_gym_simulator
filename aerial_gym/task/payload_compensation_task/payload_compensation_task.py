@@ -438,6 +438,10 @@ class PayloadCompensationTask(BaseTask):
         self.prev_linvel = torch.zeros_like(self.target_position)
         # 连续跟踪时长计数，用于轨迹奖励
         self.tracking_streak = torch.zeros(self.sim_env.num_envs, device=self.device)
+        # 缓存 PD 基础 wrench（thrust + 3 torque，归一化到补偿限幅）
+        self.base_pd_norm = torch.zeros((self.sim_env.num_envs, 4), device=self.device)
+        # 缓存上一时刻总输出（PD+残差，归一化），用于观测
+        self.prev_total_norm = torch.zeros((self.sim_env.num_envs, 4), device=self.device)
         # Teacher 模式下缓存最后一次 payload torque
         self._last_tau_payload = torch.zeros((self.sim_env.num_envs, 3), device=self.device)
 
@@ -598,8 +602,20 @@ class PayloadCompensationTask(BaseTask):
             self.tracking_streak[:] = 0
         else:
             self.tracking_streak[env_tensor] = 0
+        # 重置 PD 基础 wrench 缓存
+        if env_tensor is None:
+            self.base_pd_norm[:] = 0
+        else:
+            self.base_pd_norm[env_tensor] = 0
+        # 重置上一总输出
+        if env_tensor is None:
+            self.prev_total_norm[:] = 0
+        else:
+            self.prev_total_norm[env_tensor] = 0
         self._apply_initial_state_noise(env_tensor)
         self._log_debug_reset(env_tensor if env_tensor is not None else None)
+        # 重置后刷新一次 PD 输出，确保 obs 带上正确的基准
+        self._compute_base_pd_wrench(env_tensor)
 
     def render(self):
         return None
@@ -624,14 +640,24 @@ class PayloadCompensationTask(BaseTask):
         self._advance_curriculum_if_needed()
         if self.teacher_mode:
             self._update_teacher_residual()
-            clamped_policy_actions = torch.clamp(self.actions, -1.0, 1.0)
+        # 先将策略输出视为“总目标”归一化 wrench，与 PD 基础输出相减得到残差
+        clamped_policy_actions = torch.clamp(self.actions, -1.0, 1.0)
+        base_pd_norm = self.base_pd_norm
+        if base_pd_norm.shape[0] != clamped_policy_actions.shape[0]:
+            base_pd_norm = base_pd_norm[: clamped_policy_actions.shape[0]]
+        residual_actions = torch.clamp(clamped_policy_actions - base_pd_norm, -1.0, 1.0)
+        # 当前总输出（PD+残差），归一化
+        total_norm = torch.clamp(base_pd_norm + residual_actions, -1.0, 1.0)
+        self.prev_total_norm = total_norm.detach()
+
+        if self.teacher_mode:
             policy_imitation_err = torch.norm(
-                clamped_policy_actions - self.teacher_residual, dim=1
+                residual_actions - self.teacher_residual, dim=1
             ).mean().item()
             self._last_policy_imitation_err = policy_imitation_err
             decay_err = policy_imitation_err
             if self.dagger_use_postmix_err:
-                mixed_preview = self.dagger_frac * self.teacher_residual + (1.0 - self.dagger_frac) * clamped_policy_actions
+                mixed_preview = self.dagger_frac * self.teacher_residual + (1.0 - self.dagger_frac) * residual_actions
                 decay_err = torch.norm(mixed_preview - self.teacher_residual, dim=1).mean().item()
             self._last_decay_imitation_err = decay_err
             # 按回合衰减 DAgger 比例（类似 SB3 BC alpha^updates）
@@ -649,8 +675,9 @@ class PayloadCompensationTask(BaseTask):
             # DAgger 风格：用教师动作与策略残差混合，早期偏向教师
             dagger_frac = max(0.0, min(1.0, self.dagger_frac))
             if dagger_frac > 0.0:
-                actions = dagger_frac * self.teacher_residual + (1.0 - dagger_frac) * clamped_policy_actions
-                self.actions = actions
+                residual_actions = dagger_frac * self.teacher_residual + (1.0 - dagger_frac) * residual_actions
+        # 更新当前动作为“补偿残差”，供后续平滑/惩罚使用
+        self.actions = residual_actions
 
         self.controller_actions[:, 0:3] = self.target_position
         self.controller_actions[:, 3] = 0.0
@@ -663,8 +690,9 @@ class PayloadCompensationTask(BaseTask):
         )
         reward_window_mask_f = reward_window_mask.float()
 
-        self.controller_actions[:, 4] = clamped_actions[:, 0]
-        self.controller_actions[:, 5:] = clamped_actions[:, 1:]
+        # 将残差补偿（归一化）送入补偿通道
+        self.controller_actions[:, 4] = self.actions[:, 0]
+        self.controller_actions[:, 5:] = self.actions[:, 1:]
 
         self.sim_env.step(actions=self.controller_actions)
 
@@ -742,7 +770,7 @@ class PayloadCompensationTask(BaseTask):
         # 模仿专家残差（仅 Teacher 模式生效）
         imitation_w = float(reward_params.get("imitation_weight", 0.0))
         if self.teacher_mode and imitation_w > 0.0:
-            imit_penalty = torch.mean((clamped_actions - self.teacher_residual) ** 2, dim=1)
+            imit_penalty = torch.mean((self.actions - self.teacher_residual) ** 2, dim=1)
             self.rewards -= imitation_w * imit_penalty
 
         # 补充 TB 记录：位置/姿态基础项（均为 batch 均值）
@@ -792,14 +820,14 @@ class PayloadCompensationTask(BaseTask):
                 priv_norm = torch.norm(self.task_obs["priviliged_obs"], dim=1).mean().item()
                 self.tb_writer.add_scalar("debug/priv_norm", priv_norm, self.counter)
             # 策略/教师动作范数
-            policy_norm = torch.norm(clamped_actions, dim=1).mean().item()
+            policy_norm = torch.norm(self.actions, dim=1).mean().item()
             self.tb_writer.add_scalar("debug/policy_action_norm", policy_norm, self.counter)
             if self.teacher_mode and hasattr(self, "teacher_residual"):
                 teacher_norm = torch.norm(self.teacher_residual, dim=1).mean().item()
                 self.tb_writer.add_scalar("debug/teacher_action_norm", teacher_norm, self.counter)
                 # 范围检查，确认教师/策略动作尺度一致
-                self.tb_writer.add_scalar("debug/policy_action_min", clamped_actions.min().item(), self.counter)
-                self.tb_writer.add_scalar("debug/policy_action_max", clamped_actions.max().item(), self.counter)
+                self.tb_writer.add_scalar("debug/policy_action_min", self.actions.min().item(), self.counter)
+                self.tb_writer.add_scalar("debug/policy_action_max", self.actions.max().item(), self.counter)
                 self.tb_writer.add_scalar("debug/teacher_action_min", self.teacher_residual.min().item(), self.counter)
                 self.tb_writer.add_scalar("debug/teacher_action_max", self.teacher_residual.max().item(), self.counter)
 
@@ -1120,30 +1148,33 @@ class PayloadCompensationTask(BaseTask):
 
     def process_obs_for_task(self):
         pos_error = self.target_position - self.obs_dict["robot_position"]
-        self.task_obs["observations"][:, 0:3] = pos_error
-        rot_mat = quat_to_rotation_matrix(self.obs_dict["robot_orientation"]).reshape(
-            self.sim_env.num_envs, 9
-        )
-        self.task_obs["observations"][:, 3:12] = rot_mat
-        self.task_obs["observations"][:, 12:15] = self.obs_dict["robot_body_linvel"]
-        self.task_obs["observations"][:, 15:18] = self.obs_dict["robot_body_angvel"]
-
+        idx = 0
+        # 欧拉角 (roll, pitch, yaw)
+        self.task_obs["observations"][:, idx : idx + 3] = self.obs_dict["robot_euler_angles"]
+        idx += 3
         payload_obs = self.payload_manager.get_observation_features()
-        idx = 18
+        # 载荷质量
         self.task_obs["observations"][:, idx] = payload_obs["payload_mass"]
         idx += 1
-        self.task_obs["observations"][:, idx : idx + 3] = payload_obs["com_offset"]
-        idx += 3
-        num_payloads = payload_obs["attached_mask"].shape[1]
-        self.task_obs["observations"][:, idx : idx + num_payloads] = payload_obs[
-            "attached_mask"
-        ]
-        idx += num_payloads
+        # 上一次释放索引归一化
         self.task_obs["observations"][:, idx] = payload_obs["last_release_norm"]
         idx += 1
-        self.task_obs["observations"][:, idx] = payload_obs["last_release_mass"]
-        idx += 1
+        # 预警标志
         self.task_obs["observations"][:, idx] = payload_obs["warning_flag"]
+        idx += 1
+        # 追加 PD 基础输出（归一化 thrust + torque），用于串级残差
+        if hasattr(self, "base_pd_norm"):
+            # 先更新一遍，确保基于最新状态/目标
+            self._compute_base_pd_wrench()
+            self.task_obs["observations"][:, idx : idx + 4] = self.base_pd_norm
+        else:
+            self.task_obs["observations"][:, idx : idx + 4] = 0.0
+        idx += 4
+        # 上一时刻总输出（PD+残差，归一化）
+        if hasattr(self, "prev_total_norm"):
+            self.task_obs["observations"][:, idx : idx + 4] = self.prev_total_norm
+        else:
+            self.task_obs["observations"][:, idx : idx + 4] = 0.0
 
         self._apply_observation_noise()
 
@@ -1290,12 +1321,7 @@ class PayloadCompensationTask(BaseTask):
         pos_std = float(self.obs_noise_std.get("position_error", 0.0))
         if pos_std > 0:
             obs[:, 0:3] += torch.randn_like(obs[:, 0:3]) * pos_std
-        lin_std = float(self.obs_noise_std.get("linear_velocity", 0.0))
-        if lin_std > 0:
-            obs[:, 7:10] += torch.randn_like(obs[:, 7:10]) * lin_std
-        ang_std = float(self.obs_noise_std.get("angular_velocity", 0.0))
-        if ang_std > 0:
-            obs[:, 10:13] += torch.randn_like(obs[:, 10:13]) * ang_std
+        # 其他通道已精简，如需对新增维度加噪，请按索引单独配置
 
     def _advance_curriculum_if_needed(self):
         if (
@@ -1360,6 +1386,30 @@ class PayloadCompensationTask(BaseTask):
         self.target_position[env_tensor, 0] = center[0] + radius * torch.cos(angles)
         self.target_position[env_tensor, 1] = center[1] + radius * torch.sin(angles)
         self.target_position[env_tensor, 2] = z_height
+
+    def _compute_base_pd_wrench(self, env_ids=None):
+        """计算 PD 基础输出（不含残差），归一化到补偿限幅，用于串级输入与残差计算。"""
+        env_tensor = self._get_env_tensor(env_ids)
+        if env_tensor.numel() == 0:
+            return
+        # 使用当前目标（位置+零 yaw），补偿通道清零
+        base_ctrl = torch.zeros_like(self.controller_actions)
+        base_ctrl[:, 0:3] = self.target_position
+        base_ctrl[:, 3] = 0.0
+        # 零残差
+        base_ctrl[:, 4:] = 0.0
+        controller = self.sim_env.robot_manager.robot.controller
+        with torch.no_grad():
+            wrench = controller.update(base_ctrl)
+        thrust = wrench[:, 2]
+        torques = wrench[:, 3:6]
+        # 归一化到补偿限幅
+        thrust_limit = max(float(self.comp_thrust_limit), 1e-6)
+        torque_limits = self.comp_torque_limits.view(1, 3).clamp(min=1e-6)
+        norm_thrust = torch.clamp(thrust / thrust_limit, -1.0, 1.0)
+        norm_torque = torch.clamp(torques / torque_limits, -1.0, 1.0)
+        self.base_pd_norm[env_tensor, 0] = norm_thrust[env_tensor]
+        self.base_pd_norm[env_tensor, 1:] = norm_torque[env_tensor]
 
     def _init_rollout_logger(self):
         path = os.environ.get("AERIAL_ROLLOUT_LOG")

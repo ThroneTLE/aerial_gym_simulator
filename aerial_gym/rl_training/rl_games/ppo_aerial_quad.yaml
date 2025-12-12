@@ -72,8 +72,8 @@ params:
     # 扰动样本优势加权（权重=1+coef*mask，mask 来自 infos['is_disturbance']）
     disturbance_adv_weight: 0.0
     # BC/DAgger 模仿损失系数（从 bc_coef 衰减到 bc_min_coef，乘 bc_alpha）
-    bc_coef: 0.5
-    bc_alpha: 0.99  #0.999
+    bc_coef: 0.10
+    bc_alpha: 0.999  #0.999
     bc_min_coef: 0.1
     critic_coef: 1  # 价值损失权重（相对策略损失；大则稳定优势但可能拖慢策略更新）
     normalize_input: True  # base obs 用 running_mean_std；privileged_obs 用固定归一化（见 AERIAL_FIXED_OBS_NORM）

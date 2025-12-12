@@ -11,7 +11,7 @@ class task_config:
     device = "cuda:0"
 
     # 特权 raw 仅放入 priviliged_obs，由策略侧 encoder 压到 8 维；obs 只保留基础 29 维
-    observation_space_dim = 29
+    observation_space_dim = 14  # 3 euler + mass + last_release_norm + warning + PD 基础 wrench(4) + 上一补偿残差(4)
     privileged_observation_space_dim = 41
     action_space_dim = 4  # thrust + 3 compensation torques
     controller_action_dim = 8  # 4 Lee inputs + thrust + 3 torque compensation commands
@@ -30,9 +30,9 @@ class task_config:
     # 奖励分组：优先调“跟踪主信号”，其余保持 0 可视作关闭
     reward_parameters = {
         # 跟踪主信号：距离惩罚 + 连续跟踪奖励
-        "tracking_tolerance": 0.1,          # 米，误差低于该值计入跟踪时长
-        "tracking_reward_per_step": 5.0,   # 连续跟踪每步奖励，时长越久越大
-        "tracking_penalty_coef": 1.0,       # 距离惩罚系数，-coef * dist
+        "tracking_tolerance": 0.0,          # 米，误差低于该值计入跟踪时长
+        "tracking_reward_per_step": 0.0,   # 连续跟踪每步奖励，时长越久越大
+        "tracking_penalty_coef": 0.0,       # 距离惩罚系数，-coef * dist
 
         # 动作/速度正则与抖动抑制
         "velocity_penalty_coef": 0.0,       # 线速度范数惩罚
@@ -90,7 +90,7 @@ class task_config:
         "release_reward_window_steps": 200,
 
         # 模仿/生存
-        "imitation_weight": 10.0,
+        "imitation_weight": 16.0,
         "survive_bonus": 10.0,
     }
 
@@ -114,9 +114,9 @@ class task_config:
         "log_release_events": False,
     }
 
-    # 轨迹配置：默认改为 XY 圆轨迹追踪
+    # 轨迹配置：默认改为 XY 圆轨迹追踪  circle
     trajectory_parameters = {
-        "type": "circle",
+        "type": "",
         "radius": 1.0,
         "angular_speed_rad_per_step": 0.01,
         "center": [0.0, 0.0, 0.0],
