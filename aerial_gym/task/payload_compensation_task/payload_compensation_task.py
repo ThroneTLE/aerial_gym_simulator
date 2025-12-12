@@ -436,6 +436,8 @@ class PayloadCompensationTask(BaseTask):
         self.prev_pos_dist = torch.zeros(self.sim_env.num_envs, device=self.device)
         # 记录上一帧线速度，用于近似计算加速度惩罚
         self.prev_linvel = torch.zeros_like(self.target_position)
+        # 连续跟踪时长计数，用于轨迹奖励
+        self.tracking_streak = torch.zeros(self.sim_env.num_envs, device=self.device)
         # Teacher 模式下缓存最后一次 payload torque
         self._last_tau_payload = torch.zeros((self.sim_env.num_envs, 3), device=self.device)
 
@@ -591,6 +593,11 @@ class PayloadCompensationTask(BaseTask):
         self._randomize_target_positions(env_tensor)
         # 轨迹模式下，立刻刷新目标，避免悬停与轨迹交替
         self._update_trajectory_targets(env_tensor, advance=False)
+        # 重置跟踪计数
+        if env_tensor is None:
+            self.tracking_streak[:] = 0
+        else:
+            self.tracking_streak[env_tensor] = 0
         self._apply_initial_state_noise(env_tensor)
         self._log_debug_reset(env_tensor if env_tensor is not None else None)
 
@@ -701,6 +708,19 @@ class PayloadCompensationTask(BaseTask):
             self.rewards += bonus
             delta_for_log = delta_clamped
 
+        # 轨迹跟踪奖励/惩罚：误差越大惩罚越多，连续跟踪越久奖励越大
+        track_tol = float(reward_params.get("tracking_tolerance", 0.0))
+        track_rew = float(reward_params.get("tracking_reward_per_step", 0.0))
+        track_penalty_coef = float(reward_params.get("tracking_penalty_coef", 0.0))
+        if track_tol > 0.0 or track_penalty_coef != 0.0 or track_rew != 0.0:
+            within = dist_norm <= track_tol if track_tol > 0.0 else torch.zeros_like(dist_norm, dtype=torch.bool)
+            # 连续跟踪计数（离开后清零）
+            self.tracking_streak = torch.where(within, self.tracking_streak + 1, torch.zeros_like(self.tracking_streak))
+            if track_rew != 0.0:
+                self.rewards += track_rew * self.tracking_streak
+            if track_penalty_coef != 0.0:
+                self.rewards += -track_penalty_coef * dist_norm
+
         # 记录位置相关奖励分量，便于 TB 观察
         dist = torch.norm(pos_error_body, dim=1)
         pos_reward = exp_func(dist, 3.0, 8.0) + exp_func(dist, 2.0, 4.0)
@@ -736,6 +756,7 @@ class PayloadCompensationTask(BaseTask):
                     ),
                     "up_reward": _mean_detached(pos_reward * up_reward),
                     "ang_vel_reward": _mean_detached(pos_reward * ang_vel_reward),
+                    "tracking_streak": _mean_detached(self.tracking_streak),
                 }
             )
 

@@ -23,22 +23,36 @@ class task_config:
     dagger_use_postmix_err = True  # 使用混合后的 imitation err 作为衰减判定，和 TB 曲线一致
     fix_yaw_residual_zero = True   # 教师残差的 yaw 力矩固定为 0
 
-    episode_len_steps = 1000
+    episode_len_steps = 3000
     return_state_before_reset = False
     teacher_mode = True  # 启用特权/模仿
 
-    # 奖励仿照 xadapt：存活奖励为主，角速度/线加速度/动作振荡惩罚，移除位置/补偿项，模仿不计入 reward
+    # 奖励分组：优先调“跟踪主信号”，其余保持 0 可视作关闭
     reward_parameters = {
-        "position_weight": 10.0,
-        "crash_penalty": -10.0,
-        "attitude_penalty_coef": 0.0,
-        "release_attitude_boost": 0.0,
+        # 跟踪主信号：距离惩罚 + 连续跟踪奖励
+        "tracking_tolerance": 0.1,          # 米，误差低于该值计入跟踪时长
+        "tracking_reward_per_step": 5.0,   # 连续跟踪每步奖励，时长越久越大
+        "tracking_penalty_coef": 1.0,       # 距离惩罚系数，-coef * dist
+
+        # 动作/速度正则与抖动抑制
+        "velocity_penalty_coef": 0.0,       # 线速度范数惩罚
+        "angvel_penalty_coef": 0.000,       # 角速度惩罚
+        "action_smoothness_coef": 0.0000,   # 动作变化惩罚
+        "accel_penalty_away_coef": 0.00,    # 远离目标方向的加速度惩罚
+        "accel_penalty_toward_coef": 0.0,   # 朝向目标的加速度惩罚
+        "vel_away_penalty_coef": 0.0,       # 远离目标方向的速度惩罚
+
+        # 补偿/幅值惩罚（目前关闭）
         "comp_torque_penalty_coef": 0.0,
         "comp_thrust_penalty_coef": 0.0,
-        # 线速度惩罚关闭，改用线加速度惩罚
-        "velocity_penalty_coef": 3.0,
-        "angvel_penalty_coef": 0.000, #0.2
-        "action_smoothness_coef": 0.0000, #0.06
+        "comp_penalty_high_threshold": 1.0,
+        "comp_torque_penalty_high_coef": 0.0,
+        "comp_thrust_penalty_high_coef": 0.0,
+        "comp_window_penalty_scale": 1,
+        "comp_activation_bonus_coef": 0.0,
+
+        # 安全/约束（当前为 0 即关闭）
+        "crash_penalty": -10.0,
         "tilt_warning_deg": 0.0,
         "tilt_warning_penalty": 0.0,
         "height_warning": 0.0,
@@ -46,44 +60,41 @@ class task_config:
         "height_safe_bonus": 0.0,
         "release_tilt_limit_deg": 0.0,
         "release_tilt_penalty": 0.0,
+        "tilt_excess_threshold_deg": 0.0,
+        "tilt_excess_coef": 0.0,
+        "tilt_excess_exp": 0.0,
+
+        # 兼容保留项（轨迹场景下通常为 0）
+        "position_weight": 0.0,
+        "attitude_penalty_coef": 0.0,
+        "release_attitude_boost": 0.0,
         "stability_radius": 0.0,
         "stability_tilt_deg": 0.0,
         "stability_penalty": 0.0,
         "stability_velocity_penalty": 0.0,
         "position_error_penalty_coef": 0.0,
         "z_error_penalty_coef": 0.0,
+        "vel_window_penalty_scale": 1,
+        "smooth_window_penalty_scale": 1,
         "yaw_penalty_coef": 0.0,
         "hover_bonus_radius": 0.0,
         "hover_bonus_tilt_deg": 0.0,
         "hover_bonus_velocity": 0.0,
         "hover_bonus": 0.0,
-        "release_stability_steps": 50,#50
+        "release_stability_steps": 50,
         "release_hover_boost": 1.0,
         "release_angvel_boost": 1.0,
         "delta_error_bonus_coef": 0.0,
         "delta_error_window_steps": 0,
         "delta_error_bonus_clip": 0.0,
         "release_reward_window_steps": 200,
-        "accel_penalty_away_coef": 0.01,
-        "accel_penalty_toward_coef": 0.0,
-        "comp_penalty_high_threshold": 1.0,
-        "comp_torque_penalty_high_coef": 0.0,
-        "comp_thrust_penalty_high_coef": 0.0,
-        "comp_window_penalty_scale": 1,
-        "vel_window_penalty_scale": 1,
-        "smooth_window_penalty_scale": 1,
-        "comp_activation_bonus_coef": 0.0,
-        "vel_away_penalty_coef": 0.0,
-        "tilt_excess_threshold_deg": 0.0,
-        "tilt_excess_coef": 0.0,
-        "tilt_excess_exp": 0.0,
-        # 模仿不计入 reward，如需监督请在损失里加
-        "imitation_weight": 6.0,
-        # 存活奖励
+
+        # 模仿/生存
+        "imitation_weight": 10.0,
         "survive_bonus": 10.0,
     }
 
-    crash_distance_threshold = 5.0
+    crash_distance_threshold = 3.0
     crash_tilt_threshold_deg = 15.0
 
     payload_parameters = {

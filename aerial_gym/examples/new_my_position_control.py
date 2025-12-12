@@ -295,6 +295,7 @@ def plot_results(
     policy_actions,
     teacher_actions=None,
     pos_history=None,
+    target_history=None,
     ideal_circle=None,
 ):
     if not z_history:
@@ -369,8 +370,22 @@ def plot_results(
         ax_r.set_title("XY 平移距离随时间")
         ax_r.grid(True)
         ax_r.legend()
-        # 评估跟踪误差（到理想圆的径向误差）
-        if ideal_circle:
+        # 评估跟踪误差：位置相对目标点
+        if target_history is not None:
+            tgt_arr = np.vstack(target_history)[: len(xy)]
+            err_xy = xy - tgt_arr[:, :2]
+            err_norm = np.linalg.norm(err_xy, axis=1)
+            fig_err, ax_err = plt.subplots(1, 1, figsize=(10, 3))
+            ax_err.plot(steps[: len(err_norm)], err_norm, color="C3", label="|pos-target|")
+            for release_step, _ in release_history:
+                ax_err.axvline(release_step, color="r", linestyle=":", alpha=0.4)
+            ax_err.set_xlabel("步数")
+            ax_err.set_ylabel("跟踪误差 (m)")
+            ax_err.set_title("XY 跟踪误差")
+            ax_err.grid(True)
+            ax_err.legend()
+        # 若无目标历史但有理想圆，保留到理想圆的径向误差
+        elif ideal_circle:
             cx, cy, radius = ideal_circle
             radial = np.linalg.norm(xy - np.array([cx, cy]), axis=1)
             radial_err = radial - radius
@@ -473,6 +488,7 @@ def main():
     z_history: List[float] = []
     euler_history: List[np.ndarray] = []
     pos_history: List[np.ndarray] = []
+    target_history: List[np.ndarray] = []
     release_history: List[Tuple[int, int]] = []
     policy_actions: List[np.ndarray] = []
     teacher_actions: List[np.ndarray] = []
@@ -497,10 +513,12 @@ def main():
 
             env_id = 0
             pos = task.obs_dict["robot_position"][env_id].detach().cpu().numpy()
+            tgt = task.target_position[env_id].detach().cpu().numpy()
             quat = task.obs_dict["robot_orientation"][env_id : env_id + 1]
             euler = get_euler_xyz_tensor(quat)[0].detach().cpu().numpy()
 
             pos_history.append(pos.copy())
+            target_history.append(tgt.copy())
             z_history.append(pos[2])
             euler_history.append(euler)
             policy_actions.append(actions[env_id].detach().cpu().numpy())
@@ -534,6 +552,7 @@ def main():
         policy_actions,
         teacher_actions if teacher_actions else None,
         pos_history=pos_history,
+        target_history=target_history,
         ideal_circle=ideal_circle,
     )
 
