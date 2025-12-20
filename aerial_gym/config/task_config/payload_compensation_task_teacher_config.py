@@ -37,8 +37,8 @@ class task_config:
         "comp_thrust_penalty_coef": 0.0,
         # 线速度惩罚关闭，改用线加速度惩罚
         "velocity_penalty_coef": 0.0,
-        "angvel_penalty_coef": 0.500, #0.2
-        "action_smoothness_coef": 1.0000, #0.06
+        "angvel_penalty_coef": 0.700, #0.2
+        "action_smoothness_coef": 1.6000, #0.06
         "tilt_warning_deg": 0.0,
         "tilt_warning_penalty": 0.0,
         "height_warning": 0.0,

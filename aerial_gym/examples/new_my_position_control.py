@@ -18,7 +18,7 @@ conda run --no-capture-output -n aerialgym python aerial_gym/examples/new_my_pos
 
 """
 DEFAULT_CKPT = (
-    "plots/teacher_residual_stage1.pth"  # 修改为你的默认模型路径
+    "runs/teacher_residual_stage1_20-22-06-25/nn/teacher_residual_stage1.pth"  # 修改为你的默认模型路径
 )
 
 # Demo 默认使用训练 YAML 指定的任务；仅在缺少配置时退回补偿任务。
@@ -132,8 +132,8 @@ def _str2bool(value):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Payload compensation policy rollout.")
-    parser.add_argument("--num_envs", type=int, default=2048, help="并行环境数量（建议 1 用于绘图）")
-    parser.add_argument("--steps", type=int, default=2000, help="仿真步数")
+    parser.add_argument("--num_envs", type=int, default=1024, help="并行环境数量（建议 1 用于绘图）")
+    parser.add_argument("--steps", type=int, default=3000, help="仿真步数")
     parser.add_argument(
         "--headless",
         type=_str2bool,
@@ -294,9 +294,9 @@ def plot_results(
     release_history,
     policy_actions,
     teacher_actions=None,
-    xy_history=None,
-    xy_error_history=None,
-    target_xy_history=None,
+    pos_history=None,
+    target_history=None,
+    ideal_circle=None,
 ):
     if not z_history:
         print("无可绘制数据。")
@@ -340,52 +340,63 @@ def plot_results(
 
     _add_axis_sliders(fig, [ax_z, ax_euler])
 
-    fig_xy = None
-    if xy_history:
-        xy_arr = np.vstack(xy_history)
-        steps_xy = np.arange(xy_arr.shape[0])
-        target_xy_arr = np.vstack(target_xy_history) if target_xy_history else None
-        xy_err_arr = np.vstack(xy_error_history) if xy_error_history else None
-
-        fig_xy, (ax_xy, ax_xy_err) = plt.subplots(2, 1, figsize=(10, 8))
-        ax_xy.plot(xy_arr[:, 0], xy_arr[:, 1], label="轨迹", color="C0")
-        ax_xy.scatter(xy_arr[0, 0], xy_arr[0, 1], label="起点", color="C2", s=30)
-        ax_xy.scatter(xy_arr[-1, 0], xy_arr[-1, 1], label="终点", color="C3", s=40, marker="^")
-        if target_xy_arr is not None:
-            ax_xy.plot(target_xy_arr[:, 0], target_xy_arr[:, 1], label="目标", color="C1", linestyle="--")
-            ax_xy.scatter(
-                target_xy_arr[-1, 0],
-                target_xy_arr[-1, 1],
-                color="C1",
-                marker="x",
-                s=60,
-            )
+    # XY 轨迹与平移距离
+    if pos_history:
+        pos_arr = np.vstack(pos_history)
+        xy = pos_arr[:, :2]
+        r = np.linalg.norm(xy, axis=1)
+        fig_xy, (ax_xy, ax_r) = plt.subplots(1, 2, figsize=(13, 5))
+        ax_xy.plot(xy[:, 0], xy[:, 1], label="轨迹", color="C0")
+        ax_xy.scatter([0], [0], color="k", s=30, marker="x", label="原点")
+        if ideal_circle:
+            cx, cy, radius = ideal_circle
+            theta = np.linspace(0, 2 * np.pi, 200)
+            ax_xy.plot(cx + radius * np.cos(theta), cy + radius * np.sin(theta), "--", color="C1", alpha=0.6, label="理想圆轨迹")
         for release_step, _ in release_history:
-            if 0 <= release_step < xy_arr.shape[0]:
-                ax_xy.scatter(xy_arr[release_step, 0], xy_arr[release_step, 1], color="r", s=30)
-        ax_xy.set_xlabel("X (米)")
-        ax_xy.set_ylabel("Y (米)")
+            if 0 <= release_step < len(xy):
+                ax_xy.scatter(xy[release_step, 0], xy[release_step, 1], color="r", s=25, marker="o", alpha=0.6)
+        ax_xy.set_xlabel("X (m)")
+        ax_xy.set_ylabel("Y (m)")
         ax_xy.set_title("XY 平面轨迹")
+        ax_xy.axis("equal")
         ax_xy.grid(True)
-        ax_xy.set_aspect("equal", adjustable="box")
         ax_xy.legend()
 
-        if xy_err_arr is not None:
-            ax_xy_err.plot(steps_xy, xy_err_arr[:, 0], label="X 误差", color="C0")
-            ax_xy_err.plot(steps_xy, xy_err_arr[:, 1], label="Y 误差", color="C1")
-            xy_err_norm = np.linalg.norm(xy_err_arr, axis=1)
-            ax_xy_err.plot(steps_xy, xy_err_norm, label="平面误差", color="C2", linestyle="--")
+        ax_r.plot(steps, r, label="平移距离 |XY|", color="C2")
+        for release_step, _ in release_history:
+            ax_r.axvline(release_step, color="r", linestyle=":", alpha=0.5)
+        ax_r.set_xlabel("步数")
+        ax_r.set_ylabel("距离 (m)")
+        ax_r.set_title("XY 平移距离随时间")
+        ax_r.grid(True)
+        ax_r.legend()
+        # 评估跟踪误差：位置相对目标点
+        if target_history is not None:
+            tgt_arr = np.vstack(target_history)[: len(xy)]
+            err_xy = xy - tgt_arr[:, :2]
+            err_norm = np.linalg.norm(err_xy, axis=1)
+            fig_err, ax_err = plt.subplots(1, 1, figsize=(10, 3))
+            ax_err.plot(steps[: len(err_norm)], err_norm, color="C3", label="|pos-target|")
             for release_step, _ in release_history:
-                ax_xy_err.axvline(release_step, color="r", linestyle=":", alpha=0.5)
-            ax_xy_err.set_xlabel("步数")
-            ax_xy_err.set_ylabel("误差 (米)")
-            ax_xy_err.set_title("XY 平面位置误差")
-            ax_xy_err.grid(True)
-            ax_xy_err.legend()
-        else:
-            ax_xy_err.axis("off")
-
-        _add_axis_sliders(fig_xy, [ax_xy, ax_xy_err] if xy_err_arr is not None else [ax_xy])
+                ax_err.axvline(release_step, color="r", linestyle=":", alpha=0.4)
+            ax_err.set_xlabel("步数")
+            ax_err.set_ylabel("跟踪误差 (m)")
+            ax_err.set_title("XY 跟踪误差")
+            ax_err.grid(True)
+            ax_err.legend()
+        # 若无目标历史但有理想圆，保留到理想圆的径向误差
+        elif ideal_circle:
+            cx, cy, radius = ideal_circle
+            radial = np.linalg.norm(xy - np.array([cx, cy]), axis=1)
+            radial_err = radial - radius
+            fig_err, ax_err = plt.subplots(1, 1, figsize=(10, 3))
+            ax_err.plot(steps, radial_err, color="C3")
+            for release_step, _ in release_history:
+                ax_err.axvline(release_step, color="r", linestyle=":", alpha=0.4)
+            ax_err.set_xlabel("步数")
+            ax_err.set_ylabel("径向误差 (m)")
+            ax_err.set_title("圆轨迹径向误差")
+            ax_err.grid(True)
 
     # 补偿动作对比：策略输出 vs 教师残差（如有）
     if policy_actions:
@@ -412,10 +423,6 @@ def plot_results(
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         fig.savefig(save_path, dpi=150, bbox_inches="tight")
-        if fig_xy is not None:
-            fig_xy.savefig(
-                os.path.splitext(save_path)[0] + "_xy.png", dpi=150, bbox_inches="tight"
-            )
         if policy_actions:
             fig_act.savefig(os.path.splitext(save_path)[0] + "_actions.png", dpi=150, bbox_inches="tight")
         print(f"已保存绘图到 {save_path}")
@@ -480,9 +487,8 @@ def main():
 
     z_history: List[float] = []
     euler_history: List[np.ndarray] = []
-    xy_history: List[np.ndarray] = []
-    xy_error_history: List[np.ndarray] = []
-    target_xy_history: List[np.ndarray] = []
+    pos_history: List[np.ndarray] = []
+    target_history: List[np.ndarray] = []
     release_history: List[Tuple[int, int]] = []
     policy_actions: List[np.ndarray] = []
     teacher_actions: List[np.ndarray] = []
@@ -507,22 +513,43 @@ def main():
 
             env_id = 0
             pos = task.obs_dict["robot_position"][env_id].detach().cpu().numpy()
+            tgt = task.target_position[env_id].detach().cpu().numpy()
             quat = task.obs_dict["robot_orientation"][env_id : env_id + 1]
             euler = get_euler_xyz_tensor(quat)[0].detach().cpu().numpy()
-            target_pos = task.target_position[env_id].detach().cpu().numpy()
 
+            pos_history.append(pos.copy())
+            target_history.append(tgt.copy())
             z_history.append(pos[2])
             euler_history.append(euler)
-            xy_history.append(pos[:2].copy())
-            target_xy_history.append(target_pos[:2].copy())
-            xy_error_history.append((target_pos[:2] - pos[:2]).copy())
             policy_actions.append(actions[env_id].detach().cpu().numpy())
             if hasattr(task, "teacher_residual"):
-                teacher_actions.append(task.teacher_residual[env_id].detach().cpu().numpy())
+                # 优先使用 infos 中已经汇总好的教师“总输出”（PD+补偿）
+                if isinstance(infos, dict) and "teacher_actions" in infos:
+                    teacher_actions.append(
+                        torch.as_tensor(infos["teacher_actions"][env_id])
+                        .detach()
+                        .cpu()
+                        .numpy()
+                    )
+                else:
+                    teacher_total = torch.clamp(
+                        task.base_pd_norm[env_id] + task.teacher_residual[env_id],
+                        -1.0,
+                        1.0,
+                    )
+                    teacher_actions.append(teacher_total.detach().cpu().numpy())
 
             if task.payload_manager.just_released_flag[env_id]:
                 payload_idx = int(task.payload_manager.last_release_index[env_id].item())
                 release_history.append((step, payload_idx))
+
+    # 估计理想圆轨迹参数（基于任务配置，若有）
+    ideal_circle = None
+    traj_cfg = getattr(task.task_config, "trajectory_parameters", None) or {}
+    if str(traj_cfg.get("type", "")).lower() == "circle":
+        cx, cy, _ = traj_cfg.get("center", [0.0, 0.0, 0.0])
+        radius = float(traj_cfg.get("radius", 0.0))
+        ideal_circle = (cx, cy, radius)
 
     try:
         task.close()
@@ -539,9 +566,9 @@ def main():
         release_history,
         policy_actions,
         teacher_actions if teacher_actions else None,
-        xy_history=xy_history,
-        xy_error_history=xy_error_history,
-        target_xy_history=target_xy_history,
+        pos_history=pos_history,
+        target_history=target_history,
+        ideal_circle=ideal_circle,
     )
 
 

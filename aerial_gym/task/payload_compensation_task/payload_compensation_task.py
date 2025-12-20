@@ -656,6 +656,9 @@ class PayloadCompensationTask(BaseTask):
             self.crash_tilt_threshold_rad,
         )
         self.rewards[:] = base_rewards
+        survive_bonus = float(reward_params.get("survive_bonus", 0.0))
+        if survive_bonus != 0.0:
+            self.rewards += survive_bonus
 
         # 额外奖励：在预警或释放后窗口内，鼓励距离误差减小
         dist_norm = torch.norm(self.target_position - self.obs_dict["robot_position"], dim=1)
@@ -702,6 +705,8 @@ class PayloadCompensationTask(BaseTask):
 
         # 补充 TB 记录：位置/姿态基础项（均为 batch 均值）
         if hasattr(self, "_last_reward_components") and isinstance(self._last_reward_components, dict):
+            if survive_bonus != 0.0:
+                self._last_reward_components["survive_bonus"] = survive_bonus
             self._last_reward_components.update(
                 {
                     "pos_reward": _mean_detached(pos_reward),

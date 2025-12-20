@@ -66,7 +66,7 @@ params:
     e_clip: 0.2  # PPO 裁剪范围，越小更新越保守（clip_frac 会下降，步子变小）
     clip_value: False  # 是否对 value 也做裁剪（True 可稳 value，可能引入偏差）
     num_actors: 2048  # 参与采样的环境/actor 数
-    horizon_length: 128  # 每个 actor 收集的 rollout 长度
+    horizon_length: 256  # 每个 actor 收集的 rollout 长度
     minibatch_size:  65536 #131072 #65536  32768  # 单次优化用的样本数（越大梯度方差低但显存/时间更高）
     mini_epochs: 2  # 每批数据重复训练次数（过高易过拟合、KL 抬升；过低步子小）
     # 扰动样本优势加权（权重=1+coef*mask，mask 来自 infos['is_disturbance']）
