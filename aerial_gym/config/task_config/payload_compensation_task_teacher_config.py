@@ -23,7 +23,7 @@ class task_config:
     dagger_use_postmix_err = True  # 使用混合后的 imitation err 作为衰减判定，和 TB 曲线一致
     fix_yaw_residual_zero = True   # 教师残差的 yaw 力矩固定为 0
 
-    episode_len_steps = 3000
+    episode_len_steps = 1500
     return_state_before_reset = False
     teacher_mode = True  # 启用特权/模仿
 
@@ -105,12 +105,12 @@ class task_config:
             [-0.4, 0.4, -0.4],
             [-0.4, -0.4, -0.4],
         ],
-        "release_start": 50, #以1500为基准
-        "release_interval": 600,
-        "release_start_range": [50, 100],
-        "release_interval_range": [300, 350],
-        "warning_steps": 100,
-        "randomize_release":   False,  # 初始验证先固定
+        "release_start": 150,  # 首次释放的起始步数（按 episode_len_steps/1500 自动缩放）
+        "release_interval": 450,  # 每次释放间隔步数（同上会按比例缩放）
+        "release_start_range": [50, 100],  # randomize_release=True 时，起始释放步数采样区间；否则无效
+        "release_interval_range": [200, 350],  # randomize_release=True 时，释放间隔采样区间；否则无效
+        "warning_steps": 100,  # 释放前预警窗口步数（release_warning_flag），不随 episode 自动缩放
+        "randomize_release":    False,  # 初始验证先固定
         "log_release_events": False,
     }
 

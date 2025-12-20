@@ -18,7 +18,7 @@ conda run --no-capture-output -n aerialgym python aerial_gym/examples/new_my_pos
 
 """
 DEFAULT_CKPT = (
-    "runs/teacher_residual_stage1_12-05-39-05/nn/teacher_residual_stage1.pth"  # 修改为你的默认模型路径
+    "runs/teacher_residual_stage1_20-20-34-03/nn/teacher_residual_stage1.pth"  # 修改为你的默认模型路径
 )
 
 # Demo 默认使用训练 YAML 指定的任务；仅在缺少配置时退回补偿任务。
@@ -294,6 +294,9 @@ def plot_results(
     release_history,
     policy_actions,
     teacher_actions=None,
+    base_pd_history=None,
+    policy_total_history=None,
+    teacher_total_history=None,
     pos_history=None,
     target_history=None,
     ideal_circle=None,
@@ -406,7 +409,7 @@ def plot_results(
         fig_act, axes = plt.subplots(action_dim, 1, figsize=(10, max(4, 2 * action_dim)), sharex=True)
         if action_dim == 1:
             axes = [axes]
-        labels = ["thrust"] + [f"torque_{i}" for i in range(1, action_dim)]
+        labels = ["residual_thrust"] + [f"residual_torque_{i}" for i in range(1, action_dim)]
         for i, ax in enumerate(axes):
             ax.plot(steps, act_arr[:, i], label="policy", color="C0")
             if teacher_arr is not None:
@@ -419,12 +422,42 @@ def plot_results(
         axes[-1].set_xlabel("步数")
         fig_act.suptitle("残差补偿对比（策略 vs 教师）")
 
+    # 总输出对比：基础 PD + 残差（策略/教师）
+    if policy_total_history:
+        total_arr = np.vstack(policy_total_history)
+        action_dim = total_arr.shape[1]
+        base_arr = np.vstack(base_pd_history) if base_pd_history and len(base_pd_history) == len(policy_total_history) else None
+        teacher_total_arr = (
+            np.vstack(teacher_total_history)
+            if teacher_total_history is not None and len(teacher_total_history) == len(policy_total_history)
+            else None
+        )
+        fig_tot, axes = plt.subplots(action_dim, 1, figsize=(10, max(4, 2 * action_dim)), sharex=True)
+        if action_dim == 1:
+            axes = [axes]
+        labels = ["total_thrust"] + [f"total_torque_{i}" for i in range(1, action_dim)]
+        for i, ax in enumerate(axes):
+            ax.plot(steps, total_arr[:, i], label="policy_total", color="C0")
+            if teacher_total_arr is not None:
+                ax.plot(steps, teacher_total_arr[:, i], label="teacher_total", color="C1", linestyle="--")
+            if base_arr is not None:
+                ax.plot(steps, base_arr[:, i], label="base_pd", color="C2", linestyle=":")
+            for release_step, _ in release_history:
+                ax.axvline(release_step, color="r", linestyle=":", alpha=0.5)
+            ax.set_ylabel(labels[i])
+            ax.grid(True)
+            ax.legend()
+        axes[-1].set_xlabel("步数")
+        fig_tot.suptitle("总输出对比（基础 PD + 残差）")
+
     save_path = os.environ.get("AERIAL_SAVE_PLOT")
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         fig.savefig(save_path, dpi=150, bbox_inches="tight")
         if policy_actions:
             fig_act.savefig(os.path.splitext(save_path)[0] + "_actions.png", dpi=150, bbox_inches="tight")
+        if policy_total_history:
+            fig_tot.savefig(os.path.splitext(save_path)[0] + "_actions_total.png", dpi=150, bbox_inches="tight")
         print(f"已保存绘图到 {save_path}")
     else:
         plt.show()
@@ -492,6 +525,9 @@ def main():
     release_history: List[Tuple[int, int]] = []
     policy_actions: List[np.ndarray] = []
     teacher_actions: List[np.ndarray] = []
+    base_pd_history: List[np.ndarray] = []
+    policy_total_history: List[np.ndarray] = []
+    teacher_total_history: List[np.ndarray] = []
 
     with torch.no_grad():
         for step in range(args.steps):
@@ -521,13 +557,23 @@ def main():
             target_history.append(tgt.copy())
             z_history.append(pos[2])
             euler_history.append(euler)
-            policy_actions.append(actions[env_id].detach().cpu().numpy())
+            # 动作：记录残差和总输出，便于对齐教师/基础 PD
+            base_pd = task.base_pd_norm[env_id].detach().cpu().numpy()
+            residual = task.actions[env_id].detach().cpu().numpy()
+            policy_actions.append(residual)
+            policy_total_history.append(base_pd + residual)
+            base_pd_history.append(base_pd)
             if hasattr(task, "teacher_residual"):
-                teacher_actions.append(task.teacher_residual[env_id].detach().cpu().numpy())
+                teacher_res = task.teacher_residual[env_id].detach().cpu().numpy()
+                teacher_actions.append(teacher_res)
+                teacher_total_history.append(base_pd + teacher_res)
 
             if task.payload_manager.just_released_flag[env_id]:
                 payload_idx = int(task.payload_manager.last_release_index[env_id].item())
                 release_history.append((step, payload_idx))
+
+    # 保存轨迹配置，关闭任务后不再访问 task 对象，避免被释放后引用
+    traj_cfg = getattr(task.task_config, "trajectory_parameters", None) or {}
 
     try:
         task.close()
@@ -540,7 +586,6 @@ def main():
     print("仿真结束，开始绘图...")
     # 估计理想圆轨迹参数（基于任务配置，若有）
     ideal_circle = None
-    traj_cfg = getattr(task.task_config, "trajectory_parameters", None) or {}
     if str(traj_cfg.get("type", "")).lower() == "circle":
         cx, cy, _ = traj_cfg.get("center", [0.0, 0.0, 0.0])
         radius = float(traj_cfg.get("radius", 0.0))
@@ -551,6 +596,9 @@ def main():
         release_history,
         policy_actions,
         teacher_actions if teacher_actions else None,
+        base_pd_history=base_pd_history if base_pd_history else None,
+        policy_total_history=policy_total_history if policy_total_history else None,
+        teacher_total_history=teacher_total_history if teacher_total_history else None,
         pos_history=pos_history,
         target_history=target_history,
         ideal_circle=ideal_circle,

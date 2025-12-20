@@ -689,6 +689,8 @@ class PayloadCompensationTask(BaseTask):
         clamped_actions = torch.clamp(self.actions, -1.0, 1.0)
         # 基础奖励/补偿常开，不再使用窗口掩码
         reward_params = self.task_config.reward_parameters
+        survive_bonus = float(reward_params.get("survive_bonus", 0.0))
+        survive_term = None
         reward_window_steps = int(reward_params.get("release_reward_window_steps", 0))
         reward_window_mask = torch.ones_like(
             self.payload_manager.release_warning_flag, dtype=torch.bool, device=self.device
@@ -772,6 +774,11 @@ class PayloadCompensationTask(BaseTask):
             reward_window_mask=reward_window_mask,
         )
 
+        if survive_bonus != 0.0:
+            alive_mask = (self.terminations == 0).float()
+            survive_term = survive_bonus * alive_mask
+            self.rewards += survive_term
+
         # 模仿专家残差（仅 Teacher 模式生效）
         imitation_w = float(reward_params.get("imitation_weight", 0.0))
         if self.teacher_mode and imitation_w > 0.0:
@@ -782,6 +789,8 @@ class PayloadCompensationTask(BaseTask):
 
         # 补充 TB 记录：位置/姿态基础项（均为 batch 均值）
         if hasattr(self, "_last_reward_components") and isinstance(self._last_reward_components, dict):
+            if survive_term is not None:
+                self._last_reward_components["survive_bonus"] = _mean_detached(survive_term)
             self._last_reward_components.update(
                 {
                     "pos_reward": _mean_detached(pos_reward),
@@ -804,7 +813,10 @@ class PayloadCompensationTask(BaseTask):
         }
         if self.teacher_mode:
             teacher_total = torch.clamp(self.base_pd_norm + self.teacher_residual, -1.0, 1.0)
+            # BC/teacher接口：默认用总输出对齐策略动作；残差保留便于对比
             self.infos["teacher_actions"] = teacher_total.clone()
+            self.infos["teacher_actions_total"] = teacher_total.clone()
+            self.infos["teacher_actions_residual"] = self.teacher_residual.clone()
 
         # 更新上一帧速度，用于下一步的加速度估计
         self.prev_linvel = self.obs_dict["robot_body_linvel"].detach()
@@ -860,6 +872,15 @@ class PayloadCompensationTask(BaseTask):
                 self.tb_writer.add_scalar("imitation/err", imit_err, self.counter)
                 self.tb_writer.add_scalar("imitation/policy_err_raw", self._last_policy_imitation_err, self.counter)
                 self.tb_writer.add_scalar("imitation/err_for_decay", self._last_decay_imitation_err, self.counter)
+                # 逐通道误差：残差与总输出（基础 PD + 残差）
+                policy_total = torch.clamp(self.base_pd_norm + self.actions, -1.0, 1.0)
+                teacher_total = torch.clamp(self.base_pd_norm + self.teacher_residual, -1.0, 1.0)
+                resid_diff = torch.abs(clamped_actions - self.teacher_residual).mean(dim=0)
+                total_diff = torch.abs(policy_total - teacher_total).mean(dim=0)
+                labels = ["thrust", "torque_0", "torque_1", "torque_2"]
+                for i, name in enumerate(labels):
+                    self.tb_writer.add_scalar(f"imitation/residual_abs_err/{name}", float(resid_diff[i]), self.counter)
+                    self.tb_writer.add_scalar(f"imitation/total_abs_err/{name}", float(total_diff[i]), self.counter)
             self.tb_writer.flush()
         # 记录/打印当前 dagger_frac，便于逐“epoch”（tb_log_interval）观察
         if self.teacher_mode:

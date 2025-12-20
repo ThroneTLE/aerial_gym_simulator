@@ -51,7 +51,7 @@ params:
       scale_value: 1.0  # 全局奖励缩放，减小梯度/价值量级（过大易爆，过小学得慢）
 
     normalize_advantage: True  # 归一化 advantage（降低方差）
-    gamma: 0.99  # 折扣因子（越小越短视）
+    gamma: 0.999  # 折扣因子（越小越短视）
     tau: 0.95  # GAE 衰减（越小 bias 高/variance 低）
     ppo: True  # 开启 PPO 裁剪模式
     learning_rate: 2e-4  # 初始学习率（步幅大小）
@@ -73,8 +73,8 @@ params:
     disturbance_adv_weight: 0.0
     # BC/DAgger 模仿损失系数（从 bc_coef 衰减到 bc_min_coef，乘 bc_alpha）
     bc_coef: 0.10
-    bc_alpha: 0.999  #0.999
-    bc_min_coef: 0.1
+    bc_alpha: 0.99  #0.999
+    bc_min_coef: 0.001
     critic_coef: 1  # 价值损失权重（相对策略损失；大则稳定优势但可能拖慢策略更新）
     normalize_input: True  # base obs 用 running_mean_std；privileged_obs 用固定归一化（见 AERIAL_FIXED_OBS_NORM）
     bounds_loss_coef: 0.0001  # 动作越界惩罚系数（动作超出 [-1,1] 时的惩罚强度）
@@ -89,4 +89,4 @@ params:
       deterministic: True  # 测试时是否去掉探索噪声（True=使用均值动作）
       games_num: 100000  # 评估局数上限（rl-games 需要的占位）
 
-  horizon_length: 128
+
