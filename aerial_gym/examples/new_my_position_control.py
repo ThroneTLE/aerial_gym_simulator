@@ -18,7 +18,7 @@ conda run --no-capture-output -n aerialgym python aerial_gym/examples/new_my_pos
 
 """
 DEFAULT_CKPT = (
-    "runs/teacher_residual_stage1_10-02-56-40/nn/teacher_residual_stage1.pth"  # 修改为你的默认模型路径
+    "plots/teacher_residual_stage1.pth"  # 修改为你的默认模型路径
 )
 
 # Demo 默认使用训练 YAML 指定的任务；仅在缺少配置时退回补偿任务。
@@ -288,7 +288,16 @@ def _add_axis_sliders(fig, axes):
     return slider_x, slider_y
 
 
-def plot_results(z_history, euler_history, release_history, policy_actions, teacher_actions=None):
+def plot_results(
+    z_history,
+    euler_history,
+    release_history,
+    policy_actions,
+    teacher_actions=None,
+    xy_history=None,
+    xy_error_history=None,
+    target_xy_history=None,
+):
     if not z_history:
         print("无可绘制数据。")
         return
@@ -331,6 +340,53 @@ def plot_results(z_history, euler_history, release_history, policy_actions, teac
 
     _add_axis_sliders(fig, [ax_z, ax_euler])
 
+    fig_xy = None
+    if xy_history:
+        xy_arr = np.vstack(xy_history)
+        steps_xy = np.arange(xy_arr.shape[0])
+        target_xy_arr = np.vstack(target_xy_history) if target_xy_history else None
+        xy_err_arr = np.vstack(xy_error_history) if xy_error_history else None
+
+        fig_xy, (ax_xy, ax_xy_err) = plt.subplots(2, 1, figsize=(10, 8))
+        ax_xy.plot(xy_arr[:, 0], xy_arr[:, 1], label="轨迹", color="C0")
+        ax_xy.scatter(xy_arr[0, 0], xy_arr[0, 1], label="起点", color="C2", s=30)
+        ax_xy.scatter(xy_arr[-1, 0], xy_arr[-1, 1], label="终点", color="C3", s=40, marker="^")
+        if target_xy_arr is not None:
+            ax_xy.plot(target_xy_arr[:, 0], target_xy_arr[:, 1], label="目标", color="C1", linestyle="--")
+            ax_xy.scatter(
+                target_xy_arr[-1, 0],
+                target_xy_arr[-1, 1],
+                color="C1",
+                marker="x",
+                s=60,
+            )
+        for release_step, _ in release_history:
+            if 0 <= release_step < xy_arr.shape[0]:
+                ax_xy.scatter(xy_arr[release_step, 0], xy_arr[release_step, 1], color="r", s=30)
+        ax_xy.set_xlabel("X (米)")
+        ax_xy.set_ylabel("Y (米)")
+        ax_xy.set_title("XY 平面轨迹")
+        ax_xy.grid(True)
+        ax_xy.set_aspect("equal", adjustable="box")
+        ax_xy.legend()
+
+        if xy_err_arr is not None:
+            ax_xy_err.plot(steps_xy, xy_err_arr[:, 0], label="X 误差", color="C0")
+            ax_xy_err.plot(steps_xy, xy_err_arr[:, 1], label="Y 误差", color="C1")
+            xy_err_norm = np.linalg.norm(xy_err_arr, axis=1)
+            ax_xy_err.plot(steps_xy, xy_err_norm, label="平面误差", color="C2", linestyle="--")
+            for release_step, _ in release_history:
+                ax_xy_err.axvline(release_step, color="r", linestyle=":", alpha=0.5)
+            ax_xy_err.set_xlabel("步数")
+            ax_xy_err.set_ylabel("误差 (米)")
+            ax_xy_err.set_title("XY 平面位置误差")
+            ax_xy_err.grid(True)
+            ax_xy_err.legend()
+        else:
+            ax_xy_err.axis("off")
+
+        _add_axis_sliders(fig_xy, [ax_xy, ax_xy_err] if xy_err_arr is not None else [ax_xy])
+
     # 补偿动作对比：策略输出 vs 教师残差（如有）
     if policy_actions:
         act_arr = np.vstack(policy_actions)
@@ -356,6 +412,10 @@ def plot_results(z_history, euler_history, release_history, policy_actions, teac
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         fig.savefig(save_path, dpi=150, bbox_inches="tight")
+        if fig_xy is not None:
+            fig_xy.savefig(
+                os.path.splitext(save_path)[0] + "_xy.png", dpi=150, bbox_inches="tight"
+            )
         if policy_actions:
             fig_act.savefig(os.path.splitext(save_path)[0] + "_actions.png", dpi=150, bbox_inches="tight")
         print(f"已保存绘图到 {save_path}")
@@ -420,6 +480,9 @@ def main():
 
     z_history: List[float] = []
     euler_history: List[np.ndarray] = []
+    xy_history: List[np.ndarray] = []
+    xy_error_history: List[np.ndarray] = []
+    target_xy_history: List[np.ndarray] = []
     release_history: List[Tuple[int, int]] = []
     policy_actions: List[np.ndarray] = []
     teacher_actions: List[np.ndarray] = []
@@ -446,9 +509,13 @@ def main():
             pos = task.obs_dict["robot_position"][env_id].detach().cpu().numpy()
             quat = task.obs_dict["robot_orientation"][env_id : env_id + 1]
             euler = get_euler_xyz_tensor(quat)[0].detach().cpu().numpy()
+            target_pos = task.target_position[env_id].detach().cpu().numpy()
 
             z_history.append(pos[2])
             euler_history.append(euler)
+            xy_history.append(pos[:2].copy())
+            target_xy_history.append(target_pos[:2].copy())
+            xy_error_history.append((target_pos[:2] - pos[:2]).copy())
             policy_actions.append(actions[env_id].detach().cpu().numpy())
             if hasattr(task, "teacher_residual"):
                 teacher_actions.append(task.teacher_residual[env_id].detach().cpu().numpy())
@@ -466,7 +533,16 @@ def main():
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
     print("仿真结束，开始绘图...")
-    plot_results(z_history, euler_history, release_history, policy_actions, teacher_actions if teacher_actions else None)
+    plot_results(
+        z_history,
+        euler_history,
+        release_history,
+        policy_actions,
+        teacher_actions if teacher_actions else None,
+        xy_history=xy_history,
+        xy_error_history=xy_error_history,
+        target_xy_history=target_xy_history,
+    )
 
 
 if __name__ == "__main__":

@@ -99,7 +99,7 @@ class task_config:
         "release_start_range": [50, 100],
         "release_interval_range": [300, 350],
         "warning_steps": 100,
-        "randomize_release":   False,  # 初始验证先固定
+        "randomize_release":   True,  # 初始验证先固定
         "log_release_events": False,
     }
 
