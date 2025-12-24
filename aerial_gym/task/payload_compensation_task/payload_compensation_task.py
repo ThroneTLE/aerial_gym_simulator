@@ -1381,6 +1381,8 @@ class PayloadCompensationTask(BaseTask):
         if vec_root is None:
             return
         single_state = torch.zeros(13, device=self.device)
+        # 设置初始位置为 (3, 3, 3)
+        single_state[0:3] = torch.tensor([3.0, 3.0, 3.0], device=self.device)
         single_state[6] = 1.0
         if env_ids is None:
             vec_root[:, 0, :] = single_state

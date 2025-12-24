@@ -125,7 +125,7 @@ python -m aerial_gym.rl_training.rl_games.runner \
   --experiment_name teacher_residual_stage1 \
   --num_envs 8192 \
   --headless True \
-  --checkpoint runs/teacher_residual_stage1_07-09-09-59/nn/teacher_residual_stage1.pth
+  --checkpoint runs/teacher_residual_stage1_20-22-06-25/nn/teacher_residual_stage1.pth
 
 
 python -m aerial_gym.rl_training.rl_games.runner \
