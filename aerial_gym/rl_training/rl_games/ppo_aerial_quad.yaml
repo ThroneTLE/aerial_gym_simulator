@@ -41,7 +41,7 @@ params:
       layer_norm: True  # 对 GRU 层做 layer norm（稳定训练）
 
   config:
-    env_name: payload_compensation_task_teacher      # 任务名（可切换为 payload_compensation_task_full_rl）
+    env_name: payload_compensation_task_teacher
     env_config:
       num_envs: 2048  # 并行环境数量（决定一次采样的宽度）
       headless: True  # 关闭渲染
@@ -72,7 +72,7 @@ params:
     # 扰动样本优势加权（权重=1+coef*mask，mask 来自 infos['is_disturbance']）
     disturbance_adv_weight: 0.0
     # BC/DAgger 模仿损失系数（从 bc_coef 衰减到 bc_min_coef，乘 bc_alpha）
-    bc_coef: 0.1
+    bc_coef: 0.0
     bc_alpha: 0.999
     bc_min_coef: 0.1
     critic_coef: 1  # 价值损失权重（相对策略损失；大则稳定优势但可能拖慢策略更新）

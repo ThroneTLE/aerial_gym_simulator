@@ -60,6 +60,7 @@ def point_mass_inertia(mass: float, offset: np.ndarray) -> np.ndarray:
 
 @dataclass
 class PayloadConfig:
+    enable_payload: bool
     payload_mass: float
     offsets: Sequence[Sequence[float]]
     release_start: int
@@ -87,6 +88,7 @@ class PayloadManager:
 
         self.cfg = payload_cfg
 
+        self.enable_payload = payload_cfg.enable_payload
         self.payload_mass = payload_cfg.payload_mass
         self.offsets = torch.as_tensor(
             np.array(payload_cfg.offsets, dtype=np.float32), device=self.device
@@ -153,15 +155,24 @@ class PayloadManager:
     def reset(self, env_ids: Optional[torch.Tensor] = None):
         if env_ids is None:
             env_ids = torch.arange(self.num_envs, device=self.device)
-        self.attached_mask[env_ids] = True
+        if self.enable_payload:
+            self.attached_mask[env_ids] = True
+        else:
+            self.attached_mask[env_ids] = False
         self.step_counter[env_ids] = 0
-        self._assign_random_release_start(env_ids)
-        self._assign_random_release_order(env_ids)
+        if self.enable_payload:
+            self._assign_random_release_start(env_ids)#给每个环境分配“第一次释放的步数”，等步数到了就会释放。
+            self._assign_random_release_order(env_ids)#给每个环境分配“释放顺序”（payload 0/1/2/3 的释放顺序）。
+        else:
+            self.next_release_step[env_ids] = torch.iinfo(torch.int64).max
         self.release_cursor[env_ids] = 0
         self.last_release_index[env_ids] = -1
         self.last_release_mass[env_ids] = 0.0
         self.just_released_flag[env_ids] = False
-        self.current_payload_mass[env_ids] = self.num_payloads * self.payload_mass
+        if self.enable_payload:
+            self.current_payload_mass[env_ids] = self.num_payloads * self.payload_mass
+        else:
+            self.current_payload_mass[env_ids] = 0.0
         self.com_offset_body[env_ids] = 0.0
         self.release_warning_flag[env_ids] = False
         self._update_mass_properties(env_ids)
@@ -169,6 +180,9 @@ class PayloadManager:
     def step(self):
         self.just_released_flag[:] = False
         self.last_release_mass[:] = 0.0
+        if not self.enable_payload:
+            self.release_warning_flag[:] = False
+            return
         self.step_counter += 1
 
         candidates = torch.nonzero(
@@ -259,6 +273,18 @@ class PayloadManager:
         return self._sample_between(self.release_interval_range, self.release_interval)
 
     def _update_mass_properties(self, env_ids: torch.Tensor):
+        if not self.enable_payload:
+            env_id_list = env_ids.long().tolist()
+            for env_id in env_id_list:
+                self.current_payload_mass[env_id] = 0.0
+                self.com_offset_body[env_id] = 0.0
+                props = self.actor_props[env_id]
+                props[0].mass = float(self.base_mass[env_id].item())
+                props[0].inertia = _np_to_mat33(self.base_inertia[env_id].cpu().numpy())
+                self.gym.set_actor_rigid_body_properties(
+                    self.env_handles[env_id], self.robot_handles[env_id], props, recomputeInertia=False
+                )
+            return
         env_id_list = env_ids.long().tolist()
         for env_id in env_id_list:
             attached = self.attached_mask[env_id]
@@ -292,6 +318,8 @@ class PayloadManager:
             )
 
     def compute_world_torque(self) -> torch.Tensor:
+        if not self.enable_payload:
+            return torch.zeros((self.num_envs, 3), device=self.device)
         payload_mass = self.attached_mask.sum(dim=1) * self.payload_mass
         total_mass = self.base_mass + payload_mass
 
@@ -419,6 +447,19 @@ class PayloadCompensationTask(BaseTask):
             lee_controller_with_comp_config.control, "compensation_torque_limits", [0.5, 0.5, 0.1]
         )
         self.comp_torque_limits = torch.as_tensor(torque_limits, device=self.device)
+        # Teacher 前馈参数：释放瞬间的冲击补偿
+        ff_cfg = getattr(self.task_config, "release_feedforward_parameters", None) or {}
+        self.release_ff_enable = bool(ff_cfg.get("enable", True))
+        self.release_ff_steps = int(ff_cfg.get("steps", 20))
+        self.release_ff_decay = float(ff_cfg.get("decay", 0.85))
+        self.release_ff_torque_scale = float(ff_cfg.get("torque_scale", 1.0))
+        self.release_ff_thrust_scale = float(ff_cfg.get("thrust_scale", 0.0))
+        self.release_ff_log = bool(ff_cfg.get("log", False))
+        self.release_ff_log_path = str(ff_cfg.get("log_path", "")).strip()
+        self._release_ff_torque = torch.zeros((self.sim_env.num_envs, 3), device=self.device)
+        self._release_ff_thrust = torch.zeros(self.sim_env.num_envs, device=self.device)
+        self._release_ff_counter = torch.zeros(self.sim_env.num_envs, device=self.device, dtype=torch.long)
+        self._release_ff_log_count = 0
         # 教师模式：特权向量（载荷/惯量/扰动/分配矩阵等），raw 形式输出，由策略侧可训练编码器处理
         self.priv_vec_dim = 41
         self.priv_embed_dim = self.priv_vec_dim
@@ -426,6 +467,7 @@ class PayloadCompensationTask(BaseTask):
         self.target_position = torch.zeros(
             (self.sim_env.num_envs, 3), device=self.device, requires_grad=False
         )
+        self.target_velocity = torch.zeros_like(self.target_position)
         # 记录上一帧的位置误差范数，用于计算误差缩小奖励
         self.prev_pos_dist = torch.zeros(self.sim_env.num_envs, device=self.device)
         # 记录上一帧线速度，用于近似计算加速度惩罚
@@ -466,6 +508,7 @@ class PayloadCompensationTask(BaseTask):
         }
 
         payload_cfg = PayloadConfig(
+            enable_payload=self.task_config.payload_parameters.get("enable_payload", True),
             payload_mass=self.task_config.payload_parameters["payload_mass"],
             offsets=self.task_config.payload_parameters["offsets"],
             release_start=self.task_config.payload_parameters["release_start"],
@@ -499,6 +542,18 @@ class PayloadCompensationTask(BaseTask):
         )
         self.obs_noise_std = rand_cfg.get("obs_noise_std", {})
 
+        self.trajectory_cfg = getattr(self.task_config, "trajectory_parameters", None) or {}
+        self.trajectory_enabled = bool(self.trajectory_cfg.get("enable", False))
+        self.trajectory_loop = bool(self.trajectory_cfg.get("loop", False))
+        sim_cfg = getattr(self.sim_env, "sim_config", None)
+        self.trajectory_dt = float(getattr(getattr(sim_cfg, "sim", None), "dt", 0.01))
+        self.trajectory_buffer = None
+        self.trajectory_step = torch.zeros(
+            self.sim_env.num_envs, device=self.device, dtype=torch.long
+        )
+        if self.trajectory_enabled:
+            self._build_trajectories()
+
         curriculum_cfg = getattr(self.task_config, "curriculum_parameters", None)
         self.curriculum_target_ranges = None
         self.curriculum_stage_steps = None
@@ -524,13 +579,23 @@ class PayloadCompensationTask(BaseTask):
         orig_pre_physics_step = robot_manager.pre_physics_step
         payload_manager = self.payload_manager
         sim_env = self.sim_env
+        payload_cfg = getattr(self.task_config, "payload_parameters", {}) or {}
+        log_payload_torque = bool(payload_cfg.get("log_payload_torque", False))
+        log_payload_torque_path = str(payload_cfg.get("payload_torque_log_path", "")).strip()
+        log_payload_torque_interval = int(payload_cfg.get("payload_torque_log_interval", 200))
+        if log_payload_torque and not log_payload_torque_path:
+            log_payload_torque_path = "logs/payload_torque.log"
+        if log_payload_torque and log_payload_torque_path:
+            log_dir = os.path.dirname(log_payload_torque_path)
+            if log_dir:
+                os.makedirs(log_dir, exist_ok=True)
+        log_state = {"count": 0}
 
         def patched_pre_physics_step(actions, _orig=orig_pre_physics_step):
             _orig(actions)
             orientations = sim_env.IGE_env.global_tensor_dict["robot_orientation"]
             body_torque = payload_manager.compute_body_torque(orientations)
             sim_env.robot_manager.robot.robot_torque_tensors[:, 0, :] += body_torque
-
         robot_manager.pre_physics_step = patched_pre_physics_step
 
     def close(self):
@@ -559,16 +624,31 @@ class PayloadCompensationTask(BaseTask):
 
         if env_tensor is None:
             self.target_position[:, 0:3] = 0.0
+            self.target_velocity[:, 0:3] = 0.0
             self.prev_pos_dist[:] = 0.0
         else:
             self.target_position[env_tensor.long(), 0:3] = 0.0
+            self.target_velocity[env_tensor.long(), 0:3] = 0.0
             self.prev_pos_dist[env_tensor.long()] = 0.0
 
         if reset_payload_manager:
             self.payload_manager.reset(env_ids=env_tensor)
 
         self._initialize_vehicle_state(env_ids=env_tensor)
-        self._randomize_target_positions(env_tensor)
+        if hasattr(self, "_release_ff_counter"):
+            if env_tensor is None:
+                self._release_ff_counter.zero_()
+                self._release_ff_torque.zero_()
+                self._release_ff_thrust.zero_()
+                self._release_ff_log_count = 0
+            else:
+                self._release_ff_counter[env_tensor] = 0
+                self._release_ff_torque[env_tensor] = 0.0
+                self._release_ff_thrust[env_tensor] = 0.0
+        if self.trajectory_enabled:
+            self._reset_trajectories(env_tensor)
+        else:
+            self._randomize_target_positions(env_tensor)
         self._apply_initial_state_noise(env_tensor)
         self._log_debug_reset(env_tensor if env_tensor is not None else None)
 
@@ -589,6 +669,7 @@ class PayloadCompensationTask(BaseTask):
         self.actions = actions
 
         self.payload_manager.step()
+        self._update_target_from_trajectory()
         self._advance_curriculum_if_needed()
         if self.teacher_mode:
             self._update_teacher_residual()
@@ -633,6 +714,9 @@ class PayloadCompensationTask(BaseTask):
 
         self.controller_actions[:, 4] = clamped_actions[:, 0]
         self.controller_actions[:, 5:] = clamped_actions[:, 1:]
+        controller = self.sim_env.robot_manager.robot.controller
+        if getattr(controller, "use_velocity_feedforward", False):
+            controller.ff_velocity[:] = self.target_velocity
 
         self.sim_env.step(actions=self.controller_actions)
 
@@ -698,10 +782,24 @@ class PayloadCompensationTask(BaseTask):
         )
 
         # 模仿专家残差（仅 Teacher 模式生效）
-        imitation_w = float(reward_params.get("imitation_weight", 0.0))
-        if self.teacher_mode and imitation_w > 0.0:
-            imit_penalty = torch.mean((clamped_actions - self.teacher_residual) ** 2, dim=1)
-            self.rewards -= imitation_w * imit_penalty
+        imitation_thrust_w = reward_params.get("imitation_thrust_weight", None)
+        imitation_torque_w = reward_params.get("imitation_torque_weight", None)
+        if imitation_thrust_w is None and imitation_torque_w is None:
+            imitation_w = float(reward_params.get("imitation_weight", 0.0))
+            if self.teacher_mode and imitation_w > 0.0:
+                imit_penalty = torch.mean((clamped_actions - self.teacher_residual) ** 2, dim=1)
+                self.rewards -= imitation_w * imit_penalty
+        else:
+            thrust_w = float(imitation_thrust_w or 0.0)
+            torque_w = float(imitation_torque_w or 0.0)
+            if self.teacher_mode and (thrust_w != 0.0 or torque_w != 0.0):
+                diff = clamped_actions - self.teacher_residual
+                thrust_penalty = diff[:, 0] ** 2
+                if diff.shape[1] > 1:
+                    torque_penalty = torch.mean(diff[:, 1:] ** 2, dim=1)
+                else:
+                    torque_penalty = torch.zeros_like(thrust_penalty)
+                self.rewards -= thrust_w * thrust_penalty + torque_w * torque_penalty
 
         # 补充 TB 记录：位置/姿态基础项（均为 batch 均值）
         if hasattr(self, "_last_reward_components") and isinstance(self._last_reward_components, dict):
@@ -1159,8 +1257,11 @@ class PayloadCompensationTask(BaseTask):
     def _update_teacher_residual(self):
         """Compute teacher residual (normalized) using privileged mass/COM."""
         orientations = self.obs_dict["robot_orientation"]
-        tau_payload = self.payload_manager.compute_body_torque(orientations)
-        self._last_tau_payload = tau_payload.detach()
+        if self.payload_manager.enable_payload:
+            tau_payload = self.payload_manager.compute_body_torque(orientations)
+        else:
+            tau_payload = torch.zeros((self.sim_env.num_envs, 3), device=self.device)
+        prev_tau_payload = self._last_tau_payload
         residual = torch.zeros_like(self.teacher_residual)
         # 惯量差补偿：使用 gyroscopic 项近似 tau_true - tau_base
         angvel = self.obs_dict["robot_body_angvel"]
@@ -1174,18 +1275,90 @@ class PayloadCompensationTask(BaseTask):
 
         torque_limits = self.comp_torque_limits.view(1, 3).clamp(min=1e-6)
         total_tau = -tau_payload + tau_inertia
+        if self.release_ff_enable and self.release_ff_steps > 0:
+            just_released = self.payload_manager.just_released_flag
+            if just_released.any():
+                delta_tau = prev_tau_payload - tau_payload
+                self._release_ff_torque[just_released] = (
+                    self.release_ff_torque_scale * delta_tau[just_released]
+                )
+                self._release_ff_thrust[just_released] = 0.0
+                if self.release_ff_thrust_scale != 0.0:
+                    mass_delta = self.payload_manager.last_release_mass[just_released]
+                    self._release_ff_thrust[just_released] = (
+                        self.release_ff_thrust_scale
+                        * torch.abs(self.payload_manager.gravity[2])
+                        * mass_delta
+                    )
+                self._release_ff_counter[just_released] = self.release_ff_steps
+                if (self.release_ff_log or self.release_ff_log_path) and self._release_ff_log_count < 5:
+                    env_ids = just_released.nonzero(as_tuple=False).squeeze(-1).tolist()
+                    for env_id in env_ids[:3]:
+                        prev_tau = prev_tau_payload[env_id].detach().cpu().numpy()
+                        curr_tau = tau_payload[env_id].detach().cpu().numpy()
+                        ff_tau = self._release_ff_torque[env_id].detach().cpu().numpy()
+                        comp_limits = self.comp_torque_limits.detach().cpu().numpy()
+                        comp_torque = np.round(ff_tau, 6).tolist()
+                        msg = (
+                            "[ReleaseFF] env=%d tau_prev=%s tau_curr=%s delta=%s ff=%s "
+                            "norms(prev=%.4f curr=%.4f ff=%.4f) comp_limits=%s comp_torque=%s\n"
+                            % (
+                                env_id,
+                                np.round(prev_tau, 6).tolist(),
+                                np.round(curr_tau, 6).tolist(),
+                                np.round(prev_tau - curr_tau, 6).tolist(),
+                                np.round(ff_tau, 6).tolist(),
+                                float(np.linalg.norm(prev_tau)),
+                                float(np.linalg.norm(curr_tau)),
+                                float(np.linalg.norm(ff_tau)),
+                                np.round(comp_limits, 6).tolist(),
+                                comp_torque,
+                            )
+                        )
+                        if self.release_ff_log_path:
+                            log_dir = os.path.dirname(self.release_ff_log_path)
+                            if log_dir:
+                                os.makedirs(log_dir, exist_ok=True)
+                            with open(self.release_ff_log_path, "a", encoding="utf-8") as f:
+                                f.write(msg)
+                        elif self.release_ff_log:
+                            logger.info(msg.strip())
+                    self._release_ff_log_count += 1
+            active = self._release_ff_counter > 0
+            if active.any():
+                total_tau[active] = total_tau[active] + self._release_ff_torque[active]
+                self._release_ff_torque[active] = (
+                    self._release_ff_torque[active] * self.release_ff_decay
+                )
+                self._release_ff_thrust[active] = (
+                    self._release_ff_thrust[active] * self.release_ff_decay
+                )
+                self._release_ff_counter[active] -= 1
         residual[:, 1:] = torch.clamp(total_tau / torque_limits, -1.0, 1.0)
         if self.fix_yaw_residual_zero:
             residual[:, 3] = 0.0
         # thrust 补偿：名义控制未包含载荷质量，补齐 payload 重力
-        mass_delta = self.payload_manager.current_payload_mass  # 真实-名义
+        if self.payload_manager.enable_payload:
+            mass_delta = self.payload_manager.current_payload_mass  # 真实-名义
+        else:
+            mass_delta = torch.zeros(self.sim_env.num_envs, device=self.device)
         if self.comp_thrust_limit > 1e-6:
             thrust_extra = torch.abs(self.payload_manager.gravity[2]) * mass_delta
             residual[:, 0] = torch.clamp(thrust_extra / self.comp_thrust_limit, -1.0, 1.0)
+        if self.release_ff_enable and self.release_ff_steps > 0:
+            active = self._release_ff_counter > 0
+            if active.any() and self.comp_thrust_limit > 1e-6:
+                ff = torch.clamp(
+                    self._release_ff_thrust[active] / self.comp_thrust_limit, -1.0, 1.0
+                )
+                residual[active, 0] = residual[active, 0] + ff
         self.teacher_residual = residual
+        self._last_tau_payload = tau_payload.detach()
 
     def _compute_true_inertia(self):
         """Recompute true inertia tensor from base + attached payloads."""
+        if not self.payload_manager.enable_payload:
+            return self.payload_manager.base_inertia_nominal.clone()
         inertia = self.payload_manager.base_inertia_nominal.clone()
         attached = self.payload_manager.attached_mask
         for idx in range(self.payload_manager.num_payloads):
@@ -1195,6 +1368,170 @@ class PayloadCompensationTask(BaseTask):
             point_I = torch.as_tensor(point_I, device=self.device, dtype=torch.float32).unsqueeze(0)
             inertia += point_I * mask.view(-1, 1, 1)
         return inertia
+
+    def _reset_trajectories(self, env_ids=None):
+        if not self.trajectory_enabled:
+            return
+        env_tensor = self._get_env_tensor(env_ids)
+        if env_tensor.numel() == 0:
+            return
+        randomize = bool(self.trajectory_cfg.get("randomize_each_reset", True))
+        if self.trajectory_buffer is None or randomize:
+            self._build_trajectories(env_tensor)
+        self.trajectory_step[env_tensor] = 0
+        if self.trajectory_buffer is not None:
+            self.target_position[env_tensor] = self.trajectory_buffer[env_tensor, 0]
+
+    def _build_trajectories(self, env_ids=None):
+        env_tensor = self._get_env_tensor(env_ids)
+        if env_tensor.numel() == 0:
+            return
+        steps = int(self.task_config.episode_len_steps)
+        traj = self._sample_random_trajectories(env_tensor.shape[0], steps)
+        if (
+            self.trajectory_buffer is None
+            or self.trajectory_buffer.shape[0] != self.sim_env.num_envs
+            or self.trajectory_buffer.shape[1] != steps
+        ):
+            self.trajectory_buffer = torch.zeros(
+                (self.sim_env.num_envs, steps, 3), device=self.device
+            )
+        self.trajectory_buffer[env_tensor] = traj
+
+    def _update_target_from_trajectory(self):
+        if not self.trajectory_enabled or self.trajectory_buffer is None:
+            return
+        steps = self.trajectory_buffer.shape[1]
+        env_ids = torch.arange(self.sim_env.num_envs, device=self.device, dtype=torch.long)
+        if self.trajectory_loop:
+            idx = self.trajectory_step % steps
+        else:
+            idx = torch.clamp(self.trajectory_step, max=steps - 1)
+        self.target_position[:] = self.trajectory_buffer[env_ids, idx]
+        if self.trajectory_loop:
+            idx_prev = (idx - 1) % steps
+        else:
+            idx_prev = torch.clamp(idx - 1, min=0)
+        dt = max(self.trajectory_dt, 1e-6)
+        self.target_velocity[:] = (
+            self.trajectory_buffer[env_ids, idx] - self.trajectory_buffer[env_ids, idx_prev]
+        ) / dt
+        if self.trajectory_loop:
+            self.trajectory_step = (self.trajectory_step + 1) % steps
+        else:
+            self.trajectory_step = torch.clamp(self.trajectory_step + 1, max=steps - 1)
+
+    def _sample_random_trajectories(self, num_envs: int, steps: int) -> torch.Tensor:
+        cfg = self.trajectory_cfg
+        device = self.device
+        dt = max(self.trajectory_dt, 1e-6)
+        episode_time = max((steps - 1) * dt, dt)
+        t = torch.linspace(0.0, episode_time, steps, device=device).unsqueeze(0).expand(num_envs, -1)
+
+        freq_range = cfg.get("freq_range_hz", cfg.get("freq_range", [0.05, 0.25]))
+        amp_range = cfg.get("amp_range", [0.6, 2.5])
+        num_harmonics = int(cfg.get("num_harmonics", 2))
+        freq_min, freq_max = float(freq_range[0]), float(freq_range[1])
+        amp_min, amp_max = float(amp_range[0]), float(amp_range[1])
+
+        def _sample_params():
+            freqs = torch.rand((num_envs, num_harmonics), device=device) * (freq_max - freq_min) + freq_min
+            phases = torch.rand((num_envs, num_harmonics), device=device) * 2.0 * np.pi
+            amps = torch.rand((num_envs, num_harmonics), device=device) * (amp_max - amp_min) + amp_min
+            return freqs, phases, amps
+
+        freqs_x, phases_x, amps_x = _sample_params()
+        freqs_y, phases_y, amps_y = _sample_params()
+        freqs_z, phases_z, amps_z = _sample_params()
+
+        angles_x = 2.0 * np.pi * freqs_x.unsqueeze(-1) * t.unsqueeze(1) + phases_x.unsqueeze(-1)
+        angles_y = 2.0 * np.pi * freqs_y.unsqueeze(-1) * t.unsqueeze(1) + phases_y.unsqueeze(-1)
+        angles_z = 2.0 * np.pi * freqs_z.unsqueeze(-1) * t.unsqueeze(1) + phases_z.unsqueeze(-1)
+
+        x = torch.sum(amps_x.unsqueeze(-1) * torch.sin(angles_x), dim=1)
+        y = torch.sum(amps_y.unsqueeze(-1) * torch.sin(angles_y), dim=1)
+        z = torch.sum(amps_z.unsqueeze(-1) * torch.sin(angles_z), dim=1)
+
+        if bool(cfg.get("spiral", True)):
+            radius_range = cfg.get("spiral_radius_range", [0.5, 2.5])
+            radius_mod_range = cfg.get("spiral_radius_mod_range", [0.2, 1.0])
+            radius_freq_range = cfg.get("spiral_radius_freq_range", [0.05, 0.2])
+            theta_freq_range = cfg.get("spiral_theta_freq_range", [0.05, 0.2])
+
+            r0 = torch.rand(num_envs, device=device) * (radius_range[1] - radius_range[0]) + radius_range[0]
+            rmod = torch.rand(num_envs, device=device) * (radius_mod_range[1] - radius_mod_range[0]) + radius_mod_range[0]
+            r_freq = torch.rand(num_envs, device=device) * (radius_freq_range[1] - radius_freq_range[0]) + radius_freq_range[0]
+            theta_freq = torch.rand(num_envs, device=device) * (theta_freq_range[1] - theta_freq_range[0]) + theta_freq_range[0]
+            r_phase = torch.rand(num_envs, device=device) * 2.0 * np.pi
+            theta_phase = torch.rand(num_envs, device=device) * 2.0 * np.pi
+
+            r = r0[:, None] + rmod[:, None] * torch.sin(2.0 * np.pi * r_freq[:, None] * t + r_phase[:, None])
+            theta = 2.0 * np.pi * theta_freq[:, None] * t + theta_phase[:, None]
+            x = x + r * torch.cos(theta)
+            y = y + r * torch.sin(theta)
+
+        z_drift_range = cfg.get("z_drift_range", [-0.5, 0.5])
+        z_drift = torch.rand(num_envs, device=device) * (z_drift_range[1] - z_drift_range[0]) + z_drift_range[0]
+        z = z + z_drift[:, None] * (t / episode_time)
+
+        pos = torch.stack([x, y, z], dim=2)
+        pos = pos - pos[:, 0:1, :]
+
+        ramp_steps = int(cfg.get("ramp_steps", 50))
+        if ramp_steps > 0:
+            ramp_steps = min(ramp_steps, steps)
+            ramp = 0.5 - 0.5 * torch.cos(
+                torch.linspace(0.0, np.pi, ramp_steps, device=device)
+            )
+            scale = torch.ones(steps, device=device)
+            scale[:ramp_steps] = ramp
+            pos = pos * scale.view(1, steps, 1)
+
+        space_min = torch.as_tensor(cfg.get("space_min", [-3.0, -3.0, -1.0]), device=device)
+        space_max = torch.as_tensor(cfg.get("space_max", [3.0, 3.0, 4.0]), device=device)
+
+        abs_x = torch.max(torch.abs(pos[:, :, 0]), dim=1).values
+        abs_y = torch.max(torch.abs(pos[:, :, 1]), dim=1).values
+        scale_x = torch.where(abs_x > 1e-6, torch.minimum(space_max[0] / abs_x, torch.ones_like(abs_x)), torch.ones_like(abs_x))
+        scale_y = torch.where(abs_y > 1e-6, torch.minimum(space_max[1] / abs_y, torch.ones_like(abs_y)), torch.ones_like(abs_y))
+
+        z_min = torch.min(pos[:, :, 2], dim=1).values
+        z_max = torch.max(pos[:, :, 2], dim=1).values
+        z_max_safe = torch.where(torch.abs(z_max) > 1e-6, z_max, torch.ones_like(z_max))
+        z_min_safe = torch.where(torch.abs(z_min) > 1e-6, z_min, -torch.ones_like(z_min))
+        scale_z_pos = torch.where(z_max > 0.0, space_max[2] / z_max_safe, torch.ones_like(z_max))
+        scale_z_neg = torch.where(z_min < 0.0, space_min[2] / z_min_safe, torch.ones_like(z_min))
+        scale_z = torch.minimum(scale_z_pos, scale_z_neg)
+        scale_z = torch.minimum(scale_z, torch.ones_like(scale_z))
+
+        pos[:, :, 0] = pos[:, :, 0] * scale_x[:, None]
+        pos[:, :, 1] = pos[:, :, 1] * scale_y[:, None]
+        pos[:, :, 2] = pos[:, :, 2] * scale_z[:, None]
+
+        max_speed = float(cfg.get("max_speed", 3.0))
+        if max_speed > 0.0:
+            vel = (pos[:, 1:, :] - pos[:, :-1, :]) / dt
+            speed = torch.norm(vel, dim=2)
+            peak_speed = torch.max(speed, dim=1).values
+            speed_scale = torch.minimum(
+                torch.ones_like(peak_speed),
+                max_speed / (peak_speed + 1e-6),
+            )
+            pos = pos * speed_scale[:, None, None]
+
+        max_accel = float(cfg.get("max_accel", 0.0))
+        if max_accel > 0.0 and steps > 2:
+            vel = (pos[:, 1:, :] - pos[:, :-1, :]) / dt
+            accel = (vel[:, 1:, :] - vel[:, :-1, :]) / dt
+            accel_mag = torch.norm(accel, dim=2)
+            peak_accel = torch.max(accel_mag, dim=1).values
+            accel_scale = torch.minimum(
+                torch.ones_like(peak_accel),
+                max_accel / (peak_accel + 1e-6),
+            )
+            pos = pos * accel_scale[:, None, None]
+
+        return pos
 
     def _randomize_target_positions(self, env_ids=None):
         range_tensor = self.current_target_range_tensor

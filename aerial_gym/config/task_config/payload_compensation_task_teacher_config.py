@@ -23,9 +23,18 @@ class task_config:
     dagger_use_postmix_err = True  # 使用混合后的 imitation err 作为衰减判定，和 TB 曲线一致
     fix_yaw_residual_zero = True   # 教师残差的 yaw 力矩固定为 0
 
-    episode_len_steps = 1500
+    episode_len_steps = 3000
     return_state_before_reset = False
     teacher_mode = True  # 启用特权/模仿
+    release_feedforward_parameters = {
+        "enable": True,
+        "steps": 25,
+        "decay": 0.85,
+        "torque_scale": 1.0,
+        "thrust_scale": 0.0,
+        "log": False,
+        "log_path": "logs/release_ff.log",
+    }
 
     # 奖励仿照 xadapt：存活奖励为主，角速度/线加速度/动作振荡惩罚，移除位置/补偿项，模仿不计入 reward
     reward_parameters = {
@@ -37,8 +46,8 @@ class task_config:
         "comp_thrust_penalty_coef": 0.0,
         # 线速度惩罚关闭，改用线加速度惩罚
         "velocity_penalty_coef": 0.0,
-        "angvel_penalty_coef": 0.700, #0.2
-        "action_smoothness_coef": 1.6000, #0.06
+        "angvel_penalty_coef": 0.600, #0.2
+        "action_smoothness_coef": 1.8000, #0.06
         "tilt_warning_deg": 0.0,
         "tilt_warning_penalty": 0.0,
         "height_warning": 0.0,
@@ -78,16 +87,22 @@ class task_config:
         "tilt_excess_coef": 0.0,
         "tilt_excess_exp": 0.0,
         # 模仿不计入 reward，如需监督请在损失里加
-        "imitation_weight": 8.0,
+        "imitation_weight": 16.0,  # legacy fallback
+        "imitation_thrust_weight": 0.0,
+        "imitation_torque_weight": 0.0,
         # 存活奖励
         "survive_bonus": 10.0,
     }
 
-    crash_distance_threshold = 5.0
-    crash_tilt_threshold_deg = 20.0
+    crash_distance_threshold = 30.0
+    crash_tilt_threshold_deg = 200.0
 
     payload_parameters = {
+        "enable_payload": True,
         "payload_mass": 0.02,
+        "log_payload_torque": True,
+        "payload_torque_log_path": "logs/payload_torque.log",
+        "payload_torque_log_interval": 1,
         "offsets": [
             [0.4, 0.4, -0.4],
             [0.4, -0.4, -0.4],
@@ -98,9 +113,30 @@ class task_config:
         "release_interval": 300,
         "release_start_range": [50, 100],
         "release_interval_range": [300, 350],
-        "warning_steps": 100,
+        "warning_steps": 50,
         "randomize_release":   True,  # 初始验证先固定
         "log_release_events": False,
+    }
+
+    trajectory_parameters = {
+        "enable": False,
+        "type": "random_mix",
+        "space_min": [-3.0, -3.0, -1.0],
+        "space_max": [3.0, 3.0, 4.0],
+        "max_speed": 0.6,
+        "max_accel": 0.6,
+        "ramp_steps": 400,
+        "num_harmonics": 1,
+        "freq_range_hz": [0.02, 0.05],
+        "amp_range": [0.5, 1.2],
+        "spiral": False,
+        "spiral_radius_range": [0.5, 1.5],
+        "spiral_radius_mod_range": [0.2, 0.6],
+        "spiral_radius_freq_range": [0.05, 0.15],
+        "spiral_theta_freq_range": [0.05, 0.15],
+        "z_drift_range": [-0.1, 0.1],
+        "loop": False,
+        "randomize_each_reset": True,
     }
 
     randomization_parameters = False

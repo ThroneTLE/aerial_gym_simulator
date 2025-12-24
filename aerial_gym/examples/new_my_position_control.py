@@ -133,7 +133,7 @@ def _str2bool(value):
 def parse_args():
     parser = argparse.ArgumentParser(description="Payload compensation policy rollout.")
     parser.add_argument("--num_envs", type=int, default=1024, help="并行环境数量（建议 1 用于绘图）")
-    parser.add_argument("--steps", type=int, default=3000, help="仿真步数")
+    parser.add_argument("--steps", type=int, default=1500, help="仿真步数")
     parser.add_argument(
         "--headless",
         type=_str2bool,
@@ -297,6 +297,9 @@ def plot_results(
     pos_history=None,
     target_history=None,
     ideal_circle=None,
+    thrust_pd_history=None,
+    thrust_teacher_history=None,
+    thrust_policy_history=None,
 ):
     if not z_history:
         print("无可绘制数据。")
@@ -398,6 +401,39 @@ def plot_results(
             ax_err.set_title("圆轨迹径向误差")
             ax_err.grid(True)
 
+    fig_thrust = None
+    if thrust_pd_history or thrust_teacher_history or thrust_policy_history:
+        fig_thrust, ax_thrust = plt.subplots(1, 1, figsize=(10, 4))
+        if thrust_pd_history:
+            ax_thrust.plot(
+                np.arange(len(thrust_pd_history)),
+                thrust_pd_history,
+                label="纯PD",
+                color="C2",
+            )
+        if thrust_teacher_history:
+            ax_thrust.plot(
+                np.arange(len(thrust_teacher_history)),
+                thrust_teacher_history,
+                label="专家系统",
+                color="C1",
+                linestyle="--",
+            )
+        if thrust_policy_history:
+            ax_thrust.plot(
+                np.arange(len(thrust_policy_history)),
+                thrust_policy_history,
+                label="RL策略",
+                color="C0",
+            )
+        for release_step, _ in release_history:
+            ax_thrust.axvline(release_step, color="r", linestyle=":", alpha=0.5)
+        ax_thrust.set_xlabel("步数")
+        ax_thrust.set_ylabel("推力 (N)")
+        ax_thrust.set_title("总输出推力对比")
+        ax_thrust.grid(True)
+        ax_thrust.legend()
+
     # 补偿动作对比：策略输出 vs 教师残差（如有）
     if policy_actions:
         act_arr = np.vstack(policy_actions)
@@ -423,6 +459,10 @@ def plot_results(
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         fig.savefig(save_path, dpi=150, bbox_inches="tight")
+        if fig_thrust is not None:
+            fig_thrust.savefig(
+                os.path.splitext(save_path)[0] + "_thrust.png", dpi=150, bbox_inches="tight"
+            )
         if policy_actions:
             fig_act.savefig(os.path.splitext(save_path)[0] + "_actions.png", dpi=150, bbox_inches="tight")
         print(f"已保存绘图到 {save_path}")
@@ -492,6 +532,18 @@ def main():
     release_history: List[Tuple[int, int]] = []
     policy_actions: List[np.ndarray] = []
     teacher_actions: List[np.ndarray] = []
+    thrust_pd_history: List[float] = []
+    thrust_teacher_history: List[float] = []
+    thrust_policy_history: List[float] = []
+
+    comp_thrust_limit = getattr(task, "comp_thrust_limit", None)
+    if comp_thrust_limit is None:
+        controller = getattr(task.sim_env.robot_manager.robot, "controller", None)
+        comp_thrust_limit = getattr(controller, "comp_thrust_limit", None) if controller else None
+    if torch.is_tensor(comp_thrust_limit):
+        comp_thrust_limit = float(comp_thrust_limit.view(-1)[0].item())
+    elif comp_thrust_limit is not None:
+        comp_thrust_limit = float(comp_thrust_limit)
 
     with torch.no_grad():
         for step in range(args.steps):
@@ -512,6 +564,25 @@ def main():
                     policy.reset_hidden_state(env_ids=reset_envs.tolist())
 
             env_id = 0
+            controller = getattr(task.sim_env.robot_manager.robot, "controller", None)
+            total_thrust = None
+            if controller is not None and hasattr(controller, "wrench_command"):
+                total_thrust = float(
+                    controller.wrench_command[env_id, 2].detach().cpu().item()
+                )
+            if total_thrust is not None and comp_thrust_limit is not None:
+                applied_actions = task.actions if hasattr(task, "actions") else actions
+                policy_comp = float(
+                    applied_actions[env_id, 0].detach().cpu().item()
+                ) * comp_thrust_limit
+                base_thrust = total_thrust - policy_comp
+                thrust_pd_history.append(base_thrust)
+                thrust_policy_history.append(total_thrust)
+                if hasattr(task, "teacher_residual"):
+                    teacher_comp = float(
+                        task.teacher_residual[env_id, 0].detach().cpu().item()
+                    ) * comp_thrust_limit
+                    thrust_teacher_history.append(base_thrust + teacher_comp)
             pos = task.obs_dict["robot_position"][env_id].detach().cpu().numpy()
             tgt = task.target_position[env_id].detach().cpu().numpy()
             quat = task.obs_dict["robot_orientation"][env_id : env_id + 1]
@@ -569,6 +640,9 @@ def main():
         pos_history=pos_history,
         target_history=target_history,
         ideal_circle=ideal_circle,
+        thrust_pd_history=thrust_pd_history,
+        thrust_teacher_history=thrust_teacher_history,
+        thrust_policy_history=thrust_policy_history,
     )
 
 

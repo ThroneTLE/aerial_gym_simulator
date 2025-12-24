@@ -1,6 +1,7 @@
 """Minimal example showing payload release by editing mass properties only."""
 from __future__ import annotations
 
+import os
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 import numpy as np
@@ -36,6 +37,203 @@ PAYLOAD_OFFSETS = [
 PAYLOAD_MASS = 0.02  # kg
 RELEASE_START_STEP = 400
 RELEASE_INTERVAL = 200
+RELEASE_START_RANGE = (max(0, RELEASE_START_STEP - 100), RELEASE_START_STEP + 100)
+RELEASE_INTERVAL_RANGE = (max(1, RELEASE_INTERVAL - 50), RELEASE_INTERVAL + 50)
+RANDOMIZE_RELEASE = True
+
+
+def _add_axis_sliders(fig, axes):
+    fig.subplots_adjust(bottom=0.25)
+    slider_color = "#24a8a8"
+    ax_xscale = fig.add_axes([0.15, 0.1, 0.7, 0.03], facecolor=slider_color)
+    ax_yscale = fig.add_axes([0.15, 0.05, 0.7, 0.03], facecolor=slider_color)
+    slider_x = Slider(ax_xscale, "X轴缩放", 0.2, 5.0, valinit=1.0)
+    slider_y = Slider(ax_yscale, "Y轴缩放", 0.2, 5.0, valinit=1.0)
+
+    base_limits = {axis: {"x": axis.get_xlim(), "y": axis.get_ylim()} for axis in axes}
+
+    def _apply_scale(_):
+        x_scale = slider_x.val
+        y_scale = slider_y.val
+
+        for axis in axes:
+            base_xlim = base_limits[axis]["x"]
+            base_ylim = base_limits[axis]["y"]
+
+            x_mid = 0.5 * (base_xlim[0] + base_xlim[1])
+            x_span = (base_xlim[1] - base_xlim[0]) / x_scale
+            axis.set_xlim(x_mid - 0.5 * x_span, x_mid + 0.5 * x_span)
+
+            y_mid = 0.5 * (base_ylim[0] + base_ylim[1])
+            y_span = (base_ylim[1] - base_ylim[0]) / y_scale
+            axis.set_ylim(y_mid - 0.5 * y_span, y_mid + 0.5 * y_span)
+
+        fig.canvas.draw_idle()
+
+    slider_x.on_changed(_apply_scale)
+    slider_y.on_changed(_apply_scale)
+    return slider_x, slider_y
+
+
+def plot_results(
+    z_history,
+    euler_history,
+    release_history,
+    policy_actions,
+    teacher_actions=None,
+    xy_history=None,
+    xy_error_history=None,
+    target_xy_history=None,
+):
+    if not z_history:
+        print("无可绘制数据。")
+        return
+
+    steps = np.arange(len(z_history))
+    eulers = np.unwrap(np.array(euler_history), axis=0)
+    eulers_deg = np.rad2deg(eulers)
+    eulers_deg -= np.round(eulers_deg[0] / 360.0) * 360.0
+
+    fig, (ax_z, ax_euler) = plt.subplots(2, 1, figsize=(10, 8))
+
+    ax_z.plot(steps, z_history, label="Z 轴高度")
+    ax_z.set_xlabel("步数")
+    ax_z.set_ylabel("Z 轴高度 (米)")
+    ax_z.set_title("无人机 Z 轴位置曲线")
+    ax_z.grid(True)
+    ax_z.legend()
+
+    for release_step, payload_idx in release_history:
+        ax_z.axvline(release_step, color="r", linestyle="--", alpha=0.6)
+        ax_z.text(
+            release_step,
+            ax_z.get_ylim()[1],
+            f"释放 {payload_idx}",
+            color="r",
+            fontsize=9,
+            verticalalignment="top",
+            horizontalalignment="center",
+            rotation=90,
+        )
+
+    ax_euler.plot(steps, eulers_deg[:, 0], label="Roll (°)")
+    ax_euler.plot(steps, eulers_deg[:, 1], label="Pitch (°)")
+    ax_euler.plot(steps, eulers_deg[:, 2], label="Yaw (°)")
+    ax_euler.set_xlabel("步数")
+    ax_euler.set_ylabel("角度 (°)")
+    ax_euler.set_title("无人机姿态角 (XYZ)")
+    ax_euler.grid(True)
+    ax_euler.legend()
+
+    _add_axis_sliders(fig, [ax_z, ax_euler])
+
+    fig_xy = None
+    if xy_history:
+        xy_arr = np.vstack(xy_history)
+        steps_xy = np.arange(xy_arr.shape[0])
+        target_xy_arr = np.vstack(target_xy_history) if target_xy_history else None
+        xy_err_arr = np.vstack(xy_error_history) if xy_error_history else None
+
+        fig_xy, (ax_xy, ax_xy_err) = plt.subplots(2, 1, figsize=(10, 8))
+        ax_xy.plot(xy_arr[:, 0], xy_arr[:, 1], label="轨迹", color="C0")
+        ax_xy.scatter(
+            xy_arr[0, 0],
+            xy_arr[0, 1],
+            label="起点",
+            facecolors="none",
+            edgecolors="#2ca02c",
+            s=120,
+            linewidth=1.5,
+            zorder=6,
+        )
+        ax_xy.scatter(
+            xy_arr[-1, 0],
+            xy_arr[-1, 1],
+            label="终点",
+            color="#d62728",
+            s=110,
+            marker="^",
+            edgecolor="k",
+            linewidth=0.5,
+            zorder=5,
+        )
+        if target_xy_arr is not None:
+            ax_xy.plot(target_xy_arr[:, 0], target_xy_arr[:, 1], label="目标", color="C1", linestyle="--")
+            ax_xy.scatter(
+                target_xy_arr[-1, 0],
+                target_xy_arr[-1, 1],
+                color="C1",
+                marker="x",
+                s=60,
+            )
+        for release_step, _ in release_history:
+            if 0 <= release_step < xy_arr.shape[0]:
+                ax_xy.scatter(xy_arr[release_step, 0], xy_arr[release_step, 1], color="r", s=30)
+        ax_xy.set_xlabel("X (米)")
+        ax_xy.set_ylabel("Y (米)")
+        ax_xy.set_title("XY 平面轨迹")
+        ax_xy.grid(True)
+        ax_xy.set_aspect("equal", adjustable="box")
+        ax_xy.legend()
+
+        if xy_err_arr is not None:
+            ax_xy_err.plot(steps_xy, xy_err_arr[:, 0], label="X 误差", color="C0")
+            ax_xy_err.plot(steps_xy, xy_err_arr[:, 1], label="Y 误差", color="C1")
+            xy_err_norm = np.linalg.norm(xy_err_arr, axis=1)
+            ax_xy_err.plot(steps_xy, xy_err_norm, label="平面误差", color="C2", linestyle="--")
+            for release_step, _ in release_history:
+                ax_xy_err.axvline(release_step, color="r", linestyle=":", alpha=0.5)
+            ax_xy_err.set_xlabel("步数")
+            ax_xy_err.set_ylabel("误差 (米)")
+            ax_xy_err.set_title("XY 平面位置误差")
+            ax_xy_err.grid(True)
+            ax_xy_err.legend()
+        else:
+            ax_xy_err.axis("off")
+
+        _add_axis_sliders(fig_xy, [ax_xy, ax_xy_err] if xy_err_arr is not None else [ax_xy])
+
+    if policy_actions:
+        act_arr = np.vstack(policy_actions)
+        action_dim = act_arr.shape[1]
+        teacher_arr = (
+            np.vstack(teacher_actions)
+            if teacher_actions is not None and len(teacher_actions) == len(policy_actions)
+            else None
+        )
+        fig_act, axes = plt.subplots(
+            action_dim, 1, figsize=(10, max(4, 2 * action_dim)), sharex=True
+        )
+        if action_dim == 1:
+            axes = [axes]
+        labels = ["thrust"] + [f"torque_{i}" for i in range(1, action_dim)]
+        for i, ax in enumerate(axes):
+            ax.plot(steps, act_arr[:, i], label="policy", color="C0")
+            if teacher_arr is not None:
+                ax.plot(steps, teacher_arr[:, i], label="teacher", color="C1", linestyle="--")
+            for release_step, _ in release_history:
+                ax.axvline(release_step, color="r", linestyle=":", alpha=0.5)
+            ax.set_ylabel(labels[i])
+            ax.grid(True)
+            ax.legend()
+        axes[-1].set_xlabel("步数")
+        fig_act.suptitle("残差补偿对比（策略 vs 教师）")
+
+    save_path = os.environ.get("AERIAL_SAVE_PLOT")
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        fig.savefig(save_path, dpi=150, bbox_inches="tight")
+        if fig_xy is not None:
+            fig_xy.savefig(
+                os.path.splitext(save_path)[0] + "_xy.png", dpi=150, bbox_inches="tight"
+            )
+        if policy_actions:
+            fig_act.savefig(
+                os.path.splitext(save_path)[0] + "_actions.png", dpi=150, bbox_inches="tight"
+            )
+        print(f"已保存绘图到 {save_path}")
+    else:
+        plt.show()
 
 # 将 Mat33 拆解成 numpy 数组，方便后续做线性代数运算（例如缩放惯量）。
 def _mat33_to_np(mat: gymapi.Mat33) -> np.ndarray:
@@ -98,6 +296,9 @@ class PayloadManager:
         offsets,
         release_start: int,
         release_interval: int,
+        release_start_range=None,
+        release_interval_range=None,
+        randomize_release: bool = False,
     ):
         self.env_manager = env_manager
         self.device = env_manager.device
@@ -114,8 +315,12 @@ class PayloadManager:
             for idx, offset in enumerate(offsets)
         ]
         self.release_idx = 0
-        self.next_release_step = release_start
-        self.release_interval = release_interval
+        self.release_start = int(release_start)
+        self.release_interval = int(release_interval)
+        self.release_start_range = release_start_range
+        self.release_interval_range = release_interval_range
+        self.randomize_release = bool(randomize_release)
+        self.next_release_step = self._sample_release_start()
         self.release_history = []
 
         props = self.gym.get_actor_rigid_body_properties(self.env_handle, self.robot_handle)
@@ -147,6 +352,24 @@ class PayloadManager:
         self.base_body_index = 0  # base_link 假设是第一个刚体
         self.current_mass = self.initial_mass
 
+    def _sample_release_start(self) -> int:
+        if self.randomize_release and self.release_start_range is not None:
+            low, high = self.release_start_range
+            low, high = int(low), int(high)
+            if low > high:
+                low, high = high, low
+            return random.randint(low, high)
+        return self.release_start
+
+    def _sample_release_interval(self) -> int:
+        if self.randomize_release and self.release_interval_range is not None:
+            low, high = self.release_interval_range
+            low, high = int(low), int(high)
+            if low > high:
+                low, high = high, low
+            return max(1, random.randint(low, high))
+        return max(1, self.release_interval)
+
     # 返回当前仍附着在母机上的子机列表。
     def _attached_payloads(self):
         return [p for p in self.payloads if p["attached"]]
@@ -164,7 +387,7 @@ class PayloadManager:
         payload["attached"] = False
         self.release_idx += 1
         self.release_history.append((step, payload.get("name", f"{self.release_idx}")))
-        self.next_release_step += self.release_interval
+        self.next_release_step = step + self._sample_release_interval()
         self.update_mass_properties()
         logger.info("Payload %d released -> new mass %.3f kg", self.release_idx, self.current_mass)
 
@@ -236,6 +459,9 @@ if __name__ == "__main__":
         offsets=PAYLOAD_OFFSETS,
         release_start=RELEASE_START_STEP,
         release_interval=RELEASE_INTERVAL,
+        release_start_range=RELEASE_START_RANGE,
+        release_interval_range=RELEASE_INTERVAL_RANGE,
+        randomize_release=RANDOMIZE_RELEASE,
     )
 
     orig_pre_physics_step = env_manager.robot_manager.pre_physics_step
@@ -249,8 +475,17 @@ if __name__ == "__main__":
     env_manager.robot_manager.pre_physics_step = patched_pre_physics_step
 
     actions = torch.zeros((env_manager.num_envs, 4), device=device)
+    target_position = torch.zeros(3, device=device)
+    target_yaw = 0.0
+    actions[:, 0:3] = target_position
+    actions[:, 3] = target_yaw
+    target_xy_np = target_position[:2].detach().cpu().numpy()
+
     z_history = []
     euler_history = []
+    xy_history = []
+    xy_error_history = []
+    target_xy_history = []
 
     obs = env_manager.get_obs()
 
@@ -260,95 +495,26 @@ if __name__ == "__main__":
         env_manager.step(actions=actions)
 
         obs = env_manager.get_obs()
-        z_history.append(obs["robot_position"][0, 2].item())
+        position = obs["robot_position"][0].detach().cpu().numpy()
+        z_history.append(position[2])
+        xy_history.append(position[:2].copy())
+        target_xy_history.append(target_xy_np.copy())
+        xy_error_history.append((target_xy_np - position[:2]).copy())
         quat = obs["robot_orientation"][0:1]
         euler = get_euler_xyz_tensor(quat)
         euler_history.append(euler[0].detach().cpu().numpy())
 
         if step % 200 == 0:
-            position = obs["robot_position"][0]
             logger.info("Step %d | position: [%.2f, %.2f, %.2f]", step, *position.tolist())
 
     sim_builder.delete_env()
-
-    # 创建缩放滑块，让多个子图共享同一组 X/Y 缩放倍率。
-    def _add_axis_sliders(fig, axes):
-        fig.subplots_adjust(bottom=0.25)
-        slider_color = "#24a8a8"
-        ax_xscale = fig.add_axes([0.15, 0.1, 0.7, 0.03], facecolor=slider_color)
-        ax_yscale = fig.add_axes([0.15, 0.05, 0.7, 0.03], facecolor=slider_color)
-        slider_x = Slider(ax_xscale, "X轴缩放", 0.2, 5.0, valinit=1.0)
-        slider_y = Slider(ax_yscale, "Y轴缩放", 0.2, 5.0, valinit=1.0)
-
-        base_limits = {
-            axis: {"x": axis.get_xlim(), "y": axis.get_ylim()} for axis in axes
-        }
-
-        def _apply_scale(_):
-            x_scale = slider_x.val
-            y_scale = slider_y.val
-
-            for axis in axes:
-                base_xlim = base_limits[axis]["x"]
-                base_ylim = base_limits[axis]["y"]
-
-                x_mid = 0.5 * (base_xlim[0] + base_xlim[1])
-                x_span = (base_xlim[1] - base_xlim[0]) / x_scale
-                axis.set_xlim(x_mid - 0.5 * x_span, x_mid + 0.5 * x_span)
-
-                y_mid = 0.5 * (base_ylim[0] + base_ylim[1])
-                y_span = (base_ylim[1] - base_ylim[0]) / y_scale
-                axis.set_ylim(y_mid - 0.5 * y_span, y_mid + 0.5 * y_span)
-
-            fig.canvas.draw_idle()
-
-        slider_x.on_changed(_apply_scale)
-        slider_y.on_changed(_apply_scale)
-        return slider_x, slider_y
-
-    if z_history:
-        steps = np.arange(len(z_history))
-        eulers = None
-        if euler_history:
-            eulers_rad = np.array(euler_history)
-            eulers_continuous = np.unwrap(eulers_rad, axis=0)
-            eulers = np.rad2deg(eulers_continuous)
-            offsets = np.round(eulers[0] / 360.0) * 360.0
-            eulers -= offsets
-
-        fig, (ax_z, ax_euler) = plt.subplots(2, 1, figsize=(10, 8))
-
-        ax_z.plot(steps, z_history, label="Z 轴高度")
-        ax_z.set_xlabel("步数")
-        ax_z.set_ylabel("Z 轴高度 (米)")
-        ax_z.set_title("无人机 Z 轴位置曲线")
-        ax_z.grid(True)
-        ax_z.legend()
-
-        for idx, (release_step, release_name) in enumerate(payload_manager.release_history, start=1):
-            ax_z.axvline(release_step, color="r", linestyle="--", alpha=0.6)
-            ax_z.text(
-                release_step,
-                ax_z.get_ylim()[1],
-                f"释放 {release_name}",
-                color="r",
-                fontsize=9,
-                verticalalignment="top",
-                horizontalalignment="center",
-                rotation=90,
-            )
-
-        if eulers is not None:
-            ax_euler.plot(steps, eulers[:, 0], label="Roll (°)")
-            ax_euler.plot(steps, eulers[:, 1], label="Pitch (°)")
-            ax_euler.plot(steps, eulers[:, 2], label="Yaw (°)")
-            ax_euler.set_xlabel("步数")
-            ax_euler.set_ylabel("角度 (°)")
-            ax_euler.set_title("无人机姿态角 (XYZ)")
-            ax_euler.grid(True)
-            ax_euler.legend()
-        else:
-            ax_euler.axis("off")
-
-        _ = _add_axis_sliders(fig, [ax_z, ax_euler])
-        plt.show()
+    plot_results(
+        z_history,
+        euler_history,
+        payload_manager.release_history,
+        [],
+        teacher_actions=None,
+        xy_history=xy_history,
+        xy_error_history=xy_error_history,
+        target_xy_history=target_xy_history,
+    )

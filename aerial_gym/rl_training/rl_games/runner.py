@@ -106,16 +106,6 @@ env_configurations.register(
 )
 
 env_configurations.register(
-    "payload_compensation_task_full_rl",
-    {
-        "env_creator": lambda **kwargs: task_registry.make_task(
-            "payload_compensation_task_full_rl", **kwargs
-        ),
-        "vecenv_type": "AERIAL-RLGPU",
-    },
-)
-
-env_configurations.register(
     "payload_compensation_task_teacher",
     {
         "env_creator": lambda **kwargs: task_registry.make_task(

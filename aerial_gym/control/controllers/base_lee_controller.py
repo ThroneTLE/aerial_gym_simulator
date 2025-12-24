@@ -70,6 +70,32 @@ class BaseLeeController(BaseController):
         self.K_rot_tensor_current = (self.K_rot_tensor_max + self.K_rot_tensor_min) / 2.0
         self.K_angvel_tensor_current = (self.K_angvel_tensor_max + self.K_angvel_tensor_min) / 2.0
 
+        self.use_integral = bool(getattr(self.cfg, "use_integral", False))
+        self.use_velocity_feedforward = bool(getattr(self.cfg, "use_velocity_feedforward", False))
+        self.velocity_feedforward_gain = float(
+            getattr(self.cfg, "velocity_feedforward_gain", 1.0)
+        )
+        if self.use_integral:
+            self.K_pos_int_tensor = torch.tensor(
+                getattr(self.cfg, "K_pos_int_tensor", [0.0, 0.0, 0.0]),
+                device=self.device,
+                requires_grad=False,
+            ).expand(self.num_envs, -1)
+            self.position_integrator_limit = torch.tensor(
+                getattr(self.cfg, "position_integrator_limit", [0.0, 0.0, 0.0]),
+                device=self.device,
+                requires_grad=False,
+            ).expand(self.num_envs, -1)
+            self.position_error_integral = torch.zeros(
+                (self.num_envs, 3), device=self.device
+            )
+        else:
+            self.K_pos_int_tensor = torch.zeros((self.num_envs, 3), device=self.device)
+            self.position_integrator_limit = torch.zeros((self.num_envs, 3), device=self.device)
+            self.position_error_integral = torch.zeros((self.num_envs, 3), device=self.device)
+        self.dt = float(getattr(global_tensor_dict, "get", lambda *_: 0.01)("dt", 0.01))
+        self.ff_velocity = torch.zeros((self.num_envs, 3), device=self.device)
+
         # --- 控制器内部张量 (Internal Tensors) ---
         self.accel = torch.zeros((self.num_envs, 3), device=self.device) # 计算出的加速度指令
         # 最终的力和力矩指令 [fx, fy, fz, tx, ty, tz]
@@ -102,8 +128,12 @@ class BaseLeeController(BaseController):
         if env_ids is None:
             # 如果 env_ids 为 None，则重置所有环境
             env_ids = torch.arange(self.K_rot_tensor.shape[0])
+        if self.use_integral:
+            self.position_error_integral[env_ids] = 0.0
+        if self.use_velocity_feedforward:
+            self.ff_velocity[env_ids] = 0.0
         self.randomize_params(env_ids) # 随机化控制参数
-        # 注意: 积分控制项目前已移除，如需恢复需在此处重置积分状态
+        # 注意: 积分项在此处清零以避免 windup
 
     def randomize_params(self, env_ids):
         """
@@ -135,13 +165,25 @@ class BaseLeeController(BaseController):
         position_error_world_frame = setpoint_position - self.robot_position
         # 将期望速度从相对坐标系（假设是载具坐标系）旋转到世界坐标系
         setpoint_velocity_world_frame = quat_rotate(self.robot_vehicle_orientation, setpoint_velocity)
+        if self.use_velocity_feedforward:
+            setpoint_velocity_world_frame = (
+                setpoint_velocity_world_frame + self.velocity_feedforward_gain * self.ff_velocity
+            )
         # 计算速度误差
         velocity_error = setpoint_velocity_world_frame - self.robot_linvel
 
+        if self.use_integral:
+            self.position_error_integral += position_error_world_frame * self.dt
+            limit = self.position_integrator_limit
+            if torch.any(limit > 0):
+                self.position_error_integral = torch.clamp(
+                    self.position_error_integral, -limit, limit
+                )
         # 计算加速度指令 (PID 控制律)
         accel_command = (
             self.K_pos_tensor_current * position_error_world_frame # P 项
             + self.K_linvel_tensor_current * velocity_error         # D 项
+            + self.K_pos_int_tensor * self.position_error_integral  # I 项
         )
         return accel_command
 
