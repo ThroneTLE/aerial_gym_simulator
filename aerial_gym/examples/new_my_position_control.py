@@ -132,8 +132,8 @@ def _str2bool(value):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Payload compensation policy rollout.")
-    parser.add_argument("--num_envs", type=int, default=1024, help="并行环境数量（建议 1 用于绘图）")
-    parser.add_argument("--steps", type=int, default=3000, help="仿真步数")
+    parser.add_argument("--num_envs", type=int, default=1, help="并行环境数量（建议 1 用于绘图）")
+    parser.add_argument("--steps", type=int, default=1500, help="仿真步数")
     parser.add_argument(
         "--headless",
         type=_str2bool,

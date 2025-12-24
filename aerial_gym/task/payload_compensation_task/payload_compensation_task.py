@@ -291,31 +291,34 @@ class PayloadManager:
                 self.env_handles[env_id], self.robot_handles[env_id], props, recomputeInertia=False
             )
 
-    def compute_world_torque(self) -> torch.Tensor:
+    def compute_body_torque(self, orientations: torch.Tensor) -> torch.Tensor:
+        """
+        计算因质心(COM)偏移而在机体坐标系中产生的扰动扭矩。
+        扭矩 τ = r_com × F_gravity，其中所有向量都在机体坐标系中表示。
+        """
+        # 1. 计算总质量和附加载荷质量
         payload_mass = self.attached_mask.sum(dim=1) * self.payload_mass
         total_mass = self.base_mass + payload_mass
 
+        # 2. 在机体坐标系中计算质心偏移 (r_com_b)
+        # r_com_b = (Σ m_i * r_i) / M_total, 其中 r_i 是载荷的偏移量
         weighted_offsets = (
             self.attached_mask.float().unsqueeze(-1) * self.offsets.unsqueeze(0)
         ).sum(dim=1)
         weighted_offsets *= self.payload_mass
 
-        torque = torch.zeros((self.num_envs, 3), device=self.device)
-        valid = total_mass > 0
-        if valid.any():
-            com_offset = torch.zeros_like(weighted_offsets)
-            com_offset[valid] = weighted_offsets[valid] / total_mass[valid].unsqueeze(-1)
-            gravity_vec = self.gravity.unsqueeze(0).expand(self.num_envs, -1)
-            torque[valid] = torch.cross(
-                com_offset[valid], gravity_vec[valid] * total_mass[valid].unsqueeze(-1)
-            )
-        return torque
+        com_offset_body = torch.zeros((self.num_envs, 3), device=self.device)
+        valid_mass = total_mass > 1e-6
+        com_offset_body[valid_mass] = weighted_offsets[valid_mass] / total_mass[valid_mass].unsqueeze(-1)
 
-    def compute_body_torque(self, orientations: torch.Tensor) -> torch.Tensor:
-        world_torque = self.compute_world_torque()
-        if world_torque.shape[0] != orientations.shape[0]:
-            world_torque = world_torque[: orientations.shape[0]]
-        return quat_rotate_inverse(orientations, world_torque)
+        # 3. 在世界坐标系中计算重力 (F_g_w)
+        gravity_force_world = self.gravity.unsqueeze(0) * total_mass.unsqueeze(-1)
+
+        # 4. 将重力从世界坐标系转换到机体坐标系 (F_g_b = R_bw * F_g_w)
+        gravity_force_body = quat_rotate_inverse(orientations, gravity_force_world)
+
+        # 5. 在机体坐标系中计算扭矩 (τ_b = r_com_b × F_g_b)
+        return torch.cross(com_offset_body, gravity_force_body, dim=1)
 
     def get_observation_features(self):
         attached_mask = self.attached_mask.float()
