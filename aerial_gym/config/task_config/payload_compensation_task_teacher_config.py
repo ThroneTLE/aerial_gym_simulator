@@ -31,14 +31,14 @@ class task_config:
     reward_parameters = {
         "position_weight": 0.0,
         "crash_penalty": -10.0,
-        "attitude_penalty_coef": 0.10,
+        "attitude_penalty_coef": 0.00,
         "release_attitude_boost": 1.0,
         "comp_torque_penalty_coef": 0.0,
         "comp_thrust_penalty_coef": 0.0,
         # 线速度惩罚关闭，改用线加速度惩罚
         "velocity_penalty_coef": 0.0,
-        "angvel_penalty_coef": 0.300, #0.2
-        "action_smoothness_coef": 0.6000, #0.06
+        "angvel_penalty_coef": 0.000, #0.2
+        "action_smoothness_coef": 0.0000, #0.06
         "tilt_warning_deg": 0.0,
         "tilt_warning_penalty": 0.0,
         "height_warning": 0.0,
@@ -58,13 +58,13 @@ class task_config:
         "hover_bonus_velocity": 0.0,
         "hover_bonus": 0.0,
         "release_stability_steps": 50,
-        "release_hover_boost": 0.000010,
-        "release_angvel_boost": 0.00005,
+        "release_hover_boost": 0.000000,
+        "release_angvel_boost": 0.00000,
         "delta_error_bonus_coef": 0.0,
         "delta_error_window_steps": 0,
         "delta_error_bonus_clip": 0.0,
         "release_reward_window_steps": 200,
-        "accel_penalty_away_coef": 0.00001,
+        "accel_penalty_away_coef": 0.00000,
         "accel_penalty_toward_coef": 0.0,
         "comp_penalty_high_threshold": 1.0,
         "comp_torque_penalty_high_coef": 0.0,
@@ -96,7 +96,7 @@ class task_config:
 
     payload_parameters = {
         "payload_mass": 0.02,
-        "payload_mass_range": [0.0, 0.04],
+        "payload_mass_range": [0.0, 0.03],
         "randomize_payload_mass": True,
         "randomize_offsets_on_plane": True,
         "offset_plane_radial_jitter": 0.4,  #沿机臂方向的“半径扰动”，均匀分布 [-jitter, +jitter]
