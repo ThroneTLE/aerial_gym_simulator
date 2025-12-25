@@ -17,6 +17,7 @@ from aerial_gym.utils.logging import CustomLogger
 from aerial_gym.utils.math import (
     quat_apply_inverse,
     quat_axis,
+    quat_rotate,
     quat_rotate_inverse,
     quat_from_euler_xyz_tensor,
     quat_mul,
@@ -65,10 +66,18 @@ class PayloadConfig:
     release_start: int
     release_interval: int
     warning_steps: int
+    payload_mass_range: Optional[Sequence[float]] = None
+    randomize_payload_mass: bool = False
+    randomize_offsets_on_plane: bool = False
+    offset_plane_radial_jitter: float = 0.0
+    offset_plane_z_jitter: float = 0.0
+    offset_plane_r_max: float = 0.0
+    offset_plane_z_max: float = 0.0
     release_start_range: Optional[Sequence[int]] = None
     release_interval_range: Optional[Sequence[int]] = None
     randomize_release: bool = False
     log_release_events: bool = False
+    force_offset_torque_scale: float = 0.0
 
 
 class PayloadManager:
@@ -87,11 +96,21 @@ class PayloadManager:
 
         self.cfg = payload_cfg
 
-        self.payload_mass = payload_cfg.payload_mass
-        self.offsets = torch.as_tensor(
+        self.payload_mass = float(payload_cfg.payload_mass)
+        self.payload_mass_range = payload_cfg.payload_mass_range
+        self.randomize_payload_mass = bool(payload_cfg.randomize_payload_mass)
+        self.base_offsets = torch.as_tensor(
             np.array(payload_cfg.offsets, dtype=np.float32), device=self.device
         )
-        self.num_payloads = self.offsets.shape[0]
+        self.num_payloads = self.base_offsets.shape[0]
+        self.offsets = (
+            self.base_offsets.unsqueeze(0).expand(self.num_envs, -1, -1).clone()
+        )
+        self.randomize_offsets_on_plane = bool(payload_cfg.randomize_offsets_on_plane)
+        self.offset_plane_radial_jitter = float(payload_cfg.offset_plane_radial_jitter)
+        self.offset_plane_z_jitter = float(payload_cfg.offset_plane_z_jitter)
+        self.offset_plane_r_max = float(payload_cfg.offset_plane_r_max)
+        self.offset_plane_z_max = float(payload_cfg.offset_plane_z_max)
 
         self.attached_mask = torch.ones(
             (self.num_envs, self.num_payloads), dtype=torch.bool, device=self.device
@@ -107,6 +126,7 @@ class PayloadManager:
         self.release_interval_range = payload_cfg.release_interval_range
         self.randomize_release = payload_cfg.randomize_release
         self.log_release_events = payload_cfg.log_release_events
+        self.force_offset_torque_scale = float(payload_cfg.force_offset_torque_scale)
 
         self.last_release_index = torch.full(
             (self.num_envs,), -1, dtype=torch.long, device=self.device
@@ -118,6 +138,9 @@ class PayloadManager:
 
         self.current_payload_mass = torch.full(
             (self.num_envs,), self.num_payloads * self.payload_mass, device=self.device
+        )
+        self.payload_mass_per_env = torch.full(
+            (self.num_envs,), self.payload_mass, device=self.device
         )
         self.com_offset_body = torch.zeros((self.num_envs, 3), device=self.device)
         self.release_warning_flag = torch.zeros(
@@ -153,6 +176,7 @@ class PayloadManager:
     def reset(self, env_ids: Optional[torch.Tensor] = None):
         if env_ids is None:
             env_ids = torch.arange(self.num_envs, device=self.device)
+        env_ids = env_ids.to(self.device).long()
         self.attached_mask[env_ids] = True
         self.step_counter[env_ids] = 0
         self._assign_random_release_start(env_ids)
@@ -161,7 +185,8 @@ class PayloadManager:
         self.last_release_index[env_ids] = -1
         self.last_release_mass[env_ids] = 0.0
         self.just_released_flag[env_ids] = False
-        self.current_payload_mass[env_ids] = self.num_payloads * self.payload_mass
+        self._sample_payload_mass(env_ids)
+        self._randomize_offsets_on_plane(env_ids)
         self.com_offset_body[env_ids] = 0.0
         self.release_warning_flag[env_ids] = False
         self._update_mass_properties(env_ids)
@@ -205,14 +230,14 @@ class PayloadManager:
         attach_row[payload_id] = False
         self.release_cursor[env_id] = cursor + 1
         self.last_release_index[env_id] = payload_id
-        self.last_release_mass[env_id] = self.payload_mass
+        self.last_release_mass[env_id] = self.payload_mass_per_env[env_id]
         self.just_released_flag[env_id] = True
         if self.log_release_events:
             logger.info(
                 "[ReleaseEvent] env=%d payload=%d offset=%s step=%d",
                 env_id,
                 payload_id,
-                self.offsets[payload_id].tolist(),
+                self.offsets[env_id, payload_id].tolist(),
                 int(self.step_counter[env_id].item()),
             )
         self.step_counter[env_id] = 0
@@ -258,12 +283,62 @@ class PayloadManager:
     def _sample_interval(self) -> int:
         return self._sample_between(self.release_interval_range, self.release_interval)
 
+    def _sample_payload_mass(self, env_ids: torch.Tensor):
+        if not self.randomize_payload_mass or not self.payload_mass_range:
+            self.payload_mass_per_env[env_ids] = self.payload_mass
+            return
+        low, high = self.payload_mass_range
+        if low > high:
+            low, high = high, low
+        low = float(max(0.0, low))
+        high = float(max(0.0, high))
+        if low == high:
+            self.payload_mass_per_env[env_ids] = low
+            return
+        samples = torch.rand((env_ids.shape[0],), device=self.device) * (high - low) + low
+        self.payload_mass_per_env[env_ids] = samples
+
+    def _randomize_offsets_on_plane(self, env_ids: torch.Tensor):
+        if not self.randomize_offsets_on_plane:
+            self.offsets[env_ids] = self.base_offsets
+            return
+        if self.offset_plane_radial_jitter <= 0.0 and self.offset_plane_z_jitter <= 0.0:
+            self.offsets[env_ids] = self.base_offsets
+            return
+
+        base = self.base_offsets
+        xy = base[:, 0:2]
+        r0 = torch.norm(xy, dim=1, keepdim=True).clamp(min=1e-6)
+        dir_xy = xy / r0
+        z0 = base[:, 2:3]
+        r_max = self.offset_plane_r_max
+        z_max = self.offset_plane_z_max
+
+        for env_id in env_ids.long().tolist():
+            radial_delta = (
+                (torch.rand((self.num_payloads, 1), device=self.device) * 2.0 - 1.0)
+                * self.offset_plane_radial_jitter
+            )
+            z_delta = (
+                (torch.rand((self.num_payloads, 1), device=self.device) * 2.0 - 1.0)
+                * self.offset_plane_z_jitter
+            )
+            r = (r0 + radial_delta).clamp(min=1e-4)
+            if r_max > 0.0:
+                r = torch.clamp(r, max=r_max)
+            z = z0 + z_delta
+            if z_max > 0.0:
+                z = torch.clamp(z, min=-z_max, max=z_max)
+            xy_new = dir_xy * r
+            self.offsets[env_id] = torch.cat([xy_new, z], dim=1)
+
     def _update_mass_properties(self, env_ids: torch.Tensor):
         env_id_list = env_ids.long().tolist()
         for env_id in env_id_list:
             attached = self.attached_mask[env_id]
             payload_count = int(attached.sum().item())
-            payload_mass_sum = payload_count * self.payload_mass
+            payload_mass_each = float(self.payload_mass_per_env[env_id].item())
+            payload_mass_sum = payload_count * payload_mass_each
             self.current_payload_mass[env_id] = payload_mass_sum
 
             base_mass = float(self.base_mass[env_id].item())
@@ -273,9 +348,9 @@ class PayloadManager:
             for idx, attached_flag in enumerate(attached.tolist()):
                 if not attached_flag:
                     continue
-                offset = self.offsets[idx].cpu().numpy()
-                inertia_np += point_mass_inertia(self.payload_mass, offset)
-                weighted_offset += self.payload_mass * offset
+                offset = self.offsets[env_id, idx].cpu().numpy()
+                inertia_np += point_mass_inertia(payload_mass_each, offset)
+                weighted_offset += payload_mass_each * offset
 
             if total_mass > 0.0:
                 self.com_offset_body[env_id] = torch.as_tensor(
@@ -297,15 +372,14 @@ class PayloadManager:
         扭矩 τ = r_com × F_gravity，其中所有向量都在机体坐标系中表示。
         """
         # 1. 计算总质量和附加载荷质量
-        payload_mass = self.attached_mask.sum(dim=1) * self.payload_mass
+        payload_mass_each = self.payload_mass_per_env
+        payload_mass = self.attached_mask.sum(dim=1) * payload_mass_each
         total_mass = self.base_mass + payload_mass
 
         # 2. 在机体坐标系中计算质心偏移 (r_com_b)
         # r_com_b = (Σ m_i * r_i) / M_total, 其中 r_i 是载荷的偏移量
-        weighted_offsets = (
-            self.attached_mask.float().unsqueeze(-1) * self.offsets.unsqueeze(0)
-        ).sum(dim=1)
-        weighted_offsets *= self.payload_mass
+        weighted_offsets = (self.attached_mask.float().unsqueeze(-1) * self.offsets).sum(dim=1)
+        weighted_offsets *= payload_mass_each.unsqueeze(-1)
 
         com_offset_body = torch.zeros((self.num_envs, 3), device=self.device)
         valid_mass = total_mass > 1e-6
@@ -319,6 +393,51 @@ class PayloadManager:
 
         # 5. 在机体坐标系中计算扭矩 (τ_b = r_com_b × F_g_b)
         return torch.cross(com_offset_body, gravity_force_body, dim=1)
+
+    def compute_force_offset_torque(self, total_force_body: torch.Tensor) -> torch.Tensor:
+        """
+        近似补偿 COM 偏移带来的力矩：tau_eq = - r_com × F_total (机体坐标系)。
+        total_force_body: (N, 3) 机体系下的外部合力（不含重力）。
+        """
+        return -self.force_offset_torque_scale * torch.cross(
+            self.com_offset_body, total_force_body, dim=1
+        )
+
+    def compute_total_force_body(self) -> torch.Tensor:
+        """
+        严格版本：将每个刚体局部坐标系的力转换到机体坐标系后求和。
+        """
+        global_dict = self.env_manager.IGE_env.global_tensor_dict
+        robot_force = global_dict.get("robot_force_tensor", None)
+        if robot_force is None:
+            return torch.zeros((self.num_envs, 3), device=self.device)
+
+        num_rb_robot = self.env_manager.IGE_env.num_rigid_bodies_robot
+        num_rb_env = self.env_manager.IGE_env.num_rigid_bodies_per_env
+        if not num_rb_robot or not num_rb_env:
+            return robot_force.sum(dim=1)
+
+        rb_state = global_dict.get("rigid_body_state_tensor", None)
+        if rb_state is None:
+            return robot_force.sum(dim=1)
+
+        rb_state = rb_state.reshape(self.num_envs, num_rb_env, -1)
+        robot_rb_state = rb_state[:, :num_rb_robot, :]
+        link_quat = robot_rb_state[:, :, 3:7]
+        root_quat = robot_rb_state[:, 0, 3:7]
+        force_local = robot_force[:, :num_rb_robot, :]
+
+        link_quat_flat = link_quat.reshape(-1, 4)
+        force_local_flat = force_local.reshape(-1, 3)
+        force_world_flat = quat_rotate(link_quat_flat, force_local_flat)
+        force_world = force_world_flat.reshape(self.num_envs, num_rb_robot, 3)
+
+        root_quat_expanded = root_quat.unsqueeze(1).expand(-1, num_rb_robot, -1)
+        force_body_flat = quat_rotate_inverse(
+            root_quat_expanded.reshape(-1, 4), force_world.reshape(-1, 3)
+        )
+        force_body = force_body_flat.reshape(self.num_envs, num_rb_robot, 3)
+        return force_body.sum(dim=1)
 
     def get_observation_features(self):
         attached_mask = self.attached_mask.float()
@@ -385,6 +504,28 @@ class PayloadCompensationTask(BaseTask):
             self.task_config.reward_parameters[key] = torch.tensor(
                 self.task_config.reward_parameters[key], device=self.device
             )
+        reward_cfg = self.task_config.reward_parameters
+        self._imitation_weight_start = float(
+            reward_cfg.get("imitation_weight_start", reward_cfg.get("imitation_weight", 0.0))
+        )
+        self._imitation_weight_end = float(
+            reward_cfg.get("imitation_weight_end", self._imitation_weight_start)
+        )
+        self._imitation_weight_decay_reward = float(
+            reward_cfg.get("imitation_weight_decay_reward", 0.0)
+        )
+        self._imitation_weight_decay_span = float(
+            reward_cfg.get("imitation_weight_decay_span", 0.0)
+        )
+        self._imitation_reward_ema_alpha = float(
+            reward_cfg.get("imitation_reward_ema_alpha", 0.05)
+        )
+        self._imitation_weight_current = self._imitation_weight_start
+        self._imitation_reward_ema = None
+        self._imitation_schedule_enabled = (
+            self._imitation_weight_decay_reward > 0.0
+            and self._imitation_weight_start != self._imitation_weight_end
+        )
 
         logger.info("Building environment for payload compensation task.")
         self.sim_builder = SimBuilder()
@@ -474,10 +615,28 @@ class PayloadCompensationTask(BaseTask):
             release_start=self.task_config.payload_parameters["release_start"],
             release_interval=self.task_config.payload_parameters["release_interval"],
             warning_steps=self.task_config.payload_parameters["warning_steps"],
+            payload_mass_range=self.task_config.payload_parameters.get("payload_mass_range"),
+            randomize_payload_mass=self.task_config.payload_parameters.get(
+                "randomize_payload_mass", False
+            ),
+            randomize_offsets_on_plane=self.task_config.payload_parameters.get(
+                "randomize_offsets_on_plane", False
+            ),
+            offset_plane_radial_jitter=self.task_config.payload_parameters.get(
+                "offset_plane_radial_jitter", 0.0
+            ),
+            offset_plane_z_jitter=self.task_config.payload_parameters.get(
+                "offset_plane_z_jitter", 0.0
+            ),
+            offset_plane_r_max=self.task_config.payload_parameters.get("offset_plane_r_max", 0.0),
+            offset_plane_z_max=self.task_config.payload_parameters.get("offset_plane_z_max", 0.0),
             release_start_range=self.task_config.payload_parameters.get("release_start_range"),
             release_interval_range=self.task_config.payload_parameters.get("release_interval_range"),
             randomize_release=self.task_config.payload_parameters.get("randomize_release", True),
             log_release_events=self.task_config.payload_parameters.get("log_release_events", False),
+            force_offset_torque_scale=self.task_config.payload_parameters.get(
+                "force_offset_torque_scale", 0.0
+            ),
         )
         self.payload_manager = PayloadManager(self.sim_env, payload_cfg)
         self.payload_manager.reset()
@@ -501,6 +660,14 @@ class PayloadCompensationTask(BaseTask):
             else None
         )
         self.obs_noise_std = rand_cfg.get("obs_noise_std", {})
+        obs_cfg = getattr(self.task_config, "observation_parameters", None) or {}
+        if not isinstance(obs_cfg, dict):
+            obs_cfg = {}
+        self.obs_include_payload_mass = bool(obs_cfg.get("include_payload_mass", True))
+        self.obs_include_payload_com = bool(obs_cfg.get("include_payload_com", True))
+        self.obs_include_last_release_mass = bool(
+            obs_cfg.get("include_last_release_mass", True)
+        )
 
         curriculum_cfg = getattr(self.task_config, "curriculum_parameters", None)
         self.curriculum_target_ranges = None
@@ -532,6 +699,11 @@ class PayloadCompensationTask(BaseTask):
             _orig(actions)
             orientations = sim_env.IGE_env.global_tensor_dict["robot_orientation"]
             body_torque = payload_manager.compute_body_torque(orientations)
+            if payload_manager.force_offset_torque_scale != 0.0:
+                total_force_body = payload_manager.compute_total_force_body()
+                body_torque = body_torque + payload_manager.compute_force_offset_torque(
+                    total_force_body
+                )
             sim_env.robot_manager.robot.robot_torque_tensors[:, 0, :] += body_torque
 
         robot_manager.pre_physics_step = patched_pre_physics_step
@@ -702,6 +874,9 @@ class PayloadCompensationTask(BaseTask):
 
         # 模仿专家残差（仅 Teacher 模式生效）
         imitation_w = float(reward_params.get("imitation_weight", 0.0))
+        if self.teacher_mode and self._imitation_schedule_enabled:
+            reward_mean = float(self.rewards.mean().item())
+            imitation_w = self._update_imitation_weight(reward_mean)
         if self.teacher_mode and imitation_w > 0.0:
             imit_penalty = torch.mean((clamped_actions - self.teacher_residual) ** 2, dim=1)
             self.rewards -= imitation_w * imit_penalty
@@ -1092,9 +1267,15 @@ class PayloadCompensationTask(BaseTask):
 
         payload_obs = self.payload_manager.get_observation_features()
         idx = 18
-        self.task_obs["observations"][:, idx] = payload_obs["payload_mass"]
+        if self.obs_include_payload_mass:
+            self.task_obs["observations"][:, idx] = payload_obs["payload_mass"]
+        else:
+            self.task_obs["observations"][:, idx] = 0.0
         idx += 1
-        self.task_obs["observations"][:, idx : idx + 3] = payload_obs["com_offset"]
+        if self.obs_include_payload_com:
+            self.task_obs["observations"][:, idx : idx + 3] = payload_obs["com_offset"]
+        else:
+            self.task_obs["observations"][:, idx : idx + 3] = 0.0
         idx += 3
         num_payloads = payload_obs["attached_mask"].shape[1]
         self.task_obs["observations"][:, idx : idx + num_payloads] = payload_obs[
@@ -1103,7 +1284,10 @@ class PayloadCompensationTask(BaseTask):
         idx += num_payloads
         self.task_obs["observations"][:, idx] = payload_obs["last_release_norm"]
         idx += 1
-        self.task_obs["observations"][:, idx] = payload_obs["last_release_mass"]
+        if self.obs_include_last_release_mass:
+            self.task_obs["observations"][:, idx] = payload_obs["last_release_mass"]
+        else:
+            self.task_obs["observations"][:, idx] = 0.0
         idx += 1
         self.task_obs["observations"][:, idx] = payload_obs["warning_flag"]
 
@@ -1159,11 +1343,44 @@ class PayloadCompensationTask(BaseTask):
             return env_ids.to(self.device).long()
         return torch.as_tensor(env_ids, device=self.device, dtype=torch.long)
 
+    def _update_imitation_weight(self, reward_mean: float) -> float:
+        if not self._imitation_schedule_enabled:
+            return self._imitation_weight_start
+        if self._imitation_reward_ema is None:
+            self._imitation_reward_ema = reward_mean
+        else:
+            alpha = self._imitation_reward_ema_alpha
+            self._imitation_reward_ema = (
+                (1.0 - alpha) * self._imitation_reward_ema + alpha * reward_mean
+            )
+
+        span = self._imitation_weight_decay_span
+        if span <= 0.0:
+            progress = 1.0 if self._imitation_reward_ema >= self._imitation_weight_decay_reward else 0.0
+        else:
+            start = self._imitation_weight_decay_reward - 0.5 * span
+            end = self._imitation_weight_decay_reward + 0.5 * span
+            if end <= start:
+                progress = 1.0 if self._imitation_reward_ema >= end else 0.0
+            else:
+                progress = (self._imitation_reward_ema - start) / (end - start)
+                progress = float(max(0.0, min(1.0, progress)))
+
+        self._imitation_weight_current = (
+            self._imitation_weight_start
+            + (self._imitation_weight_end - self._imitation_weight_start) * progress
+        )
+        return self._imitation_weight_current
+
     def _update_teacher_residual(self):
         """Compute teacher residual (normalized) using privileged mass/COM."""
         orientations = self.obs_dict["robot_orientation"]
         tau_payload = self.payload_manager.compute_body_torque(orientations)
-        self._last_tau_payload = tau_payload.detach()
+        tau_force = torch.zeros_like(tau_payload)
+        if self.payload_manager.force_offset_torque_scale != 0.0:
+            total_force_body = self.payload_manager.compute_total_force_body()
+            tau_force = self.payload_manager.compute_force_offset_torque(total_force_body)
+        self._last_tau_payload = (tau_payload + tau_force).detach()
         residual = torch.zeros_like(self.teacher_residual)
         # 惯量差补偿：使用 gyroscopic 项近似 tau_true - tau_base
         angvel = self.obs_dict["robot_body_angvel"]
@@ -1176,7 +1393,7 @@ class PayloadCompensationTask(BaseTask):
         tau_inertia = gyro_true - gyro_nom
 
         torque_limits = self.comp_torque_limits.view(1, 3).clamp(min=1e-6)
-        total_tau = -tau_payload + tau_inertia
+        total_tau = -(tau_payload + tau_force) + tau_inertia
         residual[:, 1:] = torch.clamp(total_tau / torque_limits, -1.0, 1.0)
         if self.fix_yaw_residual_zero:
             residual[:, 3] = 0.0
@@ -1190,13 +1407,19 @@ class PayloadCompensationTask(BaseTask):
     def _compute_true_inertia(self):
         """Recompute true inertia tensor from base + attached payloads."""
         inertia = self.payload_manager.base_inertia_nominal.clone()
-        attached = self.payload_manager.attached_mask
+        attached = self.payload_manager.attached_mask.float()
+        offsets = self.payload_manager.offsets
+        payload_mass_each = self.payload_manager.payload_mass_per_env
+        eye = torch.eye(3, device=self.device).unsqueeze(0)
         for idx in range(self.payload_manager.num_payloads):
-            mask = attached[:, idx].float().unsqueeze(-1)
-            offset = self.payload_manager.offsets[idx].unsqueeze(0)  # (1,3)
-            point_I = point_mass_inertia(self.payload_manager.payload_mass, offset.squeeze(0).cpu().numpy())
-            point_I = torch.as_tensor(point_I, device=self.device, dtype=torch.float32).unsqueeze(0)
-            inertia += point_I * mask.view(-1, 1, 1)
+            offset = offsets[:, idx, :]
+            r_sq = torch.sum(offset * offset, dim=1)
+            outer = offset.unsqueeze(2) * offset.unsqueeze(1)
+            point_I = payload_mass_each.view(-1, 1, 1) * (
+                r_sq.view(-1, 1, 1) * eye - outer
+            )
+            mask = attached[:, idx].view(-1, 1, 1)
+            inertia += point_I * mask
         return inertia
 
     def _randomize_target_positions(self, env_ids=None):

@@ -31,14 +31,14 @@ class task_config:
     reward_parameters = {
         "position_weight": 0.0,
         "crash_penalty": -10.0,
-        "attitude_penalty_coef": 0.0,
+        "attitude_penalty_coef": 0.10,
         "release_attitude_boost": 1.0,
         "comp_torque_penalty_coef": 0.0,
         "comp_thrust_penalty_coef": 0.0,
         # 线速度惩罚关闭，改用线加速度惩罚
         "velocity_penalty_coef": 0.0,
-        "angvel_penalty_coef": 0.700, #0.2
-        "action_smoothness_coef": 1.6000, #0.06
+        "angvel_penalty_coef": 0.300, #0.2
+        "action_smoothness_coef": 0.6000, #0.06
         "tilt_warning_deg": 0.0,
         "tilt_warning_penalty": 0.0,
         "height_warning": 0.0,
@@ -58,13 +58,13 @@ class task_config:
         "hover_bonus_velocity": 0.0,
         "hover_bonus": 0.0,
         "release_stability_steps": 50,
-        "release_hover_boost": 0.10,
-        "release_angvel_boost": 0.5,
+        "release_hover_boost": 0.000010,
+        "release_angvel_boost": 0.00005,
         "delta_error_bonus_coef": 0.0,
         "delta_error_window_steps": 0,
         "delta_error_bonus_clip": 0.0,
         "release_reward_window_steps": 200,
-        "accel_penalty_away_coef": 0.01,
+        "accel_penalty_away_coef": 0.00001,
         "accel_penalty_toward_coef": 0.0,
         "comp_penalty_high_threshold": 1.0,
         "comp_torque_penalty_high_coef": 0.0,
@@ -78,7 +78,15 @@ class task_config:
         "tilt_excess_coef": 0.0,
         "tilt_excess_exp": 0.0,
         # 模仿不计入 reward，如需监督请在损失里加
-        "imitation_weight": 8.0,
+        "imitation_weight": 8.0,  # 固定模仿权重（关闭调度时生效；不衰减）
+        "imitation_weight_start": 16.0,  # 起始权重；更大=初期惩罚更强，整体衰减更慢
+        "imitation_weight_end": 8.0,  # 结束权重；更大=后期仍保持较强惩罚
+        "imitation_weight_decay_reward": 150.0,  # 衰减中心阈值R0；更大=更晚开始衰减
+        "imitation_weight_decay_span": 50.0,  # 衰减窗口宽度；更大=衰减更慢/更平滑
+        "imitation_reward_ema_alpha": 0.05,  # EMA平滑系数；更小=更平滑但响应更慢
+        # 线性衰减示意：
+        # progress = clamp( (r_ema - (R0 - span/2)) / span, 0, 1 )
+        # w = w_start + (w_end - w_start) * progress
         # 存活奖励
         "survive_bonus": 10.0,
     }
@@ -88,6 +96,14 @@ class task_config:
 
     payload_parameters = {
         "payload_mass": 0.02,
+        "payload_mass_range": [0.0, 0.04],
+        "randomize_payload_mass": True,
+        "randomize_offsets_on_plane": True,
+        "offset_plane_radial_jitter": 0.4,  #沿机臂方向的“半径扰动”，均匀分布 [-jitter, +jitter]
+        "offset_plane_z_jitter": 0.8,  #垂直方向的“高度扰动”，均匀分布 [-jitter, +jitter]
+        "offset_plane_r_max": 0.4,   #机臂方向最大偏移距离
+        "offset_plane_z_max": 0.4,      #垂直方向最大偏移距离
+        "force_offset_torque_scale": 1.0,  # 等效力矩系数：tau_eq = - r_com x F_total，1.0=全量补偿，0=关闭
         "offsets": [
             [0.4, 0.4, -0.4],
             [0.4, -0.4, -0.4],
@@ -104,5 +120,10 @@ class task_config:
     }
 
     randomization_parameters = False
+    observation_parameters = {
+        "include_payload_mass": False,  # base obs 是否包含载荷质量
+        "include_payload_com": False,  # base obs 是否包含载荷质心偏移
+        "include_last_release_mass": False,  # base obs 是否包含上次释放质量
+    }
 
     curriculum_parameters = None

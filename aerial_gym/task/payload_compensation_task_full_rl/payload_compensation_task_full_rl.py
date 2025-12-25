@@ -40,6 +40,9 @@ class PayloadCompensationTaskFullRL(PositionSetpointTask):
             release_start_range=self.task_config.payload_parameters.get("release_start_range"),
             release_interval_range=self.task_config.payload_parameters.get("release_interval_range"),
             randomize_release=self.task_config.payload_parameters.get("randomize_release", True),
+            force_offset_torque_scale=self.task_config.payload_parameters.get(
+                "force_offset_torque_scale", 0.0
+            ),
         )
         self.payload_manager = PayloadManager(self.sim_env, payload_cfg)
         self.payload_manager.reset()
@@ -74,6 +77,11 @@ class PayloadCompensationTaskFullRL(PositionSetpointTask):
             _orig(actions)
             orientations = sim_env.IGE_env.global_tensor_dict["robot_orientation"]
             body_torque = payload_manager.compute_body_torque(orientations)
+            if payload_manager.force_offset_torque_scale != 0.0:
+                total_force_body = payload_manager.compute_total_force_body()
+                body_torque = body_torque + payload_manager.compute_force_offset_torque(
+                    total_force_body
+                )
             sim_env.robot_manager.robot.robot_torque_tensors[:, 0, :] += body_torque
 
         robot_manager.pre_physics_step = patched_pre_physics_step
