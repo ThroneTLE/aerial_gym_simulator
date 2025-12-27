@@ -92,6 +92,21 @@ export AERIAL_TB_INTERVAL=100
 export AERIAL_FIXED_OBS_NORM=/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/fixed_stats.npz
 export AERIAL_USE_PRIV_ENCODER=0
 
+
+重新训练观测
+/home/throne/miniconda3/envs/aerialgym/bin/python tools/resample_fixed_stats.py \
+  --task payload_compensation_task_teacher \
+  --num_envs 256 \
+  --steps 2000 \
+  --warmup 100 \
+  --out /home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/fixed_stats.npz
+
+
+
+export AERIAL_DEBUG_NAN_SOURCES=0
+export AERIAL_GUARD_NAN_MODEL=0   # 关闭自动保护
+export AERIAL_DEBUG_NAN_MODEL=1   # 只开日志
+
 tensorboard --logdir ./runs --port 6006
 
 python -m aerial_gym.rl_training.rl_games.runner --train   --file aerial_gym/rl_training/rl_games/ppo_aerial_quad.yaml   --task payload_compensation_task   --experiment_name 1_1     --headless False --num_envs 8192 --headless True

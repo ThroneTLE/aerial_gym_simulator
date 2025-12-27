@@ -79,7 +79,7 @@ class task_config:
         "tilt_excess_exp": 0.0,
         # 模仿不计入 reward，如需监督请在损失里加
         "imitation_weight": 8.0,  # 固定模仿权重（关闭调度时生效；不衰减）
-        "imitation_weight_start": 16.0,  # 起始权重；更大=初期惩罚更强，整体衰减更慢
+        "imitation_weight_start": 8.0,  # 起始权重；更大=初期惩罚更强，整体衰减更慢
         "imitation_weight_end": 8.0,  # 结束权重；更大=后期仍保持较强惩罚
         "imitation_weight_decay_reward": 150.0,  # 衰减中心阈值R0；更大=更晚开始衰减
         "imitation_weight_decay_span": 50.0,  # 衰减窗口宽度；更大=衰减更慢/更平滑
@@ -103,7 +103,7 @@ class task_config:
         "offset_plane_z_jitter": 0.8,  #垂直方向的“高度扰动”，均匀分布 [-jitter, +jitter]
         "offset_plane_r_max": 0.4,   #机臂方向最大偏移距离
         "offset_plane_z_max": 0.4,      #垂直方向最大偏移距离
-        "force_offset_torque_scale": 1.0,  # 等效力矩系数：tau_eq = - r_com x F_total，1.0=全量补偿，0=关闭
+        "force_offset_torque_scale": 0.00,  # 等效力矩系数：tau_eq = - r_com x F_total，1.0=全量补偿，0=关闭
         "offsets": [
             [0.4, 0.4, -0.4],
             [0.4, -0.4, -0.4],

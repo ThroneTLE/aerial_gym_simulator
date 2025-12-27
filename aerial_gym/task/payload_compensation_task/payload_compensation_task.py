@@ -810,6 +810,7 @@ class PayloadCompensationTask(BaseTask):
         self.controller_actions[:, 5:] = clamped_actions[:, 1:]
 
         self.sim_env.step(actions=self.controller_actions)
+        _reset_on_nonfinite(self.obs_dict, self.device)
 
         self._log_rollout(clamped_actions)
         pos_error_body = quat_apply_inverse(
@@ -1480,6 +1481,7 @@ class PayloadCompensationTask(BaseTask):
         if ang_std > 0:
             obs[:, 10:13] += torch.randn_like(obs[:, 10:13]) * ang_std
 
+
     def _advance_curriculum_if_needed(self):
         if (
             self.curriculum_target_ranges is None
@@ -1676,3 +1678,28 @@ def compute_reward(
         crashes > 0.0, parameter_dict["crash_penalty"] * torch.ones_like(total_reward), total_reward
     )
     return total_reward, crashes
+
+
+def _reset_on_nonfinite(obs_dict, device):
+    keys = (
+        "robot_position",
+        "robot_orientation",
+        "robot_body_linvel",
+        "robot_body_angvel",
+    )
+    bad_envs = None
+    for key in keys:
+        tensor = obs_dict.get(key)
+        if tensor is None:
+            continue
+        invalid = ~torch.isfinite(tensor)
+        if not invalid.any():
+            continue
+        invalid_envs = invalid.reshape(invalid.shape[0], -1).any(dim=1)
+        bad_envs = invalid_envs if bad_envs is None else (bad_envs | invalid_envs)
+    if bad_envs is None:
+        return
+    if bad_envs.any():
+        crashes = obs_dict.get("crashes")
+        if crashes is not None:
+            crashes[bad_envs] = True

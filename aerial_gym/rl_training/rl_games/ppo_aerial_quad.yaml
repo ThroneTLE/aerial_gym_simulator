@@ -33,12 +33,6 @@ params:
       initializer:
         name: default  # 权重初始化方案（rl-games 内置，Xavier 类）
         scale: 2  # 初始化缩放系数（越大初始方差越大）
-    rnn:
-      name: gru  # RNN 类型（GRU）
-      units: 64  # GRU 隐状态维度
-      layers: 1  # GRU 堆叠层数
-      before_mlp: False  # True=RNN 在 MLP 之前；False=MLP 之后（常用）
-      layer_norm: True  # 对 GRU 层做 layer norm（稳定训练）
 
   config:
     env_name: payload_compensation_task_teacher      # 任务名（可切换为 payload_compensation_task_full_rl）
@@ -89,4 +83,4 @@ params:
       deterministic: True  # 测试时是否去掉探索噪声（True=使用均值动作）
       games_num: 100000  # 评估局数上限（rl-games 需要的占位）
 
-  horizon_length: 128
+  

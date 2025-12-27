@@ -18,7 +18,7 @@ conda run --no-capture-output -n aerialgym python aerial_gym/examples/new_my_pos
 
 """
 DEFAULT_CKPT = (
-    "runs/teacher_residual_stage1_25-15-05-23/nn/teacher_residual_stage1.pth"  # 修改为你的默认模型路径
+    "runs/teacher_residual_stage1_27-17-36-18/nn/teacher_residual_stage1.pth"  # 修改为你的默认模型路径
 )
 
 # Demo 默认使用训练 YAML 指定的任务；仅在缺少配置时退回补偿任务。
