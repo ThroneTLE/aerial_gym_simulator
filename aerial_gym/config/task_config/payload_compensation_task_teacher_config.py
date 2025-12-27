@@ -121,9 +121,9 @@ class task_config:
 
     randomization_parameters = False
     observation_parameters = {
-        "include_payload_mass": False,  # base obs 是否包含载荷质量
-        "include_payload_com": False,  # base obs 是否包含载荷质心偏移
-        "include_last_release_mass": False,  # base obs 是否包含上次释放质量
+        "include_payload_mass": True,  # base obs 是否包含载荷质量
+        "include_payload_com": True,  # base obs 是否包含载荷质心偏移
+        "include_last_release_mass": True,  # base obs 是否包含上次释放质量
     }
 
     curriculum_parameters = None

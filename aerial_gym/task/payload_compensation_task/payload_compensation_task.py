@@ -584,6 +584,14 @@ class PayloadCompensationTask(BaseTask):
         self._debug_reset_count = 0
         self._last_reward_components = {}
 
+        obs_cfg = getattr(self.task_config, "observation_parameters", None) or {}
+        if not isinstance(obs_cfg, dict):
+            obs_cfg = {}
+        self.obs_include_payload_mass = bool(obs_cfg.get("include_payload_mass", True))
+        self.obs_include_payload_com = bool(obs_cfg.get("include_payload_com", True))
+        self.obs_include_last_release_mass = bool(
+            obs_cfg.get("include_last_release_mass", True)
+        )
         self.observation_space_dim = self.task_config.observation_space_dim
         self.action_space_dim = self.task_config.action_space_dim
 
@@ -660,14 +668,6 @@ class PayloadCompensationTask(BaseTask):
             else None
         )
         self.obs_noise_std = rand_cfg.get("obs_noise_std", {})
-        obs_cfg = getattr(self.task_config, "observation_parameters", None) or {}
-        if not isinstance(obs_cfg, dict):
-            obs_cfg = {}
-        self.obs_include_payload_mass = bool(obs_cfg.get("include_payload_mass", True))
-        self.obs_include_payload_com = bool(obs_cfg.get("include_payload_com", True))
-        self.obs_include_last_release_mass = bool(
-            obs_cfg.get("include_last_release_mass", True)
-        )
 
         curriculum_cfg = getattr(self.task_config, "curriculum_parameters", None)
         self.curriculum_target_ranges = None
