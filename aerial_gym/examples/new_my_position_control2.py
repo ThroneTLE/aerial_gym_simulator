@@ -18,8 +18,8 @@ from rl_games.algos_torch import model_builder
 import torch
 
 DEFAULT_ENV_NAME = "payload_compensation_task_teacher"
-DEFAULT_CONFIG = "aerial_gym/rl_training/rl_games/ppo_aerial_quad.yaml"
-DEFAULT_CKPT = "runs/teacher_residual_stage1_27-17-06-04/nn/teacher_residual_stage1.pth"
+DEFAULT_CONFIG = "aerial_gym/rl_training/rl_games/ppo_aerial_quad_aux.yaml"
+DEFAULT_CKPT = "runs/teacher_aux_fixed_imitation_31-16-53-36/nn/teacher_aux_fixed_imitation.pth"
 
 plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "Arial Unicode MS", "Noto Sans CJK SC"]
 plt.rcParams["axes.unicode_minus"] = False

@@ -315,14 +315,16 @@ class PayloadManager:
         z_max = self.offset_plane_z_max
 
         for env_id in env_ids.long().tolist():
+            # 同一架飞机的所有载荷共享相同的距离偏移（只有方向不同）
             radial_delta = (
-                (torch.rand((self.num_payloads, 1), device=self.device) * 2.0 - 1.0)
+                (torch.rand((1, 1), device=self.device) * 2.0 - 1.0)
                 * self.offset_plane_radial_jitter
             )
             z_delta = (
-                (torch.rand((self.num_payloads, 1), device=self.device) * 2.0 - 1.0)
+                (torch.rand((1, 1), device=self.device) * 2.0 - 1.0)
                 * self.offset_plane_z_jitter
             )
+            # 广播到所有 num_payloads 个载荷
             r = (r0 + radial_delta).clamp(min=1e-4)
             if r_max > 0.0:
                 r = torch.clamp(r, max=r_max)
@@ -879,8 +881,18 @@ class PayloadCompensationTask(BaseTask):
             reward_mean = float(self.rewards.mean().item())
             imitation_w = self._update_imitation_weight(reward_mean)
         if self.teacher_mode and imitation_w > 0.0:
-            imit_penalty = torch.mean((clamped_actions - self.teacher_residual) ** 2, dim=1)
-            self.rewards -= imitation_w * imit_penalty
+            # 分离推力和力矩的模仿权重
+            w_thrust = float(reward_params.get("imitation_weight_thrust", imitation_w))
+            w_torque = float(reward_params.get("imitation_weight_torque", imitation_w))
+            
+            # 推力模仿惩罚 (action[0])
+            thrust_err = (clamped_actions[:, 0] - self.teacher_residual[:, 0]) ** 2
+            # 力矩模仿惩罚 (action[1:4])
+            torque_err = torch.mean((clamped_actions[:, 1:4] - self.teacher_residual[:, 1:4]) ** 2, dim=1)
+            
+            # 分别加权
+            imit_penalty = w_thrust * thrust_err + w_torque * torque_err
+            self.rewards -= imit_penalty
 
         # 补充 TB 记录：位置/姿态基础项（均为 batch 均值）
         if hasattr(self, "_last_reward_components") and isinstance(self._last_reward_components, dict):

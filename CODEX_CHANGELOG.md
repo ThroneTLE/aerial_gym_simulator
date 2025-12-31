@@ -155,7 +155,13 @@ python -m aerial_gym.rl_training.rl_games.runner \
   --headless False \
   --checkpoint runs/teacher_residual_stage1_06-22-18-25/nn/teacher_residual_stage1.pth 
 
-
+python -m aerial_gym.rl_training.rl_games.runner \
+  --train \
+  --file aerial_gym/rl_training/rl_games/ppo_aerial_quad_aux.yaml \
+  --task payload_compensation_task_teacher \
+  --experiment_name teacher_aux_fixed_imitation \
+  --num_envs 4096 \
+  --headless True
 ## 2025-02-21 Teacher 残差原型
 - `aerial_gym/config/task_config/payload_compensation_task_config.py` 增加 `imitation_weight`（默认为 0）供模仿项权重使用。
 - 新增 `aerial_gym/config/task_config/payload_compensation_task_teacher_config.py`：开启 `teacher_mode`，观测维度为 29+52（raw 特权拼接到 obs），特权 obs_dim=52，由策略侧可训练编码器处理，增加 `dagger_frac=0.7` 作为教师混合比例。

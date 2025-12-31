@@ -344,8 +344,18 @@ if __name__ == "__main__":
         config = update_config(config, args)
 
         from rl_games.torch_runner import Runner
+        
+        # Register custom A2C agent with auxiliary loss
+        from aerial_gym.rl_training.rl_games.a2c_aux_loss import A2CAgentWithAuxLoss
 
         runner = Runner()
+        # Register custom agent to algo_factory
+        runner.algo_factory.register_builder(
+            'a2c_continuous_aux', 
+            lambda **kwargs: A2CAgentWithAuxLoss(**kwargs)
+        )
+        print("[Runner] Registered custom agent: a2c_continuous_aux")
+        
         try:
             runner.load(config)
         except yaml.YAMLError as exc:

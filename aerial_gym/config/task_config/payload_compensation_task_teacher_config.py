@@ -15,7 +15,7 @@ class task_config:
     privileged_observation_space_dim = 41
     action_space_dim = 4  # thrust + 3 compensation torques
     controller_action_dim = 8  # 4 Lee inputs + thrust + 3 torque compensation commands
-    dagger_frac = 0.0          # 初始教师动作占比
+    dagger_frac = 0.3          # 初始教师动作占比
     dagger_decay_reward = 15000.0  # 均值奖励达到此值后开始衰减
     dagger_decay_rate = 0.99      # 每步衰减系数
     dagger_min_frac = 0.0          # 衰减下限（保留少量教师）
@@ -29,7 +29,7 @@ class task_config:
 
     # 奖励仿照 xadapt：存活奖励为主，角速度/线加速度/动作振荡惩罚，移除位置/补偿项，模仿不计入 reward
     reward_parameters = {
-        "position_weight": 0.0,
+        "position_weight": 0.450,
         "crash_penalty": -10.0,
         "attitude_penalty_coef": 0.00,
         "release_attitude_boost": 1.0,
@@ -37,8 +37,8 @@ class task_config:
         "comp_thrust_penalty_coef": 0.0,
         # 线速度惩罚关闭，改用线加速度惩罚
         "velocity_penalty_coef": 0.0,
-        "angvel_penalty_coef": 0.000, #0.2
-        "action_smoothness_coef": 0.0000, #0.06
+        "angvel_penalty_coef": 0.050, #0.2
+        "action_smoothness_coef": 0.30000, #0.06
         "tilt_warning_deg": 0.0,
         "tilt_warning_penalty": 0.0,
         "height_warning": 0.0,
@@ -77,38 +77,32 @@ class task_config:
         "tilt_excess_threshold_deg": 0.0,
         "tilt_excess_coef": 0.0,
         "tilt_excess_exp": 0.0,
-        # 模仿不计入 reward，如需监督请在损失里加
-        "imitation_weight": 8.0,  # 固定模仿权重（关闭调度时生效；不衰减）
-        "imitation_weight_start": 8.0,  # 起始权重；更大=初期惩罚更强，整体衰减更慢
-        "imitation_weight_end": 8.0,  # 结束权重；更大=后期仍保持较强惩罚
-        "imitation_weight_decay_reward": 150.0,  # 衰减中心阈值R0；更大=更晚开始衰减
-        "imitation_weight_decay_span": 50.0,  # 衰减窗口宽度；更大=衰减更慢/更平滑
-        "imitation_reward_ema_alpha": 0.05,  # EMA平滑系数；更小=更平滑但响应更慢
-        # 线性衰减示意：
-        # progress = clamp( (r_ema - (R0 - span/2)) / span, 0, 1 )
-        # w = w_start + (w_end - w_start) * progress
+        # 模仿权重 - 分离推力和力矩
+        "imitation_weight": 4.0,  # 统一权重（当 thrust/torque 未指定时使用）
+        "imitation_weight_thrust": 4.0,  # 推力模仿权重（action[0]）
+        "imitation_weight_torque": 2.0,  # 力矩模仿权重（action[1:4]）
         # 存活奖励
-        "survive_bonus": 10.0,
+        "survive_bonus": 20.0,
     }
 
     crash_distance_threshold = 5.0
     crash_tilt_threshold_deg = 20.0
 
     payload_parameters = {
-        "payload_mass": 0.02,
-        "payload_mass_range": [0.0, 0.03],
+        "payload_mass": 0.025,
+        "payload_mass_range": [0.0, 0.05],
         "randomize_payload_mass": True,
         "randomize_offsets_on_plane": True,
         "offset_plane_radial_jitter": 0.4,  #沿机臂方向的“半径扰动”，均匀分布 [-jitter, +jitter]
         "offset_plane_z_jitter": 0.8,  #垂直方向的“高度扰动”，均匀分布 [-jitter, +jitter]
-        "offset_plane_r_max": 0.4,   #机臂方向最大偏移距离
-        "offset_plane_z_max": 0.4,      #垂直方向最大偏移距离
+        "offset_plane_r_max": 0.2,   #机臂方向最大偏移距离
+        "offset_plane_z_max": 0.2,      #垂直方向最大偏移距离
         "force_offset_torque_scale": 0.00,  # 等效力矩系数：tau_eq = - r_com x F_total，1.0=全量补偿，0=关闭
         "offsets": [
-            [0.4, 0.4, -0.4],
-            [0.4, -0.4, -0.4],
-            [-0.4, 0.4, -0.4],
-            [-0.4, -0.4, -0.4],
+            [0.2, 0.2, -0.2],
+            [0.2, -0.2, -0.2],
+            [-0.2, 0.2, -0.2],
+            [-0.2, -0.2, -0.2],
         ],
         "release_start": 50,
         "release_interval": 300,
@@ -121,9 +115,9 @@ class task_config:
 
     randomization_parameters = False
     observation_parameters = {
-        "include_payload_mass": True,  # base obs 是否包含载荷质量
-        "include_payload_com": True,  # base obs 是否包含载荷质心偏移
-        "include_last_release_mass": True,  # base obs 是否包含上次释放质量
+        "include_payload_mass": False,  # base obs 是否包含载荷质量
+        "include_payload_com": False,  # base obs 是否包含载荷质心偏移
+        "include_last_release_mass": False,  # base obs 是否包含上次释放质量
     }
 
     curriculum_parameters = None
