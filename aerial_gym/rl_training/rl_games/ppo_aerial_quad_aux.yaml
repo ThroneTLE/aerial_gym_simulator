@@ -15,7 +15,7 @@ params:
     privileged_embed: 8  # 编码后维度
     privileged_hidden: 128  # 编码器隐层宽度
     aux_target_dim: 5  # 辅助损失目标维度: [mass, com_x, com_y, com_z, released_mass]
-    aux_loss_weight: 0.5  # 辅助损失权重（网络内部）
+    aux_loss_weight: 1.0  # 辅助损失权重（网络内部）
     space:
       continuous:
         mu_activation: None  # 动作均值激活（None=线性输出，利于外部限幅）
@@ -63,8 +63,8 @@ params:
     clip_value: True  # 是否对 value 也做裁剪 - 启用防止 value 爆炸
     num_actors: 2048  # 参与采样的环境/actor 数
     horizon_length: 256  # 每个 actor 收集的 rollout 长度 - 从 32 增加到 256
-    minibatch_size: 65536  # 单次优化用的样本数（越大梯度方差低但显存/时间更高）
-    mini_epochs: 2  # 每批数据重复训练次数 - 降低到 2 减少过拟合风险
+    minibatch_size: 131072  # 单次优化用的样本数（越大梯度方差低但显存/时间更高）
+    mini_epochs: 4  # 每批数据重复训练次数 - 降低到 2 减少过拟合风险
     # 扰动样本优势加权（权重=1+coef*mask，mask 来自 infos['is_disturbance']）
     disturbance_adv_weight: 0.0
     # BC/DAgger 模仿损失系数（从 bc_coef 衰减到 bc_min_coef，乘 bc_alpha）

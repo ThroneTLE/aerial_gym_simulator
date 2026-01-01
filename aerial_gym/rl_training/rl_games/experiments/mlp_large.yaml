@@ -1,0 +1,85 @@
+params:
+  seed: 8
+  algo:
+    name: a2c_continuous_aux
+
+  model:
+    name: continuous_a2c_logstd
+
+  load_checkpoint: False
+
+  network:
+    name: privileged_actor_critic
+    separate: False
+    privileged_dim: 41
+    privileged_embed: 8
+    privileged_hidden: 256  # 增大编码器
+    aux_target_dim: 5
+    aux_loss_weight: 0.5
+    space:
+      continuous:
+        mu_activation: None
+        sigma_activation: None
+        mu_init:
+          name: default
+        sigma_init:
+          name: const_initializer
+          val: -1.0
+        fixed_sigma: False
+        min_logstd: -3.0
+        max_logstd: 1.0
+    mlp:
+      units: [512, 256, 128]  # 大型 MLP
+      d2rl: False
+      activation: elu
+      initializer:
+        name: default
+        scale: 2
+
+  config:
+    env_name: payload_compensation_task_teacher
+    env_config:
+      num_envs: 2048
+      headless: True
+
+    name: mlp_large
+    reward_shaper:
+      scale_value: 1.0
+
+    normalize_advantage: True
+    gamma: 0.99
+    tau: 0.95
+    ppo: True
+    learning_rate: 1e-4
+    lr_schedule: adaptive
+    kl_threshold: 0.01
+    save_best_after: 1
+    save_frequency: 100
+    score_to_win: 100000000
+    grad_norm: 1.0
+    entropy_coef: 0.0
+    truncate_grads: True
+    e_clip: 0.2
+    clip_value: True
+    num_actors: 2048
+    horizon_length: 256
+    minibatch_size: 65536
+    mini_epochs: 2
+    disturbance_adv_weight: 0.0
+    bc_coef: 0.1
+    bc_alpha: 0.999
+    bc_min_coef: 0.1
+    critic_coef: 1
+    normalize_input: True
+    bounds_loss_coef: 0.0001
+    max_epochs: 4000
+    normalize_value: True
+    use_diagnostics: True
+    value_bootstrap: True
+    use_smooth_clamp: False
+    aux_loss_coef: 0.5
+
+    player:
+      render: False
+      deterministic: True
+      games_num: 100000

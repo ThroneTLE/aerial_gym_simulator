@@ -10,12 +10,12 @@ class task_config:
     headless = True
     device = "cuda:0"
 
-    # 特权 raw 仅放入 priviliged_obs，由策略侧 encoder 压到 8 维；obs 只保留基础 29 维
-    observation_space_dim = 29
+    # 新观测结构: 旋转矩阵(9) + 角速度(3) + 4位附着掩码(4) + 预警(1) + 上一时刻动作(3) = 20
+    observation_space_dim = 20
     privileged_observation_space_dim = 41
-    action_space_dim = 4  # thrust + 3 compensation torques
-    controller_action_dim = 8  # 4 Lee inputs + thrust + 3 torque compensation commands
-    dagger_frac = 0.3          # 初始教师动作占比
+    action_space_dim = 3  # thrust + roll torque + pitch torque (无 yaw)
+    controller_action_dim = 8  # 保持与 Lee 控制器兼容，yaw 补偿位置设为 0
+    dagger_frac = 0.0          # 初始教师动作占比
     dagger_decay_reward = 15000.0  # 均值奖励达到此值后开始衰减
     dagger_decay_rate = 0.99      # 每步衰减系数
     dagger_min_frac = 0.0          # 衰减下限（保留少量教师）
@@ -29,7 +29,7 @@ class task_config:
 
     # 奖励仿照 xadapt：存活奖励为主，角速度/线加速度/动作振荡惩罚，移除位置/补偿项，模仿不计入 reward
     reward_parameters = {
-        "position_weight": 0.450,
+        "position_weight": 0.0,
         "crash_penalty": -10.0,
         "attitude_penalty_coef": 0.00,
         "release_attitude_boost": 1.0,
@@ -37,8 +37,8 @@ class task_config:
         "comp_thrust_penalty_coef": 0.0,
         # 线速度惩罚关闭，改用线加速度惩罚
         "velocity_penalty_coef": 0.0,
-        "angvel_penalty_coef": 0.050, #0.2
-        "action_smoothness_coef": 0.30000, #0.06
+        "angvel_penalty_coef": 0.000, #0.2
+        "action_smoothness_coef": 0.00, #0.06
         "tilt_warning_deg": 0.0,
         "tilt_warning_penalty": 0.0,
         "height_warning": 0.0,
@@ -80,29 +80,33 @@ class task_config:
         # 模仿权重 - 分离推力和力矩
         "imitation_weight": 4.0,  # 统一权重（当 thrust/torque 未指定时使用）
         "imitation_weight_thrust": 4.0,  # 推力模仿权重（action[0]）
-        "imitation_weight_torque": 2.0,  # 力矩模仿权重（action[1:4]）
+        "imitation_weight_torque": 4.0,  # 力矩模仿权重（action[1:3]）
+        # 动作幅度惩罚 - 防止不必要的残差输出和抖动
+        "action_magnitude_penalty_coef": 0.0,  # 惩罚系数，越大越抑制输出 惩罚 = thrust² × thrust_coef + mean(torque²) × torque_coef
+        "action_magnitude_penalty_thrust": 0.000,  # thrust 惩罚（可选单独设置）
+        "action_magnitude_penalty_torque": 0.000,  # torque 惩罚（可选单独设置）
         # 存活奖励
-        "survive_bonus": 20.0,
+        "survive_bonus": 10.0,
     }
 
     crash_distance_threshold = 5.0
-    crash_tilt_threshold_deg = 20.0
+    crash_tilt_threshold_deg = 45.0
 
     payload_parameters = {
-        "payload_mass": 0.025,
-        "payload_mass_range": [0.0, 0.05],
+        "payload_mass": 0.02,
+        "payload_mass_range": [0.00, 0.04],
         "randomize_payload_mass": True,
         "randomize_offsets_on_plane": True,
         "offset_plane_radial_jitter": 0.4,  #沿机臂方向的“半径扰动”，均匀分布 [-jitter, +jitter]
         "offset_plane_z_jitter": 0.8,  #垂直方向的“高度扰动”，均匀分布 [-jitter, +jitter]
-        "offset_plane_r_max": 0.2,   #机臂方向最大偏移距离
-        "offset_plane_z_max": 0.2,      #垂直方向最大偏移距离
+        "offset_plane_r_max": 0.4,   #机臂方向最大偏移距离
+        "offset_plane_z_max": 0.4,      #垂直方向最大偏移距离
         "force_offset_torque_scale": 0.00,  # 等效力矩系数：tau_eq = - r_com x F_total，1.0=全量补偿，0=关闭
         "offsets": [
-            [0.2, 0.2, -0.2],
-            [0.2, -0.2, -0.2],
-            [-0.2, 0.2, -0.2],
-            [-0.2, -0.2, -0.2],
+            [0.4, 0.4, -0.4],
+            [0.4, -0.4, -0.4],
+            [-0.4, 0.4, -0.4],
+            [-0.4, -0.4, -0.4],
         ],
         "release_start": 50,
         "release_interval": 300,

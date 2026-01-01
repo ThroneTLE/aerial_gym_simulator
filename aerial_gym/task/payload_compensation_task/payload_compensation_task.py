@@ -808,8 +808,15 @@ class PayloadCompensationTask(BaseTask):
         )
         reward_window_mask_f = reward_window_mask.float()
 
-        self.controller_actions[:, 4] = clamped_actions[:, 0]
-        self.controller_actions[:, 5:] = clamped_actions[:, 1:]
+        # 动作映射 (3维 -> 8维控制器):
+        # action[0] -> controller[4] thrust 补偿
+        # action[1] -> controller[5] roll 力矩补偿
+        # action[2] -> controller[6] pitch 力矩补偿
+        # controller[7] yaw 力矩补偿固定为 0 (不再由策略控制)
+        self.controller_actions[:, 4] = clamped_actions[:, 0]  # thrust
+        self.controller_actions[:, 5] = clamped_actions[:, 1]  # roll
+        self.controller_actions[:, 6] = clamped_actions[:, 2]  # pitch
+        self.controller_actions[:, 7] = 0.0  # yaw 固定为 0
 
         self.sim_env.step(actions=self.controller_actions)
         _reset_on_nonfinite(self.obs_dict, self.device)
@@ -887,12 +894,30 @@ class PayloadCompensationTask(BaseTask):
             
             # 推力模仿惩罚 (action[0])
             thrust_err = (clamped_actions[:, 0] - self.teacher_residual[:, 0]) ** 2
-            # 力矩模仿惩罚 (action[1:4])
-            torque_err = torch.mean((clamped_actions[:, 1:4] - self.teacher_residual[:, 1:4]) ** 2, dim=1)
+            # 力矩模仿惩罚 (action[1:3] = roll, pitch，无 yaw)
+            torque_err = torch.mean((clamped_actions[:, 1:3] - self.teacher_residual[:, 1:3]) ** 2, dim=1)
             
             # 分别加权
             imit_penalty = w_thrust * thrust_err + w_torque * torque_err
             self.rewards -= imit_penalty
+
+        # 动作幅度惩罚 - 防止不必要的残差输出和抖动
+        action_mag_coef = float(reward_params.get("action_magnitude_penalty_coef", 0.0))
+        if action_mag_coef > 0.0:
+            # 可单独设置 thrust 和 torque 的惩罚系数
+            thrust_mag_coef = float(reward_params.get("action_magnitude_penalty_thrust", action_mag_coef))
+            torque_mag_coef = float(reward_params.get("action_magnitude_penalty_torque", action_mag_coef))
+            
+            # 惩罚动作幅度的平方（L2 正则化）
+            thrust_magnitude = clamped_actions[:, 0] ** 2
+            torque_magnitude = torch.mean(clamped_actions[:, 1:3] ** 2, dim=1)
+            
+            action_mag_penalty = thrust_mag_coef * thrust_magnitude + torque_mag_coef * torque_magnitude
+            self.rewards -= action_mag_penalty
+            
+            # 记录到 TB
+            if hasattr(self, "_last_reward_components") and isinstance(self._last_reward_components, dict):
+                self._last_reward_components["action_magnitude_penalty"] = _mean_detached(action_mag_penalty)
 
         # 补充 TB 记录：位置/姿态基础项（均为 batch 均值）
         if hasattr(self, "_last_reward_components") and isinstance(self._last_reward_components, dict):
@@ -1269,40 +1294,32 @@ class PayloadCompensationTask(BaseTask):
         )
 
     def process_obs_for_task(self):
-        pos_error = self.target_position - self.obs_dict["robot_position"]
-        self.task_obs["observations"][:, 0:3] = pos_error
+        # 新观测结构 (20维):
+        # [0-8] 旋转矩阵 (9)
+        # [9-11] 机体角速度 (3)  
+        # [12-15] 4位附着掩码 (4)
+        # [16] 释放预警标志 (0 或 1)
+        # [17-19] 上一时刻动作 (3): thrust, roll, pitch
+        
+        # 旋转矩阵
         rot_mat = quat_to_rotation_matrix(self.obs_dict["robot_orientation"]).reshape(
             self.sim_env.num_envs, 9
         )
-        self.task_obs["observations"][:, 3:12] = rot_mat
-        self.task_obs["observations"][:, 12:15] = self.obs_dict["robot_body_linvel"]
-        self.task_obs["observations"][:, 15:18] = self.obs_dict["robot_body_angvel"]
-
+        self.task_obs["observations"][:, 0:9] = rot_mat
+        
+        # 机体角速度
+        self.task_obs["observations"][:, 9:12] = self.obs_dict["robot_body_angvel"]
+        
+        # 4位附着掩码 (恢复原始格式)
         payload_obs = self.payload_manager.get_observation_features()
-        idx = 18
-        if self.obs_include_payload_mass:
-            self.task_obs["observations"][:, idx] = payload_obs["payload_mass"]
-        else:
-            self.task_obs["observations"][:, idx] = 0.0
-        idx += 1
-        if self.obs_include_payload_com:
-            self.task_obs["observations"][:, idx : idx + 3] = payload_obs["com_offset"]
-        else:
-            self.task_obs["observations"][:, idx : idx + 3] = 0.0
-        idx += 3
-        num_payloads = payload_obs["attached_mask"].shape[1]
-        self.task_obs["observations"][:, idx : idx + num_payloads] = payload_obs[
-            "attached_mask"
-        ]
-        idx += num_payloads
-        self.task_obs["observations"][:, idx] = payload_obs["last_release_norm"]
-        idx += 1
-        if self.obs_include_last_release_mass:
-            self.task_obs["observations"][:, idx] = payload_obs["last_release_mass"]
-        else:
-            self.task_obs["observations"][:, idx] = 0.0
-        idx += 1
-        self.task_obs["observations"][:, idx] = payload_obs["warning_flag"]
+        attached = payload_obs["attached_mask"]  # [N, 4], 1=attached, 0=released
+        self.task_obs["observations"][:, 12:16] = attached
+        
+        # 释放预警标志
+        self.task_obs["observations"][:, 16] = payload_obs["warning_flag"]
+        
+        # 上一时刻动作 (3维: thrust, roll, pitch)
+        self.task_obs["observations"][:, 17:20] = self.prev_actions
 
         self._apply_observation_noise()
 
@@ -1386,7 +1403,13 @@ class PayloadCompensationTask(BaseTask):
         return self._imitation_weight_current
 
     def _update_teacher_residual(self):
-        """Compute teacher residual (normalized) using privileged mass/COM."""
+        """Compute teacher residual (normalized) using privileged mass/COM.
+        
+        新动作结构 (3维):
+          [0] thrust 补偿
+          [1] roll 力矩补偿
+          [2] pitch 力矩补偿
+        """
         orientations = self.obs_dict["robot_orientation"]
         tau_payload = self.payload_manager.compute_body_torque(orientations)
         tau_force = torch.zeros_like(tau_payload)
@@ -1394,7 +1417,8 @@ class PayloadCompensationTask(BaseTask):
             total_force_body = self.payload_manager.compute_total_force_body()
             tau_force = self.payload_manager.compute_force_offset_torque(total_force_body)
         self._last_tau_payload = (tau_payload + tau_force).detach()
-        residual = torch.zeros_like(self.teacher_residual)
+        residual = torch.zeros_like(self.teacher_residual)  # [N, 3]
+        
         # 惯量差补偿：使用 gyroscopic 项近似 tau_true - tau_base
         angvel = self.obs_dict["robot_body_angvel"]
         I_true = self._compute_true_inertia()
@@ -1405,11 +1429,11 @@ class PayloadCompensationTask(BaseTask):
         gyro_nom = torch.cross(angvel, Iw_nom, dim=1)
         tau_inertia = gyro_true - gyro_nom
 
-        torque_limits = self.comp_torque_limits.view(1, 3).clamp(min=1e-6)
-        total_tau = -(tau_payload + tau_force) + tau_inertia
-        residual[:, 1:] = torch.clamp(total_tau / torque_limits, -1.0, 1.0)
-        if self.fix_yaw_residual_zero:
-            residual[:, 3] = 0.0
+        # 只取 roll (index 0) 和 pitch (index 1)，忽略 yaw (index 2)
+        torque_limits = self.comp_torque_limits[0:2].view(1, 2).clamp(min=1e-6)
+        total_tau = -(tau_payload[:, 0:2] + tau_force[:, 0:2]) + tau_inertia[:, 0:2]
+        residual[:, 1:3] = torch.clamp(total_tau / torque_limits, -1.0, 1.0)
+        
         # thrust 补偿：名义控制未包含载荷质量，补齐 payload 重力
         mass_delta = self.payload_manager.current_payload_mass  # 真实-名义
         if self.comp_thrust_limit > 1e-6:
