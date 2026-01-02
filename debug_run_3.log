@@ -1,0 +1,158 @@
+Importing module 'gym_38' (/home/throne/下载/isaacgym/python/isaacgym/_bindings/linux-x86_64/gym_38.so)
+Setting GYM_USD_PLUG_INFO_PATH to /home/throne/下载/isaacgym/python/isaacgym/_bindings/linux-x86_64/usd/plugInfo.json
+PyTorch version 1.13.1
+Device count 1
+/home/throne/下载/isaacgym/python/isaacgym/_bindings/src/gymtorch
+Using /home/throne/.cache/torch_extensions/py38_cu117 as PyTorch extensions root...
+Emitting ninja build file /home/throne/.cache/torch_extensions/py38_cu117/gymtorch/build.ninja...
+Building extension module gymtorch...
+Allowing ninja to set a default number of workers... (overridable by setting the environment variable MAX_JOBS=N)
+ninja: no work to do.
+Loading extension module gymtorch...
+Gym has been unmaintained since 2022 and does not support NumPy 2.0 amongst other critical functionality.
+Please upgrade to Gymnasium, the maintained drop-in replacement of Gym, or contact the authors of your software and request that they upgrade.
+See the migration guide at https://gymnasium.farama.org/introduction/migration_guide/ for additional information.
+/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/gymnasium/envs/registration.py:596: UserWarning: [33mWARN: plugin: shimmy.registration:register_gymnasium_envs raised Traceback (most recent call last):
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/gymnasium/envs/registration.py", line 594, in load_plugin_envs
+    fn()
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/shimmy/registration.py", line 304, in register_gymnasium_envs
+    _register_atari_envs()
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/shimmy/registration.py", line 205, in _register_atari_envs
+    import ale_py
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/ale_py/__init__.py", line 68, in <module>
+    register_v0_v4_envs()
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/ale_py/registration.py", line 178, in register_v0_v4_envs
+    _register_rom_configs(legacy_games, obs_types, versions)
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/ale_py/registration.py", line 63, in _register_rom_configs
+    gymnasium.register(
+AttributeError: partially initialized module 'gymnasium' has no attribute 'register' (most likely due to a circular import)
+[0m
+  logger.warn(f"plugin: {plugin.value} raised {traceback.format_exc()}")
+/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/torch/utils/tensorboard/__init__.py:4: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
+  if not hasattr(tensorboard, "__version__") or LooseVersion(
+[37m[1933 ms][base_task] - INFO : Setting seed: 8 (base_task.py:38)[0m
+[37m[1937 ms][payload_compensation_task] - INFO : Building environment for payload compensation task. (payload_compensation_task.py:567)[0m
+[37m[1937 ms][env_manager] - INFO : Populating environments. (env_manager.py:76)[0m
+[37m[1937 ms][env_manager] - INFO : Creating simulation instance. (env_manager.py:92)[0m
+[37m[1937 ms][env_manager] - INFO : Instantiating IGE object. (env_manager.py:93)[0m
+[37m[1937 ms][IsaacGymEnvManager] - INFO : Creating Isaac Gym Environment (IGE_env_manager.py:46)[0m
+[37m[1937 ms][IsaacGymEnvManager] - INFO : Acquiring gym object (IGE_env_manager.py:81)[0m
+[37m[1937 ms][IsaacGymEnvManager] - INFO : Acquired gym object (IGE_env_manager.py:83)[0m
+[37m[1938 ms][IsaacGymEnvManager] - INFO : Fixing devices (IGE_env_manager.py:95)[0m
+[37m[1938 ms][IsaacGymEnvManager] - INFO : Using GPU pipeline for simulation. (IGE_env_manager.py:112)[0m
+[37m[1938 ms][IsaacGymEnvManager] - INFO : Sim Device type: cuda, Sim Device ID: 0 (IGE_env_manager.py:115)[0m
+[31;1m[1938 ms][IsaacGymEnvManager] - CRITICAL : 
+ Setting graphics device to -1.
+ This is done because the simulation is run in headless mode and no Isaac Gym cameras are used.
+ No need to worry. The simulation and warp rendering will work as expected. (IGE_env_manager.py:125)[0m
+[37m[1938 ms][IsaacGymEnvManager] - INFO : Graphics Device ID: -1 (IGE_env_manager.py:133)[0m
+[37m[1938 ms][IsaacGymEnvManager] - INFO : Creating Isaac Gym Simulation Object (IGE_env_manager.py:135)[0m
+[33;20m[1938 ms][IsaacGymEnvManager] - WARNING : If you have set the CUDA_VISIBLE_DEVICES environment variable, please ensure that you set it
+to a particular one that works for your system to use the viewer or Isaac Gym cameras.
+If you want to run parallel simulations on multiple GPUs with camera sensors,
+please disable Isaac Gym and use warp (by setting use_warp=True), set the viewer to headless. (IGE_env_manager.py:143)[0m
+[33;20m[1938 ms][IsaacGymEnvManager] - WARNING : If you see a segfault in the next lines, it is because of the discrepancy between the CUDA device and the graphics device.
+Please ensure that the CUDA device and the graphics device are the same. (IGE_env_manager.py:148)[0m
+Not connected to PVD
++++ Using GPU PhysX
+PxgCudaDeviceMemoryAllocator fail to allocate memory 134217728 bytes!! Result = 2
+PxgCudaDeviceMemoryAllocator fail to allocate memory 268435456 bytes!! Result = 2
+PxgCudaDeviceMemoryAllocator fail to allocate memory 1073741824 bytes!! Result = 2
+PxgCudaDeviceMemoryAllocator fail to allocate memory 134217728 bytes!! Result = 2
+PxgCudaDeviceMemoryAllocator fail to allocate memory 201326592 bytes!! Result = 2
+PxgCudaDeviceMemoryAllocator fail to allocate memory 67108864 bytes!! Result = 2
+PxgCudaDeviceMemoryAllocator fail to allocate memory 67108864 bytes!! Result = 2
+PxgCudaDeviceMemoryAllocator fail to allocate memory 134217728 bytes!! Result = 2
+PxgCudaDeviceMemoryAllocator fail to allocate memory 134217728 bytes!! Result = 2
+Physics Engine: PhysX
+Physics Device: cuda:0
+GPU Pipeline: enabled
+[37m[2709 ms][IsaacGymEnvManager] - INFO : Created Isaac Gym Simulation Object (IGE_env_manager.py:154)[0m
+[37m[2709 ms][IsaacGymEnvManager] - INFO : Created Isaac Gym Environment (IGE_env_manager.py:49)[0m
+[37m[2954 ms][env_manager] - INFO : IGE object instantiated. (env_manager.py:115)[0m
+[37m[2954 ms][env_manager] - INFO : Creating warp environment. (env_manager.py:119)[0m
+[37m[2954 ms][env_manager] - INFO : Warp environment created. (env_manager.py:121)[0m
+[37m[2954 ms][env_manager] - INFO : Creating robot manager. (env_manager.py:126)[0m
+[37m[2954 ms][BaseRobot] - INFO : [DONE] Initializing controller (base_robot.py:26)[0m
+[37m[2954 ms][BaseRobot] - INFO : Initializing controller lee_position_control_with_compensation (base_robot.py:29)[0m
+[33;20m[2954 ms][base_multirotor] - WARNING : Creating 4096 multirotors. (base_multirotor.py:37)[0m
+[37m[2954 ms][env_manager] - INFO : [DONE] Creating robot manager. (env_manager.py:132)[0m
+[37m[2954 ms][env_manager] - INFO : [DONE] Creating simulation instance. (env_manager.py:134)[0m
+[37m[2954 ms][asset_loader] - INFO : Loading asset: quad.urdf for the first time. Next use of this asset will be via the asset buffer. (asset_loader.py:71)[0m
+[37m[2960 ms][env_manager] - INFO : Populating environment 0 (env_manager.py:194)[0m
+[33;20m[3441 ms][robot_manager] - WARNING : 
+Robot mass: 0.2500003944120692,
+Inertia: tensor([[8.4501e-04, 0.0000e+00, 3.3087e-24],
+        [0.0000e+00, 8.4501e-04, 3.3087e-24],
+        [3.3087e-24, 3.3087e-24, 1.6900e-03]], device='cuda:0'),
+Robot COM: tensor([[0.0000e+00, 0.0000e+00, 1.3411e-14, 1.0000e+00]], device='cuda:0') (robot_manager.py:427)[0m
+[33;20m[3441 ms][robot_manager] - WARNING : Calculated robot mass and inertia for this robot. This code assumes that your robot is the same across environments. (robot_manager.py:430)[0m
+[31;1m[3441 ms][robot_manager] - CRITICAL : If your robot differs across environments you need to perform this computation for each different robot here. (robot_manager.py:433)[0m
+[37m[3574 ms][env_manager] - INFO : Populating environment 1000 (env_manager.py:194)[0m
+[37m[3703 ms][env_manager] - INFO : Populating environment 2000 (env_manager.py:194)[0m
+[37m[3833 ms][env_manager] - INFO : Populating environment 3000 (env_manager.py:194)[0m
+[37m[3963 ms][env_manager] - INFO : Populating environment 4000 (env_manager.py:194)[0m
+[37m[3977 ms][env_manager] - INFO : [DONE] Populating environments. (env_manager.py:79)[0m
+PxgCudaDeviceMemoryAllocator fail to allocate memory 67108864 bytes!! Result = 2
+PxgCudaDeviceMemoryAllocator fail to allocate memory 67108864 bytes!! Result = 2
+PxgCudaDeviceMemoryAllocator fail to allocate memory 67108864 bytes!! Result = 2
+/buildAgent/work/99bede84aa0a52c2/source/physx/src/NpScene.cpp (3509) : internal error : PhysX Internal CUDA error. Simulation can not continue!
+
+[Error] [carb.gym.plugin] Gym cuda error: an illegal memory access was encountered: ../../../source/plugins/carb/gym/impl/Gym/GymPhysX.cpp: 1459
+Traceback (most recent call last):
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/runpy.py", line 194, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/runpy.py", line 87, in _run_code
+    exec(code, run_globals)
+  File "/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/rl_training/rl_games/runner.py", line 382, in <module>
+    runner.run(args)
+  File "/home/throne/.local/lib/python3.8/site-packages/rl_games/torch_runner.py", line 133, in run
+    self.run_train(args)
+  File "/home/throne/.local/lib/python3.8/site-packages/rl_games/torch_runner.py", line 113, in run_train
+    agent = self.algo_factory.create(self.algo_name, base_name='run', params=self.params)
+  File "/home/throne/.local/lib/python3.8/site-packages/rl_games/common/object_factory.py", line 15, in create
+    return builder(**kwargs)
+  File "/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/rl_training/rl_games/runner.py", line 361, in <lambda>
+    lambda **kwargs: A2CAgentWithAuxLoss(**kwargs)
+  File "/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/rl_training/rl_games/a2c_aux_loss.py", line 33, in __init__
+    super().__init__(base_name, params)
+  File "/home/throne/.local/lib/python3.8/site-packages/rl_games/algos_torch/a2c_continuous.py", line 24, in __init__
+    a2c_common.ContinuousA2CBase.__init__(self, base_name, params)
+  File "/home/throne/.local/lib/python3.8/site-packages/rl_games/common/a2c_common.py", line 1189, in __init__
+    A2CBase.__init__(self, base_name, params)
+  File "/home/throne/.local/lib/python3.8/site-packages/rl_games/common/a2c_common.py", line 131, in __init__
+    self.vec_env = vecenv.create_vec_env(self.env_name, self.num_actors, **self.env_config)
+  File "/home/throne/.local/lib/python3.8/site-packages/rl_games/common/vecenv.py", line 224, in create_vec_env
+    return vecenv_config[vec_env_name](config_name, num_actors, **kwargs)
+  File "/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/rl_training/rl_games/runner.py", line 194, in <lambda>
+    lambda config_name, num_actors, **kwargs: AERIALRLGPUEnv(config_name, num_actors, **kwargs),
+  File "/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/rl_training/rl_games/runner.py", line 67, in __init__
+    self.env = env_configurations.configurations[config_name]["env_creator"](**kwargs)
+  File "/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/rl_training/rl_games/runner.py", line 127, in <lambda>
+    "env_creator": lambda **kwargs: task_registry.make_task(
+  File "/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/registry/task_registry.py", line 28, in make_task
+    return task_class(
+  File "/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/task/payload_compensation_task/payload_compensation_task.py", line 569, in __init__
+    self.sim_env = self.sim_builder.build_env(
+  File "/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/sim/sim_builder.py", line 37, in build_env
+    self.env = EnvManager(
+  File "/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/env_manager/env_manager.py", line 81, in __init__
+    self.prepare_sim()
+  File "/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/env_manager/env_manager.py", line 282, in prepare_sim
+    if not self.IGE_env.prepare_for_simulation(self, self.global_tensor_dict):
+  File "/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/env_manager/IGE_env_manager.py", line 312, in prepare_for_simulation
+    raise RuntimeError("Failed to prepare Isaac Gym Environment")
+RuntimeError: Failed to prepare Isaac Gym Environment
+Warp 1.0.0 initialized:
+   CUDA Toolkit 11.5, Driver 12.6
+   Devices:
+     "cpu"      : "x86_64"
+     "cuda:0"   : "NVIDIA GeForce RTX 4060 Laptop GPU" (8 GiB, sm_89, mempool enabled)
+   Kernel cache:
+     /home/throne/.cache/warp/1.0.0
+[isaacgym:gymutil.py] Unknown args:  []
+Loading config:  aerial_gym/rl_training/rl_games/ppo_aerial_quad_aux.yaml
+[Runner] Registered custom agent: a2c_continuous_aux
+self.seed = 8
+Started to train
+[isaacgym:gymutil.py] Unknown args:  ['--train', '--file', 'aerial_gym/rl_training/rl_games/ppo_aerial_quad_aux.yaml', '--task', 'payload_compensation_task_teacher', '--experiment_name', 'teacher_debug_mag']

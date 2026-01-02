@@ -1,0 +1,911 @@
+Importing module 'gym_38' (/home/throne/下载/isaacgym/python/isaacgym/_bindings/linux-x86_64/gym_38.so)
+Setting GYM_USD_PLUG_INFO_PATH to /home/throne/下载/isaacgym/python/isaacgym/_bindings/linux-x86_64/usd/plugInfo.json
+PyTorch version 1.13.1
+Device count 1
+/home/throne/下载/isaacgym/python/isaacgym/_bindings/src/gymtorch
+Using /home/throne/.cache/torch_extensions/py38_cu117 as PyTorch extensions root...
+Emitting ninja build file /home/throne/.cache/torch_extensions/py38_cu117/gymtorch/build.ninja...
+Building extension module gymtorch...
+Allowing ninja to set a default number of workers... (overridable by setting the environment variable MAX_JOBS=N)
+ninja: no work to do.
+Loading extension module gymtorch...
+Gym has been unmaintained since 2022 and does not support NumPy 2.0 amongst other critical functionality.
+Please upgrade to Gymnasium, the maintained drop-in replacement of Gym, or contact the authors of your software and request that they upgrade.
+See the migration guide at https://gymnasium.farama.org/introduction/migration_guide/ for additional information.
+/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/gymnasium/envs/registration.py:596: UserWarning: [33mWARN: plugin: shimmy.registration:register_gymnasium_envs raised Traceback (most recent call last):
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/gymnasium/envs/registration.py", line 594, in load_plugin_envs
+    fn()
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/shimmy/registration.py", line 304, in register_gymnasium_envs
+    _register_atari_envs()
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/shimmy/registration.py", line 205, in _register_atari_envs
+    import ale_py
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/ale_py/__init__.py", line 68, in <module>
+    register_v0_v4_envs()
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/ale_py/registration.py", line 178, in register_v0_v4_envs
+    _register_rom_configs(legacy_games, obs_types, versions)
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/ale_py/registration.py", line 63, in _register_rom_configs
+    gymnasium.register(
+AttributeError: partially initialized module 'gymnasium' has no attribute 'register' (most likely due to a circular import)
+[0m
+  logger.warn(f"plugin: {plugin.value} raised {traceback.format_exc()}")
+/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/torch/utils/tensorboard/__init__.py:4: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
+  if not hasattr(tensorboard, "__version__") or LooseVersion(
+[37m[1890 ms][base_task] - INFO : Setting seed: 8 (base_task.py:38)[0m
+[37m[1891 ms][payload_compensation_task] - INFO : Building environment for payload compensation task. (payload_compensation_task.py:567)[0m
+[37m[1891 ms][env_manager] - INFO : Populating environments. (env_manager.py:76)[0m
+[37m[1891 ms][env_manager] - INFO : Creating simulation instance. (env_manager.py:92)[0m
+[37m[1891 ms][env_manager] - INFO : Instantiating IGE object. (env_manager.py:93)[0m
+[37m[1891 ms][IsaacGymEnvManager] - INFO : Creating Isaac Gym Environment (IGE_env_manager.py:46)[0m
+[37m[1891 ms][IsaacGymEnvManager] - INFO : Acquiring gym object (IGE_env_manager.py:81)[0m
+[37m[1891 ms][IsaacGymEnvManager] - INFO : Acquired gym object (IGE_env_manager.py:83)[0m
+[37m[1891 ms][IsaacGymEnvManager] - INFO : Fixing devices (IGE_env_manager.py:95)[0m
+[37m[1892 ms][IsaacGymEnvManager] - INFO : Using GPU pipeline for simulation. (IGE_env_manager.py:112)[0m
+[37m[1892 ms][IsaacGymEnvManager] - INFO : Sim Device type: cuda, Sim Device ID: 0 (IGE_env_manager.py:115)[0m
+[31;1m[1892 ms][IsaacGymEnvManager] - CRITICAL : 
+ Setting graphics device to -1.
+ This is done because the simulation is run in headless mode and no Isaac Gym cameras are used.
+ No need to worry. The simulation and warp rendering will work as expected. (IGE_env_manager.py:125)[0m
+[37m[1892 ms][IsaacGymEnvManager] - INFO : Graphics Device ID: -1 (IGE_env_manager.py:133)[0m
+[37m[1892 ms][IsaacGymEnvManager] - INFO : Creating Isaac Gym Simulation Object (IGE_env_manager.py:135)[0m
+[33;20m[1892 ms][IsaacGymEnvManager] - WARNING : If you have set the CUDA_VISIBLE_DEVICES environment variable, please ensure that you set it
+to a particular one that works for your system to use the viewer or Isaac Gym cameras.
+If you want to run parallel simulations on multiple GPUs with camera sensors,
+please disable Isaac Gym and use warp (by setting use_warp=True), set the viewer to headless. (IGE_env_manager.py:143)[0m
+[33;20m[1892 ms][IsaacGymEnvManager] - WARNING : If you see a segfault in the next lines, it is because of the discrepancy between the CUDA device and the graphics device.
+Please ensure that the CUDA device and the graphics device are the same. (IGE_env_manager.py:148)[0m
+Not connected to PVD
++++ Using GPU PhysX
+Physics Engine: PhysX
+Physics Device: cuda:0
+GPU Pipeline: enabled
+[37m[2621 ms][IsaacGymEnvManager] - INFO : Created Isaac Gym Simulation Object (IGE_env_manager.py:154)[0m
+[37m[2621 ms][IsaacGymEnvManager] - INFO : Created Isaac Gym Environment (IGE_env_manager.py:49)[0m
+[37m[2823 ms][env_manager] - INFO : IGE object instantiated. (env_manager.py:115)[0m
+[37m[2823 ms][env_manager] - INFO : Creating warp environment. (env_manager.py:119)[0m
+[37m[2823 ms][env_manager] - INFO : Warp environment created. (env_manager.py:121)[0m
+[37m[2823 ms][env_manager] - INFO : Creating robot manager. (env_manager.py:126)[0m
+[37m[2823 ms][BaseRobot] - INFO : [DONE] Initializing controller (base_robot.py:26)[0m
+[37m[2823 ms][BaseRobot] - INFO : Initializing controller lee_position_control_with_compensation (base_robot.py:29)[0m
+[33;20m[2823 ms][base_multirotor] - WARNING : Creating 512 multirotors. (base_multirotor.py:37)[0m
+[37m[2824 ms][env_manager] - INFO : [DONE] Creating robot manager. (env_manager.py:132)[0m
+[37m[2824 ms][env_manager] - INFO : [DONE] Creating simulation instance. (env_manager.py:134)[0m
+[37m[2824 ms][asset_loader] - INFO : Loading asset: quad.urdf for the first time. Next use of this asset will be via the asset buffer. (asset_loader.py:71)[0m
+[37m[2825 ms][env_manager] - INFO : Populating environment 0 (env_manager.py:194)[0m
+[33;20m[3200 ms][robot_manager] - WARNING : 
+Robot mass: 0.2500003944120692,
+Inertia: tensor([[8.4501e-04, 0.0000e+00, 3.3087e-24],
+        [0.0000e+00, 8.4501e-04, 3.3087e-24],
+        [3.3087e-24, 3.3087e-24, 1.6900e-03]], device='cuda:0'),
+Robot COM: tensor([[0.0000e+00, 0.0000e+00, 1.3411e-14, 1.0000e+00]], device='cuda:0') (robot_manager.py:427)[0m
+[33;20m[3200 ms][robot_manager] - WARNING : Calculated robot mass and inertia for this robot. This code assumes that your robot is the same across environments. (robot_manager.py:430)[0m
+[31;1m[3200 ms][robot_manager] - CRITICAL : If your robot differs across environments you need to perform this computation for each different robot here. (robot_manager.py:433)[0m
+[37m[3229 ms][env_manager] - INFO : [DONE] Populating environments. (env_manager.py:79)[0m
+[33;20m[3240 ms][IsaacGymEnvManager] - WARNING : Headless: True (IGE_env_manager.py:494)[0m
+[37m[3240 ms][IsaacGymEnvManager] - INFO : Headless mode. Viewer not created. (IGE_env_manager.py:505)[0m
+[33;20m[3241 ms][warp_env_manager] - WARNING : No assets have been added to the environment. Skipping preparation for simulation (warp_env_manager.py:101)[0m
+[33;20m[3291 ms][asset_manager] - WARNING : Number of obstacles to be kept in the environment: 0 (asset_manager.py:32)[0m
+/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/control/motor_model.py:53: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  torch.tensor(self.min_thrust, device=self.device, dtype=torch.float32).expand(
+/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/control/motor_model.py:56: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  torch.tensor(self.max_thrust, device=self.device, dtype=torch.float32).expand(
+[33;20m[3368 ms][control_allocation] - WARNING : Control allocation does not account for actuator limits. This leads to suboptimal allocation (control_allocation.py:67)[0m
+/home/throne/.local/lib/python3.8/site-packages/gym/spaces/box.py:84: UserWarning: [33mWARN: Box bound precision lowered by casting to float32[0m
+  logger.warn(f"Box bound precision lowered by casting to {self.dtype}")
+[37m[4098 ms][payload_compensation_task] - INFO : [DebugReset 0] env_ids=[0, 1, 2] targets=[[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]] release_info={0: {'order': [1, 3, 2, 0], 'next_release': 58}, 1: {'order': [2, 1, 3, 0], 'next_release': 92}, 2: {'order': [0, 3, 2, 1], 'next_release': 82}} (payload_compensation_task.py:1701)[0m
+Warp 1.0.0 initialized:
+   CUDA Toolkit 11.5, Driver 12.6
+   Devices:
+     "cpu"      : "x86_64"
+     "cuda:0"   : "NVIDIA GeForce RTX 4060 Laptop GPU" (8 GiB, sm_89, mempool enabled)
+   Kernel cache:
+     /home/throne/.cache/warp/1.0.0
+[isaacgym:gymutil.py] Unknown args:  []
+Loading config:  aerial_gym/rl_training/rl_games/ppo_aerial_quad_aux.yaml
+[Runner] Registered custom agent: a2c_continuous_aux
+self.seed = 8
+Started to train
+[isaacgym:gymutil.py] Unknown args:  ['--train', '--file', 'aerial_gym/rl_training/rl_games/ppo_aerial_quad_aux.yaml', '--task', 'payload_compensation_task_teacher', '--experiment_name', 'teacher_debug_mag']
+WARNING: allocation matrix is not full rank. Rank: 4
+Box(-1.0, 1.0, (3,), float32) Box(-inf, inf, (20,), float32)
+seq_length: 4
+current training device: cuda:0
+build mlp: 28
+RunningMeanStd:  (1,)
+RunningMeanStd:  (20,)
+[A2CAgentWithAuxLoss] Auxiliary loss coefficient: 0.5
+[A2CAgentWithAuxLoss] BC loss: coef=20.0, alpha=0.999, min=0.0
+[A2CAgentWithAuxLoss] NaN防护: skip=True, reset=True, tolerance=5
+[A2CAgentWithAuxLoss] Registered teacher_actions in experience_buffer (shape: [horizon=256, actors=512, action_dim=3])
+[A2CAgentWithAuxLoss] Registered privileged_obs in experience_buffer (shape: [horizon=256, actors=512, priv_dim=7])
+DEBUG: PrivilegedA2CBuilder.forward called! Base shape: torch.Size([512, 20]), Priv shape: torch.Size([512, 8])
+[PrivNet Debug] Base mag: 0.5260, Priv mag: 0.1076, Ratio: 0.2045
+[PrivNet Debug] Base mag: 0.5259, Priv mag: 0.1087, Ratio: 0.2067
+[PrivNet Debug] Base mag: 0.5270, Priv mag: 0.1066, Ratio: 0.2022
+[PrivNet Debug] Base mag: 0.5195, Priv mag: 0.1043, Ratio: 0.2007
+[37m[6135 ms][payload_compensation_task] - INFO : [DebugReset 1] env_ids=[501] targets=[[0.0, 0.0, 0.0]] release_info={501: {'order': [0, 3, 2, 1], 'next_release': 80}} (payload_compensation_task.py:1701)[0m
+[37m[6231 ms][payload_compensation_task] - INFO : [DebugReset 2] env_ids=[290] targets=[[0.0, 0.0, 0.0]] release_info={290: {'order': [2, 1, 0, 3], 'next_release': 50}} (payload_compensation_task.py:1701)[0m
+[PrivNet Debug] Base mag: 0.4791, Priv mag: 0.0950, Ratio: 0.1984
+[37m[6400 ms][payload_compensation_task] - INFO : [DebugReset 3] env_ids=[170, 320] targets=[[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]] release_info={170: {'order': [1, 3, 0, 2], 'next_release': 67}, 320: {'order': [2, 3, 0, 1], 'next_release': 86}} (payload_compensation_task.py:1701)[0m
+[37m[6432 ms][payload_compensation_task] - INFO : [DebugReset 4] env_ids=[195] targets=[[0.0, 0.0, 0.0]] release_info={195: {'order': [2, 3, 1, 0], 'next_release': 74}} (payload_compensation_task.py:1701)[0m
+[PrivNet Debug] Base mag: 0.4349, Priv mag: 0.0838, Ratio: 0.1927
+[PrivNet Debug] Base mag: 0.4198, Priv mag: 0.0832, Ratio: 0.1982
+[PrivNet Debug] Base mag: 0.4180, Priv mag: 0.0818, Ratio: 0.1958
+[PrivNet Debug] Base mag: 0.4175, Priv mag: 0.0820, Ratio: 0.1963
+[PrivNet Debug] Base mag: 0.4151, Priv mag: 0.0827, Ratio: 0.1993
+[PrivNet Debug] Base mag: 0.4122, Priv mag: 0.0819, Ratio: 0.1988
+[PrivNet Debug] Base mag: 0.4138, Priv mag: 0.0825, Ratio: 0.1994
+[PrivNet Debug] Base mag: 0.4070, Priv mag: 0.0817, Ratio: 0.2007
+[PrivNet Debug] Base mag: 0.4082, Priv mag: 0.0814, Ratio: 0.1993
+[PrivNet Debug] Base mag: 0.4066, Priv mag: 0.0821, Ratio: 0.2019
+[DaggerFrac] step=200 frac=0.00000000
+[PrivNet Debug] Base mag: 0.4075, Priv mag: 0.0822, Ratio: 0.2017
+[PrivNet Debug] Base mag: 0.4041, Priv mag: 0.0816, Ratio: 0.2020
+[PrivNet Debug] Base mag: 0.4052, Priv mag: 0.0815, Ratio: 0.2011
+[PrivNet Debug] Base mag: 0.4069, Priv mag: 0.0820, Ratio: 0.2016
+[PrivNet Debug] Base mag: 0.4081, Priv mag: 0.0816, Ratio: 0.1999
+[PrivNet Debug] Base mag: 0.4059, Priv mag: 0.0807, Ratio: 0.1989
+fps step: 33 fps step and policy inference: 30642 fps total: 29619 epoch: 1/16000 frames: 0
+saving next best rewards:  [185.53386]
+=> saving checkpoint 'runs/teacher_debug_mag_02-22-28-31/nn/teacher_debug_mag.pth'
+[PrivNet Debug] Base mag: 0.6607, Priv mag: 0.1491, Ratio: 0.2256
+[PrivNet Debug] Base mag: 0.6725, Priv mag: 0.1495, Ratio: 0.2224
+[PrivNet Debug] Base mag: 0.6768, Priv mag: 0.1490, Ratio: 0.2201
+[PrivNet Debug] Base mag: 0.7744, Priv mag: 0.1570, Ratio: 0.2028
+[PrivNet Debug] Base mag: 0.8051, Priv mag: 0.1592, Ratio: 0.1978
+[PrivNet Debug] Base mag: 0.8377, Priv mag: 0.1580, Ratio: 0.1886
+[PrivNet Debug] Base mag: 0.8714, Priv mag: 0.1647, Ratio: 0.1890
+[PrivNet Debug] Base mag: 0.8817, Priv mag: 0.1718, Ratio: 0.1948
+[PrivNet Debug] Base mag: 0.8952, Priv mag: 0.1727, Ratio: 0.1930
+[PrivNet Debug] Base mag: 0.8909, Priv mag: 0.1717, Ratio: 0.1928
+[DaggerFrac] step=400 frac=0.00000000
+[PrivNet Debug] Base mag: 0.8734, Priv mag: 0.1736, Ratio: 0.1988
+[PrivNet Debug] Base mag: 0.8914, Priv mag: 0.1784, Ratio: 0.2001
+[PrivNet Debug] Base mag: 0.8932, Priv mag: 0.1775, Ratio: 0.1987
+[PrivNet Debug] Base mag: 0.8545, Priv mag: 0.1831, Ratio: 0.2142
+[PrivNet Debug] Base mag: 0.8058, Priv mag: 0.1801, Ratio: 0.2235
+[PrivNet Debug] Base mag: 0.8064, Priv mag: 0.1824, Ratio: 0.2261
+[PrivNet Debug] Base mag: 0.7978, Priv mag: 0.1842, Ratio: 0.2309
+[PrivNet Debug] Base mag: 0.7934, Priv mag: 0.1831, Ratio: 0.2308
+[PrivNet Debug] Base mag: 0.7791, Priv mag: 0.1818, Ratio: 0.2333
+[PrivNet Debug] Base mag: 0.7812, Priv mag: 0.1847, Ratio: 0.2365
+fps step: 44 fps step and policy inference: 39626 fps total: 37933 epoch: 2/16000 frames: 131072
+saving next best rewards:  [841.7538]
+=> saving checkpoint 'runs/teacher_debug_mag_02-22-28-31/nn/teacher_debug_mag.pth'
+[PrivNet Debug] Base mag: 0.7130, Priv mag: 0.1514, Ratio: 0.2123
+[PrivNet Debug] Base mag: 0.7072, Priv mag: 0.1517, Ratio: 0.2146
+[PrivNet Debug] Base mag: 0.7097, Priv mag: 0.1523, Ratio: 0.2146
+[PrivNet Debug] Base mag: 0.7077, Priv mag: 0.1522, Ratio: 0.2151
+[PrivNet Debug] Base mag: 0.7038, Priv mag: 0.1544, Ratio: 0.2193
+[PrivNet Debug] Base mag: 0.7020, Priv mag: 0.1516, Ratio: 0.2160
+[PrivNet Debug] Base mag: 0.7098, Priv mag: 0.1515, Ratio: 0.2135
+[PrivNet Debug] Base mag: 0.7093, Priv mag: 0.1522, Ratio: 0.2146
+[PrivNet Debug] Base mag: 0.7173, Priv mag: 0.1521, Ratio: 0.2121
+[PrivNet Debug] Base mag: 0.7130, Priv mag: 0.1519, Ratio: 0.2131
+[PrivNet Debug] Base mag: 0.7152, Priv mag: 0.1519, Ratio: 0.2124
+[PrivNet Debug] Base mag: 0.7100, Priv mag: 0.1521, Ratio: 0.2142
+[PrivNet Debug] Base mag: 0.6942, Priv mag: 0.1512, Ratio: 0.2178
+[DaggerFrac] step=600 frac=0.00000000
+[PrivNet Debug] Base mag: 0.7205, Priv mag: 0.1516, Ratio: 0.2104
+[PrivNet Debug] Base mag: 0.7373, Priv mag: 0.1486, Ratio: 0.2015
+[PrivNet Debug] Base mag: 0.7530, Priv mag: 0.1525, Ratio: 0.2025
+[PrivNet Debug] Base mag: 0.7476, Priv mag: 0.1517, Ratio: 0.2029
+[PrivNet Debug] Base mag: 0.7533, Priv mag: 0.1542, Ratio: 0.2046
+[PrivNet Debug] Base mag: 0.7547, Priv mag: 0.1534, Ratio: 0.2033
+[PrivNet Debug] Base mag: 0.7711, Priv mag: 0.1525, Ratio: 0.1977
+[PrivNet Debug] Base mag: 0.7780, Priv mag: 0.1531, Ratio: 0.1968
+[PrivNet Debug] Base mag: 0.7869, Priv mag: 0.1495, Ratio: 0.1900
+[PrivNet Debug] Base mag: 0.7819, Priv mag: 0.1558, Ratio: 0.1992
+[PrivNet Debug] Base mag: 0.8044, Priv mag: 0.1566, Ratio: 0.1947
+[PrivNet Debug] Base mag: 0.7896, Priv mag: 0.1560, Ratio: 0.1975
+[PrivNet Debug] Base mag: 0.8051, Priv mag: 0.1574, Ratio: 0.1956
+[PrivNet Debug] Base mag: 0.8017, Priv mag: 0.1613, Ratio: 0.2012
+[PrivNet Debug] Base mag: 0.8008, Priv mag: 0.1627, Ratio: 0.2032
+[PrivNet Debug] Base mag: 0.7894, Priv mag: 0.1608, Ratio: 0.2038
+[PrivNet Debug] Base mag: 0.8035, Priv mag: 0.1664, Ratio: 0.2070
+[PrivNet Debug] Base mag: 0.8129, Priv mag: 0.1673, Ratio: 0.2058
+[PrivNet Debug] Base mag: 0.7162, Priv mag: 0.1412, Ratio: 0.1971
+[PrivNet Debug] Base mag: 0.7162, Priv mag: 0.1396, Ratio: 0.1949
+fps step: 47 fps step and policy inference: 42777 fps total: 40822 epoch: 3/16000 frames: 262144
+saving next best rewards:  [1788.7866]
+=> saving checkpoint 'runs/teacher_debug_mag_02-22-28-31/nn/teacher_debug_mag.pth'
+[PrivNet Debug] Base mag: 0.7281, Priv mag: 0.1520, Ratio: 0.2088
+[PrivNet Debug] Base mag: 0.7127, Priv mag: 0.1510, Ratio: 0.2119
+[PrivNet Debug] Base mag: 0.7220, Priv mag: 0.1511, Ratio: 0.2093
+[DaggerFrac] step=800 frac=0.00000000
+[PrivNet Debug] Base mag: 0.7000, Priv mag: 0.1496, Ratio: 0.2137
+[PrivNet Debug] Base mag: 0.7125, Priv mag: 0.1505, Ratio: 0.2113
+[PrivNet Debug] Base mag: 0.6980, Priv mag: 0.1526, Ratio: 0.2186
+[PrivNet Debug] Base mag: 0.6919, Priv mag: 0.1512, Ratio: 0.2185
+[PrivNet Debug] Base mag: 0.6623, Priv mag: 0.1493, Ratio: 0.2254
+[PrivNet Debug] Base mag: 0.6790, Priv mag: 0.1510, Ratio: 0.2223
+[PrivNet Debug] Base mag: 0.6691, Priv mag: 0.1480, Ratio: 0.2213
+[PrivNet Debug] Base mag: 0.6845, Priv mag: 0.1509, Ratio: 0.2205
+[PrivNet Debug] Base mag: 0.6838, Priv mag: 0.1495, Ratio: 0.2186
+[PrivNet Debug] Base mag: 0.7237, Priv mag: 0.1523, Ratio: 0.2104
+[PrivNet Debug] Base mag: 0.7263, Priv mag: 0.1501, Ratio: 0.2067
+[PrivNet Debug] Base mag: 0.7501, Priv mag: 0.1524, Ratio: 0.2032
+[DaggerFrac] step=1000 frac=0.00000000
+[PrivNet Debug] Base mag: 0.7718, Priv mag: 0.1524, Ratio: 0.1975
+[PrivNet Debug] Base mag: 0.7742, Priv mag: 0.1526, Ratio: 0.1971
+[PrivNet Debug] Base mag: 0.7740, Priv mag: 0.1499, Ratio: 0.1937
+[PrivNet Debug] Base mag: 0.6957, Priv mag: 0.1409, Ratio: 0.2026
+fps step: 51 fps step and policy inference: 45733 fps total: 43508 epoch: 4/16000 frames: 393216
+saving next best rewards:  [1877.7808]
+=> saving checkpoint 'runs/teacher_debug_mag_02-22-28-31/nn/teacher_debug_mag.pth'
+[PrivNet Debug] Base mag: 0.7477, Priv mag: 0.1417, Ratio: 0.1895
+[PrivNet Debug] Base mag: 0.7696, Priv mag: 0.1462, Ratio: 0.1899
+[PrivNet Debug] Base mag: 0.7575, Priv mag: 0.1475, Ratio: 0.1947
+[PrivNet Debug] Base mag: 0.7538, Priv mag: 0.1463, Ratio: 0.1941
+[PrivNet Debug] Base mag: 0.7663, Priv mag: 0.1512, Ratio: 0.1973
+[PrivNet Debug] Base mag: 0.7635, Priv mag: 0.1515, Ratio: 0.1984
+[PrivNet Debug] Base mag: 0.7311, Priv mag: 0.1505, Ratio: 0.2059
+[PrivNet Debug] Base mag: 0.7164, Priv mag: 0.1475, Ratio: 0.2058
+[PrivNet Debug] Base mag: 0.7079, Priv mag: 0.1498, Ratio: 0.2116
+[PrivNet Debug] Base mag: 0.7207, Priv mag: 0.1515, Ratio: 0.2103
+[PrivNet Debug] Base mag: 0.7105, Priv mag: 0.1510, Ratio: 0.2125
+[PrivNet Debug] Base mag: 0.7011, Priv mag: 0.1507, Ratio: 0.2150
+[PrivNet Debug] Base mag: 0.6939, Priv mag: 0.1500, Ratio: 0.2162
+[PrivNet Debug] Base mag: 0.6900, Priv mag: 0.1513, Ratio: 0.2193
+[PrivNet Debug] Base mag: 0.6851, Priv mag: 0.1484, Ratio: 0.2166
+[PrivNet Debug] Base mag: 0.6862, Priv mag: 0.1501, Ratio: 0.2188
+[DaggerFrac] step=1200 frac=0.00000000
+[PrivNet Debug] Base mag: 0.6821, Priv mag: 0.1520, Ratio: 0.2228
+[PrivNet Debug] Base mag: 0.6825, Priv mag: 0.1488, Ratio: 0.2181
+[PrivNet Debug] Base mag: 0.6750, Priv mag: 0.1513, Ratio: 0.2242
+[PrivNet Debug] Base mag: 0.6706, Priv mag: 0.1516, Ratio: 0.2261
+[PrivNet Debug] Base mag: 0.6677, Priv mag: 0.1482, Ratio: 0.2220
+[PrivNet Debug] Base mag: 0.6696, Priv mag: 0.1509, Ratio: 0.2253
+[PrivNet Debug] Base mag: 0.6655, Priv mag: 0.1480, Ratio: 0.2224
+[PrivNet Debug] Base mag: 0.6601, Priv mag: 0.1522, Ratio: 0.2306
+[PrivNet Debug] Base mag: 0.6679, Priv mag: 0.1489, Ratio: 0.2229
+[PrivNet Debug] Base mag: 0.6732, Priv mag: 0.1507, Ratio: 0.2239
+[PrivNet Debug] Base mag: 0.6838, Priv mag: 0.1535, Ratio: 0.2245
+[PrivNet Debug] Base mag: 0.6746, Priv mag: 0.1497, Ratio: 0.2220
+fps step: 47 fps step and policy inference: 42407 fps total: 40479 epoch: 5/16000 frames: 524288
+saving next best rewards:  [2238.4333]
+=> saving checkpoint 'runs/teacher_debug_mag_02-22-28-31/nn/teacher_debug_mag.pth'
+[PrivNet Debug] Base mag: 0.6580, Priv mag: 0.1433, Ratio: 0.2177
+[PrivNet Debug] Base mag: 0.6478, Priv mag: 0.1401, Ratio: 0.2162
+[PrivNet Debug] Base mag: 0.6549, Priv mag: 0.1413, Ratio: 0.2158
+[PrivNet Debug] Base mag: 0.6483, Priv mag: 0.1420, Ratio: 0.2191
+[PrivNet Debug] Base mag: 0.6390, Priv mag: 0.1461, Ratio: 0.2286
+[PrivNet Debug] Base mag: 0.6607, Priv mag: 0.1452, Ratio: 0.2197
+[PrivNet Debug] Base mag: 0.6607, Priv mag: 0.1460, Ratio: 0.2209
+[PrivNet Debug] Base mag: 0.6779, Priv mag: 0.1467, Ratio: 0.2164
+[PrivNet Debug] Base mag: 0.6785, Priv mag: 0.1460, Ratio: 0.2152
+[PrivNet Debug] Base mag: 0.6727, Priv mag: 0.1476, Ratio: 0.2194
+[DaggerFrac] step=1400 frac=0.00000000
+[PrivNet Debug] Base mag: 0.6709, Priv mag: 0.1472, Ratio: 0.2194
+[PrivNet Debug] Base mag: 0.6743, Priv mag: 0.1456, Ratio: 0.2159
+[PrivNet Debug] Base mag: 0.6726, Priv mag: 0.1457, Ratio: 0.2166
+[PrivNet Debug] Base mag: 0.6750, Priv mag: 0.1496, Ratio: 0.2217
+[PrivNet Debug] Base mag: 0.6642, Priv mag: 0.1484, Ratio: 0.2234
+[PrivNet Debug] Base mag: 0.6576, Priv mag: 0.1486, Ratio: 0.2260
+[PrivNet Debug] Base mag: 0.6598, Priv mag: 0.1483, Ratio: 0.2247
+[PrivNet Debug] Base mag: 0.5698, Priv mag: 0.1268, Ratio: 0.2226
+[PrivNet Debug] Base mag: 0.6706, Priv mag: 0.1313, Ratio: 0.1958
+[PrivNet Debug] Base mag: 0.6896, Priv mag: 0.1318, Ratio: 0.1911
+[PrivNet Debug] Base mag: 0.7136, Priv mag: 0.1316, Ratio: 0.1845
+[PrivNet Debug] Base mag: 0.7204, Priv mag: 0.1328, Ratio: 0.1843
+fps step: 47 fps step and policy inference: 42173 fps total: 40334 epoch: 6/16000 frames: 655360
+saving next best rewards:  [7710.481]
+=> saving checkpoint 'runs/teacher_debug_mag_02-22-28-31/nn/teacher_debug_mag.pth'
+[PrivNet Debug] Base mag: 0.7079, Priv mag: 0.1321, Ratio: 0.1866
+[PrivNet Debug] Base mag: 0.7005, Priv mag: 0.1296, Ratio: 0.1850
+[PrivNet Debug] Base mag: 0.7023, Priv mag: 0.1289, Ratio: 0.1835
+[PrivNet Debug] Base mag: 0.7058, Priv mag: 0.1289, Ratio: 0.1827
+[PrivNet Debug] Base mag: 0.7029, Priv mag: 0.1274, Ratio: 0.1812
+[PrivNet Debug] Base mag: 0.7178, Priv mag: 0.1284, Ratio: 0.1789
+[PrivNet Debug] Base mag: 0.7212, Priv mag: 0.1270, Ratio: 0.1761
+[PrivNet Debug] Base mag: 0.7071, Priv mag: 0.1250, Ratio: 0.1768
+[DaggerFrac] step=1600 frac=0.00000000
+[PrivNet Debug] Base mag: 0.6903, Priv mag: 0.1242, Ratio: 0.1800
+[PrivNet Debug] Base mag: 0.6920, Priv mag: 0.1237, Ratio: 0.1788
+[PrivNet Debug] Base mag: 0.6592, Priv mag: 0.1266, Ratio: 0.1921
+[PrivNet Debug] Base mag: 0.6574, Priv mag: 0.1240, Ratio: 0.1885
+[PrivNet Debug] Base mag: 0.6709, Priv mag: 0.1250, Ratio: 0.1863
+[PrivNet Debug] Base mag: 0.6714, Priv mag: 0.1235, Ratio: 0.1840
+[PrivNet Debug] Base mag: 0.6627, Priv mag: 0.1239, Ratio: 0.1869
+[PrivNet Debug] Base mag: 0.6714, Priv mag: 0.1227, Ratio: 0.1828
+[PrivNet Debug] Base mag: 0.6735, Priv mag: 0.1254, Ratio: 0.1861
+[PrivNet Debug] Base mag: 0.6667, Priv mag: 0.1246, Ratio: 0.1870
+[PrivNet Debug] Base mag: 0.6738, Priv mag: 0.1222, Ratio: 0.1814
+[PrivNet Debug] Base mag: 0.6660, Priv mag: 0.1265, Ratio: 0.1900
+[PrivNet Debug] Base mag: 0.6648, Priv mag: 0.1243, Ratio: 0.1870
+[PrivNet Debug] Base mag: 0.6681, Priv mag: 0.1245, Ratio: 0.1863
+[PrivNet Debug] Base mag: 0.6705, Priv mag: 0.1267, Ratio: 0.1889
+[PrivNet Debug] Base mag: 0.6646, Priv mag: 0.1246, Ratio: 0.1876
+[PrivNet Debug] Base mag: 0.6702, Priv mag: 0.1268, Ratio: 0.1891
+[PrivNet Debug] Base mag: 0.6704, Priv mag: 0.1281, Ratio: 0.1911
+[PrivNet Debug] Base mag: 0.6834, Priv mag: 0.1300, Ratio: 0.1902
+fps step: 48 fps step and policy inference: 42988 fps total: 40995 epoch: 7/16000 frames: 786432
+[PrivNet Debug] Base mag: 0.7001, Priv mag: 0.1343, Ratio: 0.1918
+[PrivNet Debug] Base mag: 0.7054, Priv mag: 0.1359, Ratio: 0.1926
+[DaggerFrac] step=1800 frac=0.00000000
+[PrivNet Debug] Base mag: 0.7056, Priv mag: 0.1349, Ratio: 0.1912
+[PrivNet Debug] Base mag: 0.7045, Priv mag: 0.1371, Ratio: 0.1946
+[PrivNet Debug] Base mag: 0.7120, Priv mag: 0.1366, Ratio: 0.1919
+[PrivNet Debug] Base mag: 0.7110, Priv mag: 0.1362, Ratio: 0.1915
+[PrivNet Debug] Base mag: 0.7213, Priv mag: 0.1369, Ratio: 0.1898
+[PrivNet Debug] Base mag: 0.7261, Priv mag: 0.1384, Ratio: 0.1907
+[PrivNet Debug] Base mag: 0.7208, Priv mag: 0.1350, Ratio: 0.1873
+[PrivNet Debug] Base mag: 0.7247, Priv mag: 0.1366, Ratio: 0.1884
+[PrivNet Debug] Base mag: 0.7225, Priv mag: 0.1375, Ratio: 0.1903
+[PrivNet Debug] Base mag: 0.7194, Priv mag: 0.1390, Ratio: 0.1932
+[PrivNet Debug] Base mag: 0.7071, Priv mag: 0.1360, Ratio: 0.1923
+[PrivNet Debug] Base mag: 0.7024, Priv mag: 0.1378, Ratio: 0.1962
+[PrivNet Debug] Base mag: 0.6946, Priv mag: 0.1346, Ratio: 0.1938
+[PrivNet Debug] Base mag: 0.6939, Priv mag: 0.1352, Ratio: 0.1949
+[PrivNet Debug] Base mag: 0.6910, Priv mag: 0.1326, Ratio: 0.1920
+[PrivNet Debug] Base mag: 0.6932, Priv mag: 0.1325, Ratio: 0.1912
+[PrivNet Debug] Base mag: 0.6856, Priv mag: 0.1327, Ratio: 0.1935
+[PrivNet Debug] Base mag: 0.6869, Priv mag: 0.1299, Ratio: 0.1892
+[PrivNet Debug] Base mag: 0.6844, Priv mag: 0.1330, Ratio: 0.1943
+[PrivNet Debug] Base mag: 0.6845, Priv mag: 0.1309, Ratio: 0.1912
+[PrivNet Debug] Base mag: 0.6841, Priv mag: 0.1328, Ratio: 0.1941
+[PrivNet Debug] Base mag: 0.6650, Priv mag: 0.1330, Ratio: 0.2001
+[PrivNet Debug] Base mag: 0.6696, Priv mag: 0.1315, Ratio: 0.1964
+[PrivNet Debug] Base mag: 0.6708, Priv mag: 0.1336, Ratio: 0.1992
+[PrivNet Debug] Base mag: 0.6734, Priv mag: 0.1305, Ratio: 0.1938
+[PrivNet Debug] Base mag: 0.6602, Priv mag: 0.1324, Ratio: 0.2006
+[PrivNet Debug] Base mag: 0.6607, Priv mag: 0.1301, Ratio: 0.1969
+[PrivNet Debug] Base mag: 0.6454, Priv mag: 0.1325, Ratio: 0.2053
+[PrivNet Debug] Base mag: 0.6451, Priv mag: 0.1306, Ratio: 0.2025
+[DaggerFrac] step=2000 frac=0.00000000
+[PrivNet Debug] Base mag: 0.6467, Priv mag: 0.1304, Ratio: 0.2016
+[PrivNet Debug] Base mag: 0.6529, Priv mag: 0.1318, Ratio: 0.2018
+fps step: 45 fps step and policy inference: 40557 fps total: 38482 epoch: 8/16000 frames: 917504
+[PrivNet Debug] Base mag: 0.6453, Priv mag: 0.1382, Ratio: 0.2141
+[PrivNet Debug] Base mag: 0.6448, Priv mag: 0.1395, Ratio: 0.2164
+[PrivNet Debug] Base mag: 0.6625, Priv mag: 0.1413, Ratio: 0.2133
+[PrivNet Debug] Base mag: 0.6814, Priv mag: 0.1419, Ratio: 0.2082
+[PrivNet Debug] Base mag: 0.6740, Priv mag: 0.1408, Ratio: 0.2089
+[PrivNet Debug] Base mag: 0.6814, Priv mag: 0.1449, Ratio: 0.2127
+[PrivNet Debug] Base mag: 0.6827, Priv mag: 0.1421, Ratio: 0.2082
+[PrivNet Debug] Base mag: 0.6873, Priv mag: 0.1430, Ratio: 0.2081
+[PrivNet Debug] Base mag: 0.6779, Priv mag: 0.1430, Ratio: 0.2109
+[PrivNet Debug] Base mag: 0.6777, Priv mag: 0.1449, Ratio: 0.2139
+[PrivNet Debug] Base mag: 0.6638, Priv mag: 0.1417, Ratio: 0.2134
+[PrivNet Debug] Base mag: 0.6933, Priv mag: 0.1460, Ratio: 0.2106
+[PrivNet Debug] Base mag: 0.6969, Priv mag: 0.1441, Ratio: 0.2067
+[PrivNet Debug] Base mag: 0.6999, Priv mag: 0.1439, Ratio: 0.2056
+[PrivNet Debug] Base mag: 0.6973, Priv mag: 0.1445, Ratio: 0.2072
+[DaggerFrac] step=2200 frac=0.00000000
+[PrivNet Debug] Base mag: 0.6905, Priv mag: 0.1451, Ratio: 0.2101
+[PrivNet Debug] Base mag: 0.6899, Priv mag: 0.1449, Ratio: 0.2101
+[PrivNet Debug] Base mag: 0.6860, Priv mag: 0.1438, Ratio: 0.2096
+[PrivNet Debug] Base mag: 0.6921, Priv mag: 0.1460, Ratio: 0.2109
+[PrivNet Debug] Base mag: 0.6785, Priv mag: 0.1432, Ratio: 0.2111
+[PrivNet Debug] Base mag: 0.7016, Priv mag: 0.1439, Ratio: 0.2052
+[PrivNet Debug] Base mag: 0.6949, Priv mag: 0.1444, Ratio: 0.2078
+[PrivNet Debug] Base mag: 0.6924, Priv mag: 0.1445, Ratio: 0.2087
+[PrivNet Debug] Base mag: 0.6906, Priv mag: 0.1415, Ratio: 0.2049
+[PrivNet Debug] Base mag: 0.6926, Priv mag: 0.1448, Ratio: 0.2091
+[PrivNet Debug] Base mag: 0.7080, Priv mag: 0.1446, Ratio: 0.2043
+[PrivNet Debug] Base mag: 0.6715, Priv mag: 0.1454, Ratio: 0.2165
+[PrivNet Debug] Base mag: 0.6746, Priv mag: 0.1443, Ratio: 0.2139
+[PrivNet Debug] Base mag: 0.6557, Priv mag: 0.1455, Ratio: 0.2219
+[PrivNet Debug] Base mag: 0.6588, Priv mag: 0.1450, Ratio: 0.2201
+[PrivNet Debug] Base mag: 0.6690, Priv mag: 0.1457, Ratio: 0.2177
+[PrivNet Debug] Base mag: 0.6825, Priv mag: 0.1436, Ratio: 0.2104
+[PrivNet Debug] Base mag: 0.6825, Priv mag: 0.1455, Ratio: 0.2133
+fps step: 46 fps step and policy inference: 41705 fps total: 39857 epoch: 9/16000 frames: 1048576
+[PrivNet Debug] Base mag: 0.6577, Priv mag: 0.1605, Ratio: 0.2440
+[PrivNet Debug] Base mag: 0.6399, Priv mag: 0.1593, Ratio: 0.2490
+[PrivNet Debug] Base mag: 0.6358, Priv mag: 0.1582, Ratio: 0.2488
+[PrivNet Debug] Base mag: 0.6455, Priv mag: 0.1582, Ratio: 0.2451
+[PrivNet Debug] Base mag: 0.6513, Priv mag: 0.1588, Ratio: 0.2438
+[PrivNet Debug] Base mag: 0.6536, Priv mag: 0.1590, Ratio: 0.2433
+[PrivNet Debug] Base mag: 0.6427, Priv mag: 0.1579, Ratio: 0.2458
+[PrivNet Debug] Base mag: 0.6516, Priv mag: 0.1597, Ratio: 0.2451
+[PrivNet Debug] Base mag: 0.6447, Priv mag: 0.1593, Ratio: 0.2470
+[PrivNet Debug] Base mag: 0.6475, Priv mag: 0.1611, Ratio: 0.2488
+[PrivNet Debug] Base mag: 0.6510, Priv mag: 0.1580, Ratio: 0.2427
+[PrivNet Debug] Base mag: 0.6442, Priv mag: 0.1584, Ratio: 0.2458
+[PrivNet Debug] Base mag: 0.6430, Priv mag: 0.1577, Ratio: 0.2453
+[PrivNet Debug] Base mag: 0.6488, Priv mag: 0.1580, Ratio: 0.2436
+[DaggerFrac] step=2400 frac=0.00000000
+[PrivNet Debug] Base mag: 0.6427, Priv mag: 0.1583, Ratio: 0.2463
+[PrivNet Debug] Base mag: 0.6439, Priv mag: 0.1578, Ratio: 0.2451
+[PrivNet Debug] Base mag: 0.6398, Priv mag: 0.1582, Ratio: 0.2472
+[PrivNet Debug] Base mag: 0.6363, Priv mag: 0.1569, Ratio: 0.2466
+[PrivNet Debug] Base mag: 0.6544, Priv mag: 0.1579, Ratio: 0.2413
+[PrivNet Debug] Base mag: 0.6655, Priv mag: 0.1593, Ratio: 0.2394
+[PrivNet Debug] Base mag: 0.6664, Priv mag: 0.1588, Ratio: 0.2383
+[PrivNet Debug] Base mag: 0.6632, Priv mag: 0.1570, Ratio: 0.2367
+[PrivNet Debug] Base mag: 0.6766, Priv mag: 0.1603, Ratio: 0.2369
+[PrivNet Debug] Base mag: 0.6753, Priv mag: 0.1582, Ratio: 0.2343
+[PrivNet Debug] Base mag: 0.6812, Priv mag: 0.1614, Ratio: 0.2369
+[PrivNet Debug] Base mag: 0.6833, Priv mag: 0.1594, Ratio: 0.2333
+[PrivNet Debug] Base mag: 0.6787, Priv mag: 0.1598, Ratio: 0.2355
+[PrivNet Debug] Base mag: 0.6783, Priv mag: 0.1602, Ratio: 0.2361
+[PrivNet Debug] Base mag: 0.6784, Priv mag: 0.1610, Ratio: 0.2373
+[PrivNet Debug] Base mag: 0.6860, Priv mag: 0.1609, Ratio: 0.2346
+[PrivNet Debug] Base mag: 0.6753, Priv mag: 0.1609, Ratio: 0.2383
+[PrivNet Debug] Base mag: 0.6850, Priv mag: 0.1630, Ratio: 0.2379
+[PrivNet Debug] Base mag: 0.6921, Priv mag: 0.1603, Ratio: 0.2316
+[PrivNet Debug] Base mag: 0.6837, Priv mag: 0.1606, Ratio: 0.2349
+fps step: 49 fps step and policy inference: 44213 fps total: 42182 epoch: 10/16000 frames: 1179648
+[PrivNet Debug] Base mag: 0.6727, Priv mag: 0.1834, Ratio: 0.2726
+[PrivNet Debug] Base mag: 0.6660, Priv mag: 0.1824, Ratio: 0.2738
+[DaggerFrac] step=2600 frac=0.00000000
+[PrivNet Debug] Base mag: 0.6543, Priv mag: 0.1842, Ratio: 0.2815
+[PrivNet Debug] Base mag: 0.6546, Priv mag: 0.1843, Ratio: 0.2815
+[PrivNet Debug] Base mag: 0.6491, Priv mag: 0.1859, Ratio: 0.2865
+[PrivNet Debug] Base mag: 0.6409, Priv mag: 0.1842, Ratio: 0.2875
+[PrivNet Debug] Base mag: 0.6271, Priv mag: 0.1827, Ratio: 0.2914
+[PrivNet Debug] Base mag: 0.6359, Priv mag: 0.1832, Ratio: 0.2880
+[PrivNet Debug] Base mag: 0.6404, Priv mag: 0.1858, Ratio: 0.2901
+[PrivNet Debug] Base mag: 0.6401, Priv mag: 0.1848, Ratio: 0.2887
+[PrivNet Debug] Base mag: 0.6327, Priv mag: 0.1817, Ratio: 0.2872
+[PrivNet Debug] Base mag: 0.6250, Priv mag: 0.1817, Ratio: 0.2906
+[PrivNet Debug] Base mag: 0.6269, Priv mag: 0.1816, Ratio: 0.2897
+[PrivNet Debug] Base mag: 0.6356, Priv mag: 0.1834, Ratio: 0.2885
+[PrivNet Debug] Base mag: 0.6412, Priv mag: 0.1846, Ratio: 0.2880
+[PrivNet Debug] Base mag: 0.6380, Priv mag: 0.1807, Ratio: 0.2833
+[PrivNet Debug] Base mag: 0.6454, Priv mag: 0.1835, Ratio: 0.2843
+[PrivNet Debug] Base mag: 0.6498, Priv mag: 0.1835, Ratio: 0.2823
+[PrivNet Debug] Base mag: 0.6491, Priv mag: 0.1814, Ratio: 0.2794
+[PrivNet Debug] Base mag: 0.6453, Priv mag: 0.1831, Ratio: 0.2837
+[PrivNet Debug] Base mag: 0.6348, Priv mag: 0.1824, Ratio: 0.2873
+[PrivNet Debug] Base mag: 0.6385, Priv mag: 0.1838, Ratio: 0.2879
+[PrivNet Debug] Base mag: 0.6492, Priv mag: 0.1869, Ratio: 0.2879
+[PrivNet Debug] Base mag: 0.6503, Priv mag: 0.1844, Ratio: 0.2835
+[DaggerFrac] step=2800 frac=0.00000000
+[PrivNet Debug] Base mag: 0.6442, Priv mag: 0.1830, Ratio: 0.2841
+fps step: 47 fps step and policy inference: 42882 fps total: 40914 epoch: 11/16000 frames: 1310720
+[PrivNet Debug] Base mag: 0.6468, Priv mag: 0.2055, Ratio: 0.3177
+[PrivNet Debug] Base mag: 0.6549, Priv mag: 0.2079, Ratio: 0.3175
+[PrivNet Debug] Base mag: 0.6542, Priv mag: 0.2052, Ratio: 0.3137
+[PrivNet Debug] Base mag: 0.6587, Priv mag: 0.2065, Ratio: 0.3135
+[PrivNet Debug] Base mag: 0.6540, Priv mag: 0.2057, Ratio: 0.3146
+[PrivNet Debug] Base mag: 0.6535, Priv mag: 0.2057, Ratio: 0.3147
+[PrivNet Debug] Base mag: 0.6535, Priv mag: 0.2059, Ratio: 0.3150
+[PrivNet Debug] Base mag: 0.6468, Priv mag: 0.2050, Ratio: 0.3169
+[PrivNet Debug] Base mag: 0.6608, Priv mag: 0.2056, Ratio: 0.3111
+[PrivNet Debug] Base mag: 0.6845, Priv mag: 0.2073, Ratio: 0.3028
+[PrivNet Debug] Base mag: 0.6663, Priv mag: 0.2052, Ratio: 0.3080
+[PrivNet Debug] Base mag: 0.6645, Priv mag: 0.2065, Ratio: 0.3108
+[PrivNet Debug] Base mag: 0.6663, Priv mag: 0.2067, Ratio: 0.3102
+[PrivNet Debug] Base mag: 0.6785, Priv mag: 0.2038, Ratio: 0.3003
+[PrivNet Debug] Base mag: 0.6726, Priv mag: 0.2073, Ratio: 0.3082
+[PrivNet Debug] Base mag: 0.6724, Priv mag: 0.2055, Ratio: 0.3057
+[PrivNet Debug] Base mag: 0.6734, Priv mag: 0.2066, Ratio: 0.3067
+[PrivNet Debug] Base mag: 0.6617, Priv mag: 0.2083, Ratio: 0.3148
+[PrivNet Debug] Base mag: 0.6797, Priv mag: 0.2057, Ratio: 0.3026
+[PrivNet Debug] Base mag: 0.6846, Priv mag: 0.2092, Ratio: 0.3056
+[PrivNet Debug] Base mag: 0.6861, Priv mag: 0.2048, Ratio: 0.2984
+[PrivNet Debug] Base mag: 0.6792, Priv mag: 0.2072, Ratio: 0.3050
+[PrivNet Debug] Base mag: 0.6825, Priv mag: 0.2060, Ratio: 0.3018
+[PrivNet Debug] Base mag: 0.6828, Priv mag: 0.2083, Ratio: 0.3051
+[PrivNet Debug] Base mag: 0.6609, Priv mag: 0.2100, Ratio: 0.3177
+[DaggerFrac] step=3000 frac=0.00000000
+[PrivNet Debug] Base mag: 0.6615, Priv mag: 0.2046, Ratio: 0.3092
+[PrivNet Debug] Base mag: 0.6936, Priv mag: 0.2114, Ratio: 0.3048
+[PrivNet Debug] Base mag: 0.7005, Priv mag: 0.2080, Ratio: 0.2969
+[PrivNet Debug] Base mag: 0.6931, Priv mag: 0.2108, Ratio: 0.3041
+[PrivNet Debug] Base mag: 0.6931, Priv mag: 0.2124, Ratio: 0.3065
+[PrivNet Debug] Base mag: 0.6956, Priv mag: 0.2116, Ratio: 0.3042
+[PrivNet Debug] Base mag: 0.6918, Priv mag: 0.2066, Ratio: 0.2986
+[PrivNet Debug] Base mag: 0.6920, Priv mag: 0.2104, Ratio: 0.3040
+fps step: 44 fps step and policy inference: 39918 fps total: 38221 epoch: 12/16000 frames: 1441792
+saving next best rewards:  [7817.6733]
+=> saving checkpoint 'runs/teacher_debug_mag_02-22-28-31/nn/teacher_debug_mag.pth'
+[PrivNet Debug] Base mag: 0.6927, Priv mag: 0.2419, Ratio: 0.3492
+[PrivNet Debug] Base mag: 0.6800, Priv mag: 0.2379, Ratio: 0.3499
+[PrivNet Debug] Base mag: 0.6727, Priv mag: 0.2355, Ratio: 0.3501
+[PrivNet Debug] Base mag: 0.6756, Priv mag: 0.2337, Ratio: 0.3459
+[PrivNet Debug] Base mag: 0.6800, Priv mag: 0.2341, Ratio: 0.3443
+[PrivNet Debug] Base mag: 0.6819, Priv mag: 0.2374, Ratio: 0.3482
+[PrivNet Debug] Base mag: 0.6802, Priv mag: 0.2343, Ratio: 0.3445
+[PrivNet Debug] Base mag: 0.6777, Priv mag: 0.2350, Ratio: 0.3467
+[PrivNet Debug] Base mag: 0.6689, Priv mag: 0.2337, Ratio: 0.3494
+[PrivNet Debug] Base mag: 0.6683, Priv mag: 0.2352, Ratio: 0.3520
+[PrivNet Debug] Base mag: 0.6610, Priv mag: 0.2350, Ratio: 0.3556
+[PrivNet Debug] Base mag: 0.6653, Priv mag: 0.2325, Ratio: 0.3494
+[PrivNet Debug] Base mag: 0.6584, Priv mag: 0.2312, Ratio: 0.3512
+[PrivNet Debug] Base mag: 0.6686, Priv mag: 0.2323, Ratio: 0.3475
+[PrivNet Debug] Base mag: 0.6712, Priv mag: 0.2310, Ratio: 0.3442
+[PrivNet Debug] Base mag: 0.6789, Priv mag: 0.2332, Ratio: 0.3435
+[PrivNet Debug] Base mag: 0.6858, Priv mag: 0.2302, Ratio: 0.3357
+[DaggerFrac] step=3200 frac=0.00000000
+[PrivNet Debug] Base mag: 0.6855, Priv mag: 0.2325, Ratio: 0.3392
+[PrivNet Debug] Base mag: 0.6759, Priv mag: 0.2331, Ratio: 0.3448
+[PrivNet Debug] Base mag: 0.6805, Priv mag: 0.2314, Ratio: 0.3401
+[PrivNet Debug] Base mag: 0.6762, Priv mag: 0.2343, Ratio: 0.3465
+[PrivNet Debug] Base mag: 0.6864, Priv mag: 0.2366, Ratio: 0.3447
+[PrivNet Debug] Base mag: 0.6902, Priv mag: 0.2366, Ratio: 0.3428
+[PrivNet Debug] Base mag: 0.6884, Priv mag: 0.2365, Ratio: 0.3436
+[PrivNet Debug] Base mag: 0.6902, Priv mag: 0.2346, Ratio: 0.3399
+[PrivNet Debug] Base mag: 0.6927, Priv mag: 0.2360, Ratio: 0.3407
+[PrivNet Debug] Base mag: 0.7019, Priv mag: 0.2396, Ratio: 0.3414
+[PrivNet Debug] Base mag: 0.7079, Priv mag: 0.2367, Ratio: 0.3343
+[PrivNet Debug] Base mag: 0.6980, Priv mag: 0.2371, Ratio: 0.3397
+[PrivNet Debug] Base mag: 0.6957, Priv mag: 0.2364, Ratio: 0.3398
+[PrivNet Debug] Base mag: 0.6891, Priv mag: 0.2375, Ratio: 0.3446
+fps step: 52 fps step and policy inference: 47230 fps total: 44855 epoch: 13/16000 frames: 1572864
+[PrivNet Debug] Base mag: 0.6901, Priv mag: 0.2619, Ratio: 0.3794
+[PrivNet Debug] Base mag: 0.7042, Priv mag: 0.2649, Ratio: 0.3762
+[PrivNet Debug] Base mag: 0.7026, Priv mag: 0.2656, Ratio: 0.3781
+[PrivNet Debug] Base mag: 0.7013, Priv mag: 0.2654, Ratio: 0.3785
+[PrivNet Debug] Base mag: 0.6829, Priv mag: 0.2642, Ratio: 0.3868
+[PrivNet Debug] Base mag: 0.6723, Priv mag: 0.2643, Ratio: 0.3932
+[PrivNet Debug] Base mag: 0.6775, Priv mag: 0.2638, Ratio: 0.3894
+[PrivNet Debug] Base mag: 0.6830, Priv mag: 0.2646, Ratio: 0.3874
+[DaggerFrac] step=3400 frac=0.00000000
+[PrivNet Debug] Base mag: 0.6803, Priv mag: 0.2665, Ratio: 0.3917
+[PrivNet Debug] Base mag: 0.6776, Priv mag: 0.2656, Ratio: 0.3919
+[PrivNet Debug] Base mag: 0.6783, Priv mag: 0.2629, Ratio: 0.3876
+[PrivNet Debug] Base mag: 0.6892, Priv mag: 0.2647, Ratio: 0.3840
+[PrivNet Debug] Base mag: 0.6830, Priv mag: 0.2670, Ratio: 0.3909
+[PrivNet Debug] Base mag: 0.6792, Priv mag: 0.2664, Ratio: 0.3923
+[PrivNet Debug] Base mag: 0.6699, Priv mag: 0.2648, Ratio: 0.3953
+[PrivNet Debug] Base mag: 0.6733, Priv mag: 0.2650, Ratio: 0.3936
+[PrivNet Debug] Base mag: 0.6806, Priv mag: 0.2665, Ratio: 0.3916
+[PrivNet Debug] Base mag: 0.6855, Priv mag: 0.2652, Ratio: 0.3869
+[PrivNet Debug] Base mag: 0.6862, Priv mag: 0.2655, Ratio: 0.3869
+[PrivNet Debug] Base mag: 0.6716, Priv mag: 0.2598, Ratio: 0.3869
+[PrivNet Debug] Base mag: 0.6677, Priv mag: 0.2635, Ratio: 0.3946
+[PrivNet Debug] Base mag: 0.6556, Priv mag: 0.2599, Ratio: 0.3964
+[PrivNet Debug] Base mag: 0.6763, Priv mag: 0.2589, Ratio: 0.3828
+[PrivNet Debug] Base mag: 0.6678, Priv mag: 0.2592, Ratio: 0.3882
+[PrivNet Debug] Base mag: 0.6700, Priv mag: 0.2574, Ratio: 0.3842
+[PrivNet Debug] Base mag: 0.6797, Priv mag: 0.2556, Ratio: 0.3761
+[PrivNet Debug] Base mag: 0.6748, Priv mag: 0.2565, Ratio: 0.3801
+[PrivNet Debug] Base mag: 0.6722, Priv mag: 0.2619, Ratio: 0.3897
+[PrivNet Debug] Base mag: 0.6741, Priv mag: 0.2599, Ratio: 0.3855
+[PrivNet Debug] Base mag: 0.6678, Priv mag: 0.2588, Ratio: 0.3876
+[PrivNet Debug] Base mag: 0.6724, Priv mag: 0.2591, Ratio: 0.3853
+[PrivNet Debug] Base mag: 0.6717, Priv mag: 0.2587, Ratio: 0.3852
+[PrivNet Debug] Base mag: 0.6695, Priv mag: 0.2613, Ratio: 0.3902
+fps step: 47 fps step and policy inference: 42212 fps total: 40336 epoch: 14/16000 frames: 1703936
+[PrivNet Debug] Base mag: 0.6762, Priv mag: 0.2757, Ratio: 0.4077
+[DaggerFrac] step=3600 frac=0.00000000
+[PrivNet Debug] Base mag: 0.6877, Priv mag: 0.2722, Ratio: 0.3958
+[PrivNet Debug] Base mag: 0.6855, Priv mag: 0.2728, Ratio: 0.3980
+[PrivNet Debug] Base mag: 0.6966, Priv mag: 0.2724, Ratio: 0.3911
+[PrivNet Debug] Base mag: 0.7030, Priv mag: 0.2755, Ratio: 0.3919
+[PrivNet Debug] Base mag: 0.6980, Priv mag: 0.2737, Ratio: 0.3922
+[PrivNet Debug] Base mag: 0.7013, Priv mag: 0.2753, Ratio: 0.3925
+[PrivNet Debug] Base mag: 0.6874, Priv mag: 0.2737, Ratio: 0.3982
+[PrivNet Debug] Base mag: 0.6858, Priv mag: 0.2774, Ratio: 0.4045
+[PrivNet Debug] Base mag: 0.6902, Priv mag: 0.2768, Ratio: 0.4010
+[PrivNet Debug] Base mag: 0.6929, Priv mag: 0.2799, Ratio: 0.4040
+[PrivNet Debug] Base mag: 0.6906, Priv mag: 0.2769, Ratio: 0.4009
+[PrivNet Debug] Base mag: 0.6945, Priv mag: 0.2849, Ratio: 0.4103
+[PrivNet Debug] Base mag: 0.6865, Priv mag: 0.2866, Ratio: 0.4174
+[PrivNet Debug] Base mag: 0.6837, Priv mag: 0.2838, Ratio: 0.4150
+[PrivNet Debug] Base mag: 0.6795, Priv mag: 0.2886, Ratio: 0.4248
+[PrivNet Debug] Base mag: 0.6783, Priv mag: 0.2846, Ratio: 0.4196
+[PrivNet Debug] Base mag: 0.6788, Priv mag: 0.2867, Ratio: 0.4224
+[PrivNet Debug] Base mag: 0.6550, Priv mag: 0.2814, Ratio: 0.4296
+[DaggerFrac] step=3800 frac=0.00000000
+[PrivNet Debug] Base mag: 0.6549, Priv mag: 0.2842, Ratio: 0.4339
+[PrivNet Debug] Base mag: 0.6650, Priv mag: 0.2844, Ratio: 0.4276
+[PrivNet Debug] Base mag: 0.6734, Priv mag: 0.2822, Ratio: 0.4190
+[PrivNet Debug] Base mag: 0.6719, Priv mag: 0.2843, Ratio: 0.4231
+[PrivNet Debug] Base mag: 0.6631, Priv mag: 0.2863, Ratio: 0.4317
+[PrivNet Debug] Base mag: 0.6571, Priv mag: 0.2834, Ratio: 0.4314
+fps step: 49 fps step and policy inference: 44831 fps total: 42250 epoch: 15/16000 frames: 1835008
+[PrivNet Debug] Base mag: 0.6482, Priv mag: 0.2977, Ratio: 0.4593
+[PrivNet Debug] Base mag: 0.6495, Priv mag: 0.3017, Ratio: 0.4644
+[PrivNet Debug] Base mag: 0.6467, Priv mag: 0.3002, Ratio: 0.4643
+[PrivNet Debug] Base mag: 0.6500, Priv mag: 0.2976, Ratio: 0.4578
+[PrivNet Debug] Base mag: 0.6715, Priv mag: 0.2991, Ratio: 0.4454
+[PrivNet Debug] Base mag: 0.6469, Priv mag: 0.2991, Ratio: 0.4623
+[PrivNet Debug] Base mag: 0.6514, Priv mag: 0.3001, Ratio: 0.4607
+[PrivNet Debug] Base mag: 0.6546, Priv mag: 0.2976, Ratio: 0.4547
+[PrivNet Debug] Base mag: 0.6619, Priv mag: 0.2989, Ratio: 0.4515
+[PrivNet Debug] Base mag: 0.6584, Priv mag: 0.2976, Ratio: 0.4521
+[PrivNet Debug] Base mag: 0.6603, Priv mag: 0.2970, Ratio: 0.4497
+[PrivNet Debug] Base mag: 0.6587, Priv mag: 0.2968, Ratio: 0.4505
+[PrivNet Debug] Base mag: 0.6646, Priv mag: 0.2954, Ratio: 0.4445
+[PrivNet Debug] Base mag: 0.6604, Priv mag: 0.2938, Ratio: 0.4449
+[PrivNet Debug] Base mag: 0.6660, Priv mag: 0.2965, Ratio: 0.4452
+[PrivNet Debug] Base mag: 0.6600, Priv mag: 0.2959, Ratio: 0.4483
+[PrivNet Debug] Base mag: 0.6643, Priv mag: 0.2912, Ratio: 0.4384
+[PrivNet Debug] Base mag: 0.6595, Priv mag: 0.2907, Ratio: 0.4408
+[PrivNet Debug] Base mag: 0.6584, Priv mag: 0.2912, Ratio: 0.4422
+[PrivNet Debug] Base mag: 0.6451, Priv mag: 0.2886, Ratio: 0.4474
+[PrivNet Debug] Base mag: 0.6432, Priv mag: 0.2905, Ratio: 0.4516
+[DaggerFrac] step=4000 frac=0.00000000
+[PrivNet Debug] Base mag: 0.6786, Priv mag: 0.2924, Ratio: 0.4309
+[PrivNet Debug] Base mag: 0.6710, Priv mag: 0.2897, Ratio: 0.4317
+[PrivNet Debug] Base mag: 0.6643, Priv mag: 0.2912, Ratio: 0.4384
+[PrivNet Debug] Base mag: 0.6722, Priv mag: 0.2989, Ratio: 0.4447
+[PrivNet Debug] Base mag: 0.6540, Priv mag: 0.2995, Ratio: 0.4580
+[PrivNet Debug] Base mag: 0.6475, Priv mag: 0.2966, Ratio: 0.4581
+[PrivNet Debug] Base mag: 0.6548, Priv mag: 0.3001, Ratio: 0.4583
+[PrivNet Debug] Base mag: 0.6550, Priv mag: 0.3008, Ratio: 0.4591
+[PrivNet Debug] Base mag: 0.6798, Priv mag: 0.3037, Ratio: 0.4467
+[PrivNet Debug] Base mag: 0.6674, Priv mag: 0.3077, Ratio: 0.4611
+[PrivNet Debug] Base mag: 0.6621, Priv mag: 0.2962, Ratio: 0.4473
+[PrivNet Debug] Base mag: 0.6621, Priv mag: 0.3056, Ratio: 0.4615
+fps step: 51 fps step and policy inference: 46196 fps total: 43945 epoch: 16/16000 frames: 1966080
+[PrivNet Debug] Base mag: 0.6524, Priv mag: 0.3317, Ratio: 0.5085
+[PrivNet Debug] Base mag: 0.6489, Priv mag: 0.3289, Ratio: 0.5068
+[PrivNet Debug] Base mag: 0.6589, Priv mag: 0.3294, Ratio: 0.5000
+[PrivNet Debug] Base mag: 0.6593, Priv mag: 0.3295, Ratio: 0.4997
+[PrivNet Debug] Base mag: 0.6596, Priv mag: 0.3304, Ratio: 0.5009
+[PrivNet Debug] Base mag: 0.6611, Priv mag: 0.3306, Ratio: 0.5001
+[PrivNet Debug] Base mag: 0.6616, Priv mag: 0.3259, Ratio: 0.4926
+[DaggerFrac] step=4200 frac=0.00000000
+[PrivNet Debug] Base mag: 0.6634, Priv mag: 0.3283, Ratio: 0.4948
+[PrivNet Debug] Base mag: 0.6666, Priv mag: 0.3283, Ratio: 0.4926
+[PrivNet Debug] Base mag: 0.6598, Priv mag: 0.3263, Ratio: 0.4946
+[PrivNet Debug] Base mag: 0.6707, Priv mag: 0.3289, Ratio: 0.4904
+[PrivNet Debug] Base mag: 0.6513, Priv mag: 0.3322, Ratio: 0.5100
+[PrivNet Debug] Base mag: 0.6506, Priv mag: 0.3269, Ratio: 0.5025
+[PrivNet Debug] Base mag: 0.6638, Priv mag: 0.3295, Ratio: 0.4964
+[PrivNet Debug] Base mag: 0.6510, Priv mag: 0.3294, Ratio: 0.5060
+[PrivNet Debug] Base mag: 0.6418, Priv mag: 0.3286, Ratio: 0.5120
+[PrivNet Debug] Base mag: 0.6425, Priv mag: 0.3274, Ratio: 0.5095
+[PrivNet Debug] Base mag: 0.6567, Priv mag: 0.3285, Ratio: 0.5002
+[PrivNet Debug] Base mag: 0.6563, Priv mag: 0.3285, Ratio: 0.5005
+[PrivNet Debug] Base mag: 0.6538, Priv mag: 0.3301, Ratio: 0.5049
+[PrivNet Debug] Base mag: 0.6478, Priv mag: 0.3266, Ratio: 0.5041
+[PrivNet Debug] Base mag: 0.6431, Priv mag: 0.3303, Ratio: 0.5136
+[PrivNet Debug] Base mag: 0.6414, Priv mag: 0.3263, Ratio: 0.5088
+[PrivNet Debug] Base mag: 0.6567, Priv mag: 0.3261, Ratio: 0.4966
+[PrivNet Debug] Base mag: 0.6533, Priv mag: 0.3285, Ratio: 0.5028
+[PrivNet Debug] Base mag: 0.6558, Priv mag: 0.3261, Ratio: 0.4973
+fps step: 49 fps step and policy inference: 44757 fps total: 42645 epoch: 17/16000 frames: 2097152
+[PrivNet Debug] Base mag: 0.6510, Priv mag: 0.3633, Ratio: 0.5580
+[PrivNet Debug] Base mag: 0.6390, Priv mag: 0.3619, Ratio: 0.5663
+[PrivNet Debug] Base mag: 0.6431, Priv mag: 0.3602, Ratio: 0.5601
+[DaggerFrac] step=4400 frac=0.00000000
+[PrivNet Debug] Base mag: 0.6578, Priv mag: 0.3630, Ratio: 0.5519
+[PrivNet Debug] Base mag: 0.6522, Priv mag: 0.3660, Ratio: 0.5612
+[PrivNet Debug] Base mag: 0.6378, Priv mag: 0.3682, Ratio: 0.5773
+[PrivNet Debug] Base mag: 0.6344, Priv mag: 0.3702, Ratio: 0.5836
+[PrivNet Debug] Base mag: 0.6525, Priv mag: 0.3668, Ratio: 0.5621
+[PrivNet Debug] Base mag: 0.6723, Priv mag: 0.3617, Ratio: 0.5381
+[PrivNet Debug] Base mag: 0.6680, Priv mag: 0.3645, Ratio: 0.5458
+[PrivNet Debug] Base mag: 0.6392, Priv mag: 0.3565, Ratio: 0.5578
+[PrivNet Debug] Base mag: 0.6497, Priv mag: 0.3583, Ratio: 0.5514
+[PrivNet Debug] Base mag: 0.6559, Priv mag: 0.3542, Ratio: 0.5400
+[DaggerFrac] step=4600 frac=0.00000000
+fps step: 50 fps step and policy inference: 45728 fps total: 43520 epoch: 18/16000 frames: 2228224
+[PrivNet Debug] Base mag: 0.6750, Priv mag: 0.3775, Ratio: 0.5593
+[PrivNet Debug] Base mag: 0.6742, Priv mag: 0.3737, Ratio: 0.5542
+[PrivNet Debug] Base mag: 0.6769, Priv mag: 0.3760, Ratio: 0.5555
+[PrivNet Debug] Base mag: 0.6776, Priv mag: 0.3733, Ratio: 0.5509
+[PrivNet Debug] Base mag: 0.6839, Priv mag: 0.3734, Ratio: 0.5460
+[PrivNet Debug] Base mag: 0.6782, Priv mag: 0.3697, Ratio: 0.5451
+[PrivNet Debug] Base mag: 0.6800, Priv mag: 0.3720, Ratio: 0.5470
+[PrivNet Debug] Base mag: 0.6656, Priv mag: 0.3747, Ratio: 0.5629
+[PrivNet Debug] Base mag: 0.6615, Priv mag: 0.3681, Ratio: 0.5564
+[PrivNet Debug] Base mag: 0.6628, Priv mag: 0.3671, Ratio: 0.5539
+[PrivNet Debug] Base mag: 0.6776, Priv mag: 0.3689, Ratio: 0.5444
+[PrivNet Debug] Base mag: 0.6821, Priv mag: 0.3695, Ratio: 0.5417
+[PrivNet Debug] Base mag: 0.6829, Priv mag: 0.3663, Ratio: 0.5364
+[PrivNet Debug] Base mag: 0.6813, Priv mag: 0.3631, Ratio: 0.5330
+[PrivNet Debug] Base mag: 0.6770, Priv mag: 0.3672, Ratio: 0.5423
+[PrivNet Debug] Base mag: 0.6805, Priv mag: 0.3681, Ratio: 0.5409
+[PrivNet Debug] Base mag: 0.6626, Priv mag: 0.3691, Ratio: 0.5572
+[PrivNet Debug] Base mag: 0.6627, Priv mag: 0.3674, Ratio: 0.5544
+[DaggerFrac] step=4800 frac=0.00000000
+[PrivNet Debug] Base mag: 0.6772, Priv mag: 0.3677, Ratio: 0.5429
+[PrivNet Debug] Base mag: 0.6906, Priv mag: 0.3712, Ratio: 0.5376
+[PrivNet Debug] Base mag: 0.6903, Priv mag: 0.3731, Ratio: 0.5405
+[PrivNet Debug] Base mag: 0.6805, Priv mag: 0.3742, Ratio: 0.5499
+[PrivNet Debug] Base mag: 0.6795, Priv mag: 0.3760, Ratio: 0.5534
+[PrivNet Debug] Base mag: 0.6900, Priv mag: 0.3739, Ratio: 0.5420
+[PrivNet Debug] Base mag: 0.6932, Priv mag: 0.3718, Ratio: 0.5363
+[PrivNet Debug] Base mag: 0.6908, Priv mag: 0.3711, Ratio: 0.5372
+[PrivNet Debug] Base mag: 0.6845, Priv mag: 0.3737, Ratio: 0.5460
+[PrivNet Debug] Base mag: 0.6863, Priv mag: 0.3733, Ratio: 0.5440
+fps step: 52 fps step and policy inference: 47559 fps total: 45191 epoch: 19/16000 frames: 2359296
+[PrivNet Debug] Base mag: 0.6899, Priv mag: 0.4041, Ratio: 0.5857
+[PrivNet Debug] Base mag: 0.6832, Priv mag: 0.4049, Ratio: 0.5926
+[PrivNet Debug] Base mag: 0.6755, Priv mag: 0.4045, Ratio: 0.5989
+[PrivNet Debug] Base mag: 0.6674, Priv mag: 0.4055, Ratio: 0.6076
+[PrivNet Debug] Base mag: 0.6651, Priv mag: 0.4035, Ratio: 0.6066
+[PrivNet Debug] Base mag: 0.6505, Priv mag: 0.3989, Ratio: 0.6132
+[PrivNet Debug] Base mag: 0.6534, Priv mag: 0.4021, Ratio: 0.6154
+[PrivNet Debug] Base mag: 0.6523, Priv mag: 0.4006, Ratio: 0.6142
+[DaggerFrac] step=5000 frac=0.00000000
+[PrivNet Debug] Base mag: 0.6433, Priv mag: 0.3993, Ratio: 0.6207
+[PrivNet Debug] Base mag: 0.6592, Priv mag: 0.3963, Ratio: 0.6012
+[PrivNet Debug] Base mag: 0.6741, Priv mag: 0.3977, Ratio: 0.5900
+[PrivNet Debug] Base mag: 0.6641, Priv mag: 0.3986, Ratio: 0.6002
+[PrivNet Debug] Base mag: 0.6646, Priv mag: 0.3931, Ratio: 0.5916
+[PrivNet Debug] Base mag: 0.6659, Priv mag: 0.3954, Ratio: 0.5938
+[PrivNet Debug] Base mag: 0.6816, Priv mag: 0.3927, Ratio: 0.5762
+[PrivNet Debug] Base mag: 0.6789, Priv mag: 0.3955, Ratio: 0.5826
+[PrivNet Debug] Base mag: 0.6598, Priv mag: 0.3958, Ratio: 0.6000
+[PrivNet Debug] Base mag: 0.6615, Priv mag: 0.3959, Ratio: 0.5985
+[PrivNet Debug] Base mag: 0.6500, Priv mag: 0.3985, Ratio: 0.6131
+[PrivNet Debug] Base mag: 0.6338, Priv mag: 0.4017, Ratio: 0.6338
+[PrivNet Debug] Base mag: 0.6647, Priv mag: 0.4245, Ratio: 0.6387
+fps step: 46 fps step and policy inference: 42105 fps total: 40226 epoch: 20/16000 frames: 2490368
+[PrivNet Debug] Base mag: 0.6579, Priv mag: 0.4275, Ratio: 0.6498
+[PrivNet Debug] Base mag: 0.6638, Priv mag: 0.4298, Ratio: 0.6475
+[PrivNet Debug] Base mag: 0.6561, Priv mag: 0.4282, Ratio: 0.6527
+[PrivNet Debug] Base mag: 0.6475, Priv mag: 0.4339, Ratio: 0.6701
+[PrivNet Debug] Base mag: 0.6485, Priv mag: 0.4339, Ratio: 0.6691
+[PrivNet Debug] Base mag: 0.6497, Priv mag: 0.4322, Ratio: 0.6652
+[PrivNet Debug] Base mag: 0.6517, Priv mag: 0.4308, Ratio: 0.6609
+[PrivNet Debug] Base mag: 0.6654, Priv mag: 0.4323, Ratio: 0.6497
+[DaggerFrac] step=5200 frac=0.00000000
+[PrivNet Debug] Base mag: 0.6651, Priv mag: 0.4366, Ratio: 0.6565
+[PrivNet Debug] Base mag: 0.6753, Priv mag: 0.4346, Ratio: 0.6435
+[PrivNet Debug] Base mag: 0.6719, Priv mag: 0.4356, Ratio: 0.6483
+[PrivNet Debug] Base mag: 0.6666, Priv mag: 0.4383, Ratio: 0.6575
+[PrivNet Debug] Base mag: 0.6625, Priv mag: 0.4322, Ratio: 0.6525
+[PrivNet Debug] Base mag: 0.6576, Priv mag: 0.4318, Ratio: 0.6566
+[PrivNet Debug] Base mag: 0.6451, Priv mag: 0.4363, Ratio: 0.6763
+[PrivNet Debug] Base mag: 0.6441, Priv mag: 0.4401, Ratio: 0.6834
+[PrivNet Debug] Base mag: 0.6406, Priv mag: 0.4435, Ratio: 0.6923
+[PrivNet Debug] Base mag: 0.6260, Priv mag: 0.4411, Ratio: 0.7046
+[PrivNet Debug] Base mag: 0.6319, Priv mag: 0.4382, Ratio: 0.6935
+[PrivNet Debug] Base mag: 0.6449, Priv mag: 0.4402, Ratio: 0.6825
+[PrivNet Debug] Base mag: 0.6358, Priv mag: 0.4398, Ratio: 0.6918
+[PrivNet Debug] Base mag: 0.6326, Priv mag: 0.4432, Ratio: 0.7007
+[PrivNet Debug] Base mag: 0.6457, Priv mag: 0.4371, Ratio: 0.6770
+[PrivNet Debug] Base mag: 0.6510, Priv mag: 0.4625, Ratio: 0.7104
+fps step: 48 fps step and policy inference: 43842 fps total: 41791 epoch: 21/16000 frames: 2621440
+[PrivNet Debug] Base mag: 0.6427, Priv mag: 0.4738, Ratio: 0.7373
+[PrivNet Debug] Base mag: 0.6512, Priv mag: 0.4792, Ratio: 0.7359
+[DaggerFrac] step=5400 frac=0.00000000
+[PrivNet Debug] Base mag: 0.6504, Priv mag: 0.4781, Ratio: 0.7351
+[PrivNet Debug] Base mag: 0.6500, Priv mag: 0.4756, Ratio: 0.7318
+[PrivNet Debug] Base mag: 0.6501, Priv mag: 0.4758, Ratio: 0.7318
+[PrivNet Debug] Base mag: 0.6678, Priv mag: 0.4766, Ratio: 0.7137
+[PrivNet Debug] Base mag: 0.6639, Priv mag: 0.4786, Ratio: 0.7208
+[PrivNet Debug] Base mag: 0.6601, Priv mag: 0.4752, Ratio: 0.7199
+[PrivNet Debug] Base mag: 0.6464, Priv mag: 0.4770, Ratio: 0.7380
+[PrivNet Debug] Base mag: 0.6427, Priv mag: 0.4746, Ratio: 0.7385
+[PrivNet Debug] Base mag: 0.6509, Priv mag: 0.4737, Ratio: 0.7278
+[PrivNet Debug] Base mag: 0.6643, Priv mag: 0.4749, Ratio: 0.7149
+[PrivNet Debug] Base mag: 0.6547, Priv mag: 0.4741, Ratio: 0.7241
+[PrivNet Debug] Base mag: 0.6549, Priv mag: 0.4692, Ratio: 0.7165
+[PrivNet Debug] Base mag: 0.6556, Priv mag: 0.4776, Ratio: 0.7285
+[PrivNet Debug] Base mag: 0.6538, Priv mag: 0.4740, Ratio: 0.7250
+[PrivNet Debug] Base mag: 0.6511, Priv mag: 0.4731, Ratio: 0.7265
+[PrivNet Debug] Base mag: 0.6486, Priv mag: 0.4754, Ratio: 0.7329
+[PrivNet Debug] Base mag: 0.6462, Priv mag: 0.4716, Ratio: 0.7298
+[PrivNet Debug] Base mag: 0.6292, Priv mag: 0.4687, Ratio: 0.7448
+[PrivNet Debug] Base mag: 0.6439, Priv mag: 0.4756, Ratio: 0.7385
+[DaggerFrac] step=5600 frac=0.00000000
+[PrivNet Debug] Base mag: 0.6380, Priv mag: 0.4752, Ratio: 0.7448
+[PrivNet Debug] Base mag: 0.6294, Priv mag: 0.4737, Ratio: 0.7527
+[PrivNet Debug] Base mag: 0.6328, Priv mag: 0.4770, Ratio: 0.7538
+[PrivNet Debug] Base mag: 0.6392, Priv mag: 0.4755, Ratio: 0.7440
+[PrivNet Debug] Base mag: 0.6407, Priv mag: 0.4757, Ratio: 0.7424
+fps step: 51 fps step and policy inference: 46422 fps total: 44131 epoch: 22/16000 frames: 2752512
+[PrivNet Debug] Base mag: 0.6341, Priv mag: 0.5073, Ratio: 0.8001
+[PrivNet Debug] Base mag: 0.6305, Priv mag: 0.5036, Ratio: 0.7987
+[PrivNet Debug] Base mag: 0.6288, Priv mag: 0.5108, Ratio: 0.8124
+[PrivNet Debug] Base mag: 0.6229, Priv mag: 0.5082, Ratio: 0.8158
+[PrivNet Debug] Base mag: 0.6282, Priv mag: 0.5071, Ratio: 0.8072
+[PrivNet Debug] Base mag: 0.6158, Priv mag: 0.5108, Ratio: 0.8296
+[PrivNet Debug] Base mag: 0.6354, Priv mag: 0.5063, Ratio: 0.7969
+[PrivNet Debug] Base mag: 0.6462, Priv mag: 0.5079, Ratio: 0.7860
+[PrivNet Debug] Base mag: 0.6372, Priv mag: 0.5050, Ratio: 0.7926
+[PrivNet Debug] Base mag: 0.6207, Priv mag: 0.5036, Ratio: 0.8113
+[PrivNet Debug] Base mag: 0.6213, Priv mag: 0.5066, Ratio: 0.8155
+[DaggerFrac] step=5800 frac=0.00000000
+[PrivNet Debug] Base mag: 0.6338, Priv mag: 0.5010, Ratio: 0.7905
+[PrivNet Debug] Base mag: 0.6377, Priv mag: 0.5022, Ratio: 0.7876
+[PrivNet Debug] Base mag: 0.6375, Priv mag: 0.5049, Ratio: 0.7921
+[PrivNet Debug] Base mag: 0.6204, Priv mag: 0.5009, Ratio: 0.8074
+[PrivNet Debug] Base mag: 0.6328, Priv mag: 0.5008, Ratio: 0.7913
+[PrivNet Debug] Base mag: 0.6342, Priv mag: 0.5009, Ratio: 0.7897
+fps step: 50 fps step and policy inference: 45439 fps total: 43219 epoch: 23/16000 frames: 2883584
+[PrivNet Debug] Base mag: 0.6491, Priv mag: 0.5265, Ratio: 0.8112
+[PrivNet Debug] Base mag: 0.6468, Priv mag: 0.5207, Ratio: 0.8051
+[PrivNet Debug] Base mag: 0.6522, Priv mag: 0.5250, Ratio: 0.8049
+[PrivNet Debug] Base mag: 0.6531, Priv mag: 0.5298, Ratio: 0.8112
+[PrivNet Debug] Base mag: 0.6585, Priv mag: 0.5270, Ratio: 0.8004
+[PrivNet Debug] Base mag: 0.6533, Priv mag: 0.5230, Ratio: 0.8006
+[PrivNet Debug] Base mag: 0.6704, Priv mag: 0.5298, Ratio: 0.7903
+[PrivNet Debug] Base mag: 0.6655, Priv mag: 0.5238, Ratio: 0.7871
+[PrivNet Debug] Base mag: 0.6600, Priv mag: 0.5279, Ratio: 0.7999
+[PrivNet Debug] Base mag: 0.6472, Priv mag: 0.5282, Ratio: 0.8162
+[PrivNet Debug] Base mag: 0.6622, Priv mag: 0.5299, Ratio: 0.8002
+[PrivNet Debug] Base mag: 0.6525, Priv mag: 0.5352, Ratio: 0.8203
+[PrivNet Debug] Base mag: 0.6455, Priv mag: 0.5290, Ratio: 0.8195
+[DaggerFrac] step=6000 frac=0.00000000
+[PrivNet Debug] Base mag: 0.6618, Priv mag: 0.5330, Ratio: 0.8053
+[PrivNet Debug] Base mag: 0.6491, Priv mag: 0.5260, Ratio: 0.8103
+[PrivNet Debug] Base mag: 0.6513, Priv mag: 0.5235, Ratio: 0.8038
+[PrivNet Debug] Base mag: 0.6598, Priv mag: 0.5263, Ratio: 0.7976
+[PrivNet Debug] Base mag: 0.6599, Priv mag: 0.5221, Ratio: 0.7912
+[PrivNet Debug] Base mag: 0.6628, Priv mag: 0.5280, Ratio: 0.7966
+[PrivNet Debug] Base mag: 0.6468, Priv mag: 0.5209, Ratio: 0.8054
+[PrivNet Debug] Base mag: 0.6450, Priv mag: 0.5212, Ratio: 0.8081
+[PrivNet Debug] Base mag: 0.6534, Priv mag: 0.5227, Ratio: 0.8001
+[PrivNet Debug] Base mag: 0.6411, Priv mag: 0.5222, Ratio: 0.8144
+[PrivNet Debug] Base mag: 0.6414, Priv mag: 0.5207, Ratio: 0.8118
+[PrivNet Debug] Base mag: 0.6515, Priv mag: 0.5277, Ratio: 0.8099
+[PrivNet Debug] Base mag: 0.6472, Priv mag: 0.5209, Ratio: 0.8048
+[PrivNet Debug] Base mag: 0.6487, Priv mag: 0.5213, Ratio: 0.8036
+[PrivNet Debug] Base mag: 0.6590, Priv mag: 0.5199, Ratio: 0.7889
+[PrivNet Debug] Base mag: 0.6454, Priv mag: 0.5206, Ratio: 0.8067
+[PrivNet Debug] Base mag: 0.6536, Priv mag: 0.5183, Ratio: 0.7931
+[PrivNet Debug] Base mag: 0.6538, Priv mag: 0.5155, Ratio: 0.7884
+fps step: 44 fps step and policy inference: 39914 fps total: 38199 epoch: 24/16000 frames: 3014656
+[PrivNet Debug] Base mag: 0.6363, Priv mag: 0.5363, Ratio: 0.8429
+[PrivNet Debug] Base mag: 0.6343, Priv mag: 0.5399, Ratio: 0.8510
+[PrivNet Debug] Base mag: 0.6376, Priv mag: 0.5357, Ratio: 0.8402
+[PrivNet Debug] Base mag: 0.6413, Priv mag: 0.5360, Ratio: 0.8357
+[PrivNet Debug] Base mag: 0.6345, Priv mag: 0.5358, Ratio: 0.8444
+[PrivNet Debug] Base mag: 0.6532, Priv mag: 0.5346, Ratio: 0.8184
+[DaggerFrac] step=6200 frac=0.00000000
+[PrivNet Debug] Base mag: 0.6429, Priv mag: 0.5346, Ratio: 0.8316
+[PrivNet Debug] Base mag: 0.6367, Priv mag: 0.5411, Ratio: 0.8499
+[PrivNet Debug] Base mag: 0.6736, Priv mag: 0.5427, Ratio: 0.8057
+[PrivNet Debug] Base mag: 0.6793, Priv mag: 0.5447, Ratio: 0.8019
+[PrivNet Debug] Base mag: 0.6602, Priv mag: 0.5427, Ratio: 0.8220
+[PrivNet Debug] Base mag: 0.6608, Priv mag: 0.5401, Ratio: 0.8173
+[PrivNet Debug] Base mag: 0.6496, Priv mag: 0.5441, Ratio: 0.8376
+[PrivNet Debug] Base mag: 0.6562, Priv mag: 0.5404, Ratio: 0.8236
+[PrivNet Debug] Base mag: 0.6638, Priv mag: 0.5400, Ratio: 0.8135
+[PrivNet Debug] Base mag: 0.6695, Priv mag: 0.5423, Ratio: 0.8099
+[PrivNet Debug] Base mag: 0.6658, Priv mag: 0.5405, Ratio: 0.8117
+[PrivNet Debug] Base mag: 0.6557, Priv mag: 0.5421, Ratio: 0.8267
+[PrivNet Debug] Base mag: 0.6531, Priv mag: 0.5456, Ratio: 0.8353
+[PrivNet Debug] Base mag: 0.6615, Priv mag: 0.5422, Ratio: 0.8197
+[PrivNet Debug] Base mag: 0.6682, Priv mag: 0.5467, Ratio: 0.8182
+[DaggerFrac] step=6400 frac=0.00000000
+fps step: 50 fps step and policy inference: 45365 fps total: 43168 epoch: 25/16000 frames: 3145728
+[PrivNet Debug] Base mag: 0.6603, Priv mag: 0.5752, Ratio: 0.8710
+[PrivNet Debug] Base mag: 0.6645, Priv mag: 0.5763, Ratio: 0.8672
+[PrivNet Debug] Base mag: 0.6645, Priv mag: 0.5781, Ratio: 0.8700
+[PrivNet Debug] Base mag: 0.6661, Priv mag: 0.5760, Ratio: 0.8648
+[PrivNet Debug] Base mag: 0.6623, Priv mag: 0.5774, Ratio: 0.8718
+[PrivNet Debug] Base mag: 0.6724, Priv mag: 0.5799, Ratio: 0.8624
+[PrivNet Debug] Base mag: 0.6781, Priv mag: 0.5796, Ratio: 0.8547
+[PrivNet Debug] Base mag: 0.6714, Priv mag: 0.5783, Ratio: 0.8613
+[PrivNet Debug] Base mag: 0.6757, Priv mag: 0.5750, Ratio: 0.8510
+[PrivNet Debug] Base mag: 0.6756, Priv mag: 0.5782, Ratio: 0.8557
+[PrivNet Debug] Base mag: 0.6763, Priv mag: 0.5766, Ratio: 0.8526
+[PrivNet Debug] Base mag: 0.6750, Priv mag: 0.5768, Ratio: 0.8544
+[PrivNet Debug] Base mag: 0.6699, Priv mag: 0.5758, Ratio: 0.8595
+[PrivNet Debug] Base mag: 0.6592, Priv mag: 0.5767, Ratio: 0.8749
+[PrivNet Debug] Base mag: 0.6623, Priv mag: 0.5781, Ratio: 0.8729
+[PrivNet Debug] Base mag: 0.6544, Priv mag: 0.5791, Ratio: 0.8849
+[PrivNet Debug] Base mag: 0.6614, Priv mag: 0.5782, Ratio: 0.8742
+[PrivNet Debug] Base mag: 0.6573, Priv mag: 0.5772, Ratio: 0.8782
+[PrivNet Debug] Base mag: 0.6542, Priv mag: 0.5716, Ratio: 0.8737
+[DaggerFrac] step=6600 frac=0.00000000
+[PrivNet Debug] Base mag: 0.6511, Priv mag: 0.5778, Ratio: 0.8875
+[PrivNet Debug] Base mag: 0.6393, Priv mag: 0.5811, Ratio: 0.9089
+[PrivNet Debug] Base mag: 0.6257, Priv mag: 0.5814, Ratio: 0.9293
+[PrivNet Debug] Base mag: 0.6239, Priv mag: 0.5782, Ratio: 0.9268
+[PrivNet Debug] Base mag: 0.6259, Priv mag: 0.5817, Ratio: 0.9294
+[PrivNet Debug] Base mag: 0.6354, Priv mag: 0.5811, Ratio: 0.9146
+[PrivNet Debug] Base mag: 0.6467, Priv mag: 0.5794, Ratio: 0.8959
+[PrivNet Debug] Base mag: 0.6577, Priv mag: 0.5958, Ratio: 0.9059
+fps step: 48 fps step and policy inference: 43045 fps total: 41092 epoch: 26/16000 frames: 3276800
+[PrivNet Debug] Base mag: 0.6431, Priv mag: 0.6025, Ratio: 0.9370
+[PrivNet Debug] Base mag: 0.6451, Priv mag: 0.5993, Ratio: 0.9289
+[PrivNet Debug] Base mag: 0.6561, Priv mag: 0.5982, Ratio: 0.9117
+[PrivNet Debug] Base mag: 0.6725, Priv mag: 0.5971, Ratio: 0.8879
+[PrivNet Debug] Base mag: 0.6613, Priv mag: 0.5971, Ratio: 0.9029
+[PrivNet Debug] Base mag: 0.6598, Priv mag: 0.5926, Ratio: 0.8981
+[PrivNet Debug] Base mag: 0.6494, Priv mag: 0.5990, Ratio: 0.9224
+[PrivNet Debug] Base mag: 0.6526, Priv mag: 0.6007, Ratio: 0.9206
+[PrivNet Debug] Base mag: 0.6557, Priv mag: 0.5996, Ratio: 0.9144
+[PrivNet Debug] Base mag: 0.6521, Priv mag: 0.5973, Ratio: 0.9160
+[PrivNet Debug] Base mag: 0.6512, Priv mag: 0.6004, Ratio: 0.9220
+[PrivNet Debug] Base mag: 0.6394, Priv mag: 0.5985, Ratio: 0.9361
+[PrivNet Debug] Base mag: 0.6413, Priv mag: 0.6013, Ratio: 0.9376
+[PrivNet Debug] Base mag: 0.6404, Priv mag: 0.6008, Ratio: 0.9382
+[PrivNet Debug] Base mag: 0.6522, Priv mag: 0.6005, Ratio: 0.9208
+[PrivNet Debug] Base mag: 0.6588, Priv mag: 0.6025, Ratio: 0.9147
+[PrivNet Debug] Base mag: 0.6504, Priv mag: 0.6051, Ratio: 0.9304
+[DaggerFrac] step=6800 frac=0.00000000
+[PrivNet Debug] Base mag: 0.6623, Priv mag: 0.6097, Ratio: 0.9206
+[PrivNet Debug] Base mag: 0.6410, Priv mag: 0.6088, Ratio: 0.9497
+[PrivNet Debug] Base mag: 0.6462, Priv mag: 0.6021, Ratio: 0.9318
+[PrivNet Debug] Base mag: 0.6379, Priv mag: 0.6030, Ratio: 0.9453
+[PrivNet Debug] Base mag: 0.6354, Priv mag: 0.5982, Ratio: 0.9413
+[PrivNet Debug] Base mag: 0.6453, Priv mag: 0.6016, Ratio: 0.9323
+[PrivNet Debug] Base mag: 0.6334, Priv mag: 0.6100, Ratio: 0.9630
+[PrivNet Debug] Base mag: 0.6412, Priv mag: 0.6053, Ratio: 0.9441
+fps step: 52 fps step and policy inference: 47110 fps total: 44744 epoch: 27/16000 frames: 3407872
+[PrivNet Debug] Base mag: 0.6332, Priv mag: 0.6188, Ratio: 0.9773
+[PrivNet Debug] Base mag: 0.6371, Priv mag: 0.6214, Ratio: 0.9755
+[PrivNet Debug] Base mag: 0.6457, Priv mag: 0.6193, Ratio: 0.9591

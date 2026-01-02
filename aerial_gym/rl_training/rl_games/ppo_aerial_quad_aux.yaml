@@ -50,25 +50,25 @@ params:
     gamma: 0.99  # 折扣因子（越小越短视）
     tau: 0.95  # GAE 衰减（越小 bias 高/variance 低）
     ppo: True  # 开启 PPO 裁剪模式
-    learning_rate: 1e-4  # 初始学习率 - 降低到 1e-4 防止 NaN
+    learning_rate: 1e-5  # 初始学习率 - 降低到 1e-4 防止 NaN
     lr_schedule: adaptive  # 基于 KL 的自适应 LR 调度
     kl_threshold: 0.01  # KL 超过阈值会降低 LR/回滚（越小越保守，clip_frac/KL 尖峰更少但收敛慢）
     save_best_after: 1  # 从第 N 个 epoch 后开始记录最佳
     save_frequency: 100  # 每隔多少个 epoch 额外保存一次 checkpoint，便于事后挑选最小 imitation/err
     score_to_win: 100000000  # 达到该分数视为"成功"停止条件
     grad_norm: 0.5  # 全局梯度裁剪范数上限（从1.0降低到0.5，更严格防止梯度爆炸）
-    entropy_coef: 0.000000  # 熵系数（鼓励探索，防止过早收敛；过大动作噪声重，过小易收敛到尖锐策略）
+    entropy_coef: 0.001000  # 熵系数（鼓励探索，防止过早收敛；过大动作噪声重，过小易收敛到尖锐策略）
     truncate_grads: True  # 是否截断梯度（RNN 训练时常开，避免反向过长）
     e_clip: 0.15  # PPO 裁剪范围（从0.2降低到0.15，更保守的策略更新，提升稳定性）
     clip_value: True  # 是否对 value 也做裁剪 - 启用防止 value 爆炸
     num_actors: 2048  # 参与采样的环境/actor 数
     horizon_length: 256  # 每个 actor 收集的 rollout 长度 - 从 32 增加到 256
     minibatch_size: 131072  # 单次优化用的样本数（越大梯度方差低但显存/时间更高）
-    mini_epochs: 3  # 每批数据重复训练次数（从4降低到3，减少过拟合和NaN风险）
+    mini_epochs: 4  # 每批数据重复训练次数（从4降低到3，减少过拟合和NaN风险）
     # 扰动样本优势加权（权重=1+coef*mask，mask 来自 infos['is_disturbance']）
     disturbance_adv_weight: 0.0
     # BC/DAgger 模仿损失系数（从 bc_coef 衰减到 bc_min_coef，乘 bc_alpha）
-    bc_coef: 100.0
+    bc_coef: 20.0
     bc_alpha: 0.999
     bc_min_coef: 0.0
     critic_coef: 1  # 价值损失权重（相对策略损失；大则稳定优势但可能拖慢策略更新）

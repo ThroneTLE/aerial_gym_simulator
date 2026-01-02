@@ -78,9 +78,9 @@ class task_config:
         "tilt_excess_coef": 0.0,
         "tilt_excess_exp": 0.0,
         # 模仿权重 - 分离推力和力矩
-        "imitation_weight": 0.0,  # 统一权重（当 thrust/torque 未指定时使用）
-        "imitation_weight_thrust": 0.0,  # 推力模仿权重（action[0]）
-        "imitation_weight_torque": 0.0,  # 力矩模仿权重（action[1:3]）
+        "imitation_weight": 8.0,  # 统一权重（当 thrust/torque 未指定时使用）
+        "imitation_weight_thrust": 8.0,  # 推力模仿权重（action[0]）
+        "imitation_weight_torque": 8.0,  # 力矩模仿权重（action[1:3]）
         # 动作幅度惩罚 - 防止不必要的残差输出和抖动
         "action_magnitude_penalty_coef": 0.0,  # 惩罚系数，越大越抑制输出 惩罚 = thrust² × thrust_coef + mean(torque²) × torque_coef
         "action_magnitude_penalty_thrust": 0.000,  # thrust 惩罚（可选单独设置）
@@ -93,8 +93,8 @@ class task_config:
     crash_tilt_threshold_deg = 20.0
 
     payload_parameters = {
-        "payload_mass": 0.02,
-        "payload_mass_range": [0.00, 0.04],
+        "payload_mass": 0.03,
+        "payload_mass_range": [0.01, 0.04],
         "randomize_payload_mass": True,
         "randomize_offsets_on_plane": True,
         "offset_plane_radial_jitter": 0.4,  #沿机臂方向的“半径扰动”，均匀分布 [-jitter, +jitter]
@@ -103,10 +103,10 @@ class task_config:
         "offset_plane_z_max": 0.4,      #垂直方向最大偏移距离
         "force_offset_torque_scale": 0.00,  # 等效力矩系数：tau_eq = - r_com x F_total，1.0=全量补偿，0=关闭
         "offsets": [
-            [0.4, 0.4, -0.4],
-            [0.4, -0.4, -0.4],
-            [-0.4, 0.4, -0.4],
-            [-0.4, -0.4, -0.4],
+            [0.4, 0.0, -0.4],
+            [0.0, -0.4, -0.4],
+            [-0.4, 0.0, -0.4],
+            [0.0, 0.4, -0.4],
         ],
         "release_start": 50,
         "release_interval": 300,

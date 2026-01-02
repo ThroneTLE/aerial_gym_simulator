@@ -311,6 +311,7 @@ class PayloadManager:
     def _sample_interval(self) -> int:
         return self._sample_between(self.release_interval_range, self.release_interval)
 
+
     def _sample_payload_mass(self, env_ids: torch.Tensor):
         if not self.randomize_payload_mass or not self.payload_mass_range:
             self.payload_mass_per_env[env_ids] = self.payload_mass
@@ -1428,10 +1429,10 @@ class PayloadCompensationTask(BaseTask):
             priv_vec[:, 0] = payload_obs["payload_mass"]
             # 1-3: COM offset
             priv_vec[:, 1:4] = payload_obs["com_offset"]
-            # 4-6: base inertia diag
+            # 4-6: base inertia diag (scaled by 1000 to match mass magnitude ~0.1)
             base_inertia_diag = torch.diagonal(self.payload_manager.base_inertia, dim1=1, dim2=2)
             if base_inertia_diag.shape[0] >= self.sim_env.num_envs:
-                priv_vec[:, 4:7] = base_inertia_diag[: self.sim_env.num_envs]
+                priv_vec[:, 4:7] = base_inertia_diag[: self.sim_env.num_envs] * 1000.0
             self.task_obs["priviliged_obs"] = priv_vec
 
         self.task_obs["rewards"] = self.rewards
@@ -1511,6 +1512,7 @@ class PayloadCompensationTask(BaseTask):
         if self.comp_thrust_limit > 1e-6:
             thrust_extra = torch.abs(self.payload_manager.gravity[2]) * mass_delta
             residual[:, 0] = torch.clamp(thrust_extra / self.comp_thrust_limit, -1.0, 1.0)
+
         self.teacher_residual = residual
 
     def _compute_true_inertia(self):

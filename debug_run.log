@@ -1,0 +1,204 @@
+Importing module 'gym_38' (/home/throne/下载/isaacgym/python/isaacgym/_bindings/linux-x86_64/gym_38.so)
+Setting GYM_USD_PLUG_INFO_PATH to /home/throne/下载/isaacgym/python/isaacgym/_bindings/linux-x86_64/usd/plugInfo.json
+PyTorch version 1.13.1
+Device count 1
+/home/throne/下载/isaacgym/python/isaacgym/_bindings/src/gymtorch
+Using /home/throne/.cache/torch_extensions/py38_cu117 as PyTorch extensions root...
+Emitting ninja build file /home/throne/.cache/torch_extensions/py38_cu117/gymtorch/build.ninja...
+Building extension module gymtorch...
+Allowing ninja to set a default number of workers... (overridable by setting the environment variable MAX_JOBS=N)
+ninja: no work to do.
+Loading extension module gymtorch...
+Gym has been unmaintained since 2022 and does not support NumPy 2.0 amongst other critical functionality.
+Please upgrade to Gymnasium, the maintained drop-in replacement of Gym, or contact the authors of your software and request that they upgrade.
+See the migration guide at https://gymnasium.farama.org/introduction/migration_guide/ for additional information.
+/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/gymnasium/envs/registration.py:596: UserWarning: [33mWARN: plugin: shimmy.registration:register_gymnasium_envs raised Traceback (most recent call last):
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/gymnasium/envs/registration.py", line 594, in load_plugin_envs
+    fn()
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/shimmy/registration.py", line 304, in register_gymnasium_envs
+    _register_atari_envs()
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/shimmy/registration.py", line 205, in _register_atari_envs
+    import ale_py
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/ale_py/__init__.py", line 68, in <module>
+    register_v0_v4_envs()
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/ale_py/registration.py", line 178, in register_v0_v4_envs
+    _register_rom_configs(legacy_games, obs_types, versions)
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/ale_py/registration.py", line 63, in _register_rom_configs
+    gymnasium.register(
+AttributeError: partially initialized module 'gymnasium' has no attribute 'register' (most likely due to a circular import)
+[0m
+  logger.warn(f"plugin: {plugin.value} raised {traceback.format_exc()}")
+/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/torch/utils/tensorboard/__init__.py:4: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
+  if not hasattr(tensorboard, "__version__") or LooseVersion(
+[37m[1897 ms][base_task] - INFO : Setting seed: 8 (base_task.py:38)[0m
+[37m[1898 ms][payload_compensation_task] - INFO : Building environment for payload compensation task. (payload_compensation_task.py:567)[0m
+[37m[1898 ms][env_manager] - INFO : Populating environments. (env_manager.py:76)[0m
+[37m[1898 ms][env_manager] - INFO : Creating simulation instance. (env_manager.py:92)[0m
+[37m[1898 ms][env_manager] - INFO : Instantiating IGE object. (env_manager.py:93)[0m
+[37m[1898 ms][IsaacGymEnvManager] - INFO : Creating Isaac Gym Environment (IGE_env_manager.py:46)[0m
+[37m[1898 ms][IsaacGymEnvManager] - INFO : Acquiring gym object (IGE_env_manager.py:81)[0m
+[37m[1898 ms][IsaacGymEnvManager] - INFO : Acquired gym object (IGE_env_manager.py:83)[0m
+[37m[1898 ms][IsaacGymEnvManager] - INFO : Fixing devices (IGE_env_manager.py:95)[0m
+[37m[1898 ms][IsaacGymEnvManager] - INFO : Using GPU pipeline for simulation. (IGE_env_manager.py:112)[0m
+[37m[1898 ms][IsaacGymEnvManager] - INFO : Sim Device type: cuda, Sim Device ID: 0 (IGE_env_manager.py:115)[0m
+[31;1m[1898 ms][IsaacGymEnvManager] - CRITICAL : 
+ Setting graphics device to -1.
+ This is done because the simulation is run in headless mode and no Isaac Gym cameras are used.
+ No need to worry. The simulation and warp rendering will work as expected. (IGE_env_manager.py:125)[0m
+[37m[1898 ms][IsaacGymEnvManager] - INFO : Graphics Device ID: -1 (IGE_env_manager.py:133)[0m
+[37m[1898 ms][IsaacGymEnvManager] - INFO : Creating Isaac Gym Simulation Object (IGE_env_manager.py:135)[0m
+[33;20m[1898 ms][IsaacGymEnvManager] - WARNING : If you have set the CUDA_VISIBLE_DEVICES environment variable, please ensure that you set it
+to a particular one that works for your system to use the viewer or Isaac Gym cameras.
+If you want to run parallel simulations on multiple GPUs with camera sensors,
+please disable Isaac Gym and use warp (by setting use_warp=True), set the viewer to headless. (IGE_env_manager.py:143)[0m
+[33;20m[1898 ms][IsaacGymEnvManager] - WARNING : If you see a segfault in the next lines, it is because of the discrepancy between the CUDA device and the graphics device.
+Please ensure that the CUDA device and the graphics device are the same. (IGE_env_manager.py:148)[0m
+Not connected to PVD
++++ Using GPU PhysX
+Physics Engine: PhysX
+Physics Device: cuda:0
+GPU Pipeline: enabled
+[37m[2634 ms][IsaacGymEnvManager] - INFO : Created Isaac Gym Simulation Object (IGE_env_manager.py:154)[0m
+[37m[2635 ms][IsaacGymEnvManager] - INFO : Created Isaac Gym Environment (IGE_env_manager.py:49)[0m
+[37m[2876 ms][env_manager] - INFO : IGE object instantiated. (env_manager.py:115)[0m
+[37m[2876 ms][env_manager] - INFO : Creating warp environment. (env_manager.py:119)[0m
+[37m[2876 ms][env_manager] - INFO : Warp environment created. (env_manager.py:121)[0m
+[37m[2876 ms][env_manager] - INFO : Creating robot manager. (env_manager.py:126)[0m
+[37m[2876 ms][BaseRobot] - INFO : [DONE] Initializing controller (base_robot.py:26)[0m
+[37m[2876 ms][BaseRobot] - INFO : Initializing controller lee_position_control_with_compensation (base_robot.py:29)[0m
+[33;20m[2876 ms][base_multirotor] - WARNING : Creating 4096 multirotors. (base_multirotor.py:37)[0m
+[37m[2876 ms][env_manager] - INFO : [DONE] Creating robot manager. (env_manager.py:132)[0m
+[37m[2876 ms][env_manager] - INFO : [DONE] Creating simulation instance. (env_manager.py:134)[0m
+[37m[2876 ms][asset_loader] - INFO : Loading asset: quad.urdf for the first time. Next use of this asset will be via the asset buffer. (asset_loader.py:71)[0m
+[37m[2881 ms][env_manager] - INFO : Populating environment 0 (env_manager.py:194)[0m
+[33;20m[3249 ms][robot_manager] - WARNING : 
+Robot mass: 0.2500003944120692,
+Inertia: tensor([[8.4501e-04, 0.0000e+00, 3.3087e-24],
+        [0.0000e+00, 8.4501e-04, 3.3087e-24],
+        [3.3087e-24, 3.3087e-24, 1.6900e-03]], device='cuda:0'),
+Robot COM: tensor([[0.0000e+00, 0.0000e+00, 1.3411e-14, 1.0000e+00]], device='cuda:0') (robot_manager.py:427)[0m
+[33;20m[3250 ms][robot_manager] - WARNING : Calculated robot mass and inertia for this robot. This code assumes that your robot is the same across environments. (robot_manager.py:430)[0m
+[31;1m[3250 ms][robot_manager] - CRITICAL : If your robot differs across environments you need to perform this computation for each different robot here. (robot_manager.py:433)[0m
+[37m[3307 ms][env_manager] - INFO : Populating environment 1000 (env_manager.py:194)[0m
+[37m[3364 ms][env_manager] - INFO : Populating environment 2000 (env_manager.py:194)[0m
+[37m[3421 ms][env_manager] - INFO : Populating environment 3000 (env_manager.py:194)[0m
+[37m[3477 ms][env_manager] - INFO : Populating environment 4000 (env_manager.py:194)[0m
+[37m[3483 ms][env_manager] - INFO : [DONE] Populating environments. (env_manager.py:79)[0m
+[33;20m[3523 ms][IsaacGymEnvManager] - WARNING : Headless: True (IGE_env_manager.py:494)[0m
+[37m[3523 ms][IsaacGymEnvManager] - INFO : Headless mode. Viewer not created. (IGE_env_manager.py:505)[0m
+[33;20m[3525 ms][warp_env_manager] - WARNING : No assets have been added to the environment. Skipping preparation for simulation (warp_env_manager.py:101)[0m
+[33;20m[3575 ms][asset_manager] - WARNING : Number of obstacles to be kept in the environment: 0 (asset_manager.py:32)[0m
+/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/control/motor_model.py:53: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  torch.tensor(self.min_thrust, device=self.device, dtype=torch.float32).expand(
+/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/control/motor_model.py:56: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  torch.tensor(self.max_thrust, device=self.device, dtype=torch.float32).expand(
+[33;20m[3789 ms][control_allocation] - WARNING : Control allocation does not account for actuator limits. This leads to suboptimal allocation (control_allocation.py:67)[0m
+/home/throne/.local/lib/python3.8/site-packages/gym/spaces/box.py:84: UserWarning: [33mWARN: Box bound precision lowered by casting to float32[0m
+  logger.warn(f"Box bound precision lowered by casting to {self.dtype}")
+[37m[6539 ms][payload_compensation_task] - INFO : [DebugReset 0] env_ids=[0, 1, 2] targets=[[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]] release_info={0: {'order': [1, 3, 0, 2], 'next_release': 97}, 1: {'order': [0, 1, 2, 3], 'next_release': 74}, 2: {'order': [3, 1, 2, 0], 'next_release': 52}} (payload_compensation_task.py:1701)[0m
+[37m[9045 ms][payload_compensation_task] - INFO : [DebugReset 1] env_ids=[3390] targets=[[0.0, 0.0, 0.0]] release_info={3390: {'order': [1, 0, 2, 3], 'next_release': 55}} (payload_compensation_task.py:1701)[0m
+[37m[9211 ms][payload_compensation_task] - INFO : [DebugReset 2] env_ids=[2924] targets=[[0.0, 0.0, 0.0]] release_info={2924: {'order': [3, 1, 2, 0], 'next_release': 54}} (payload_compensation_task.py:1701)[0m
+[37m[9391 ms][payload_compensation_task] - INFO : [DebugReset 3] env_ids=[909] targets=[[0.0, 0.0, 0.0]] release_info={909: {'order': [1, 2, 3, 0], 'next_release': 97}} (payload_compensation_task.py:1701)[0m
+[37m[9426 ms][payload_compensation_task] - INFO : [DebugReset 4] env_ids=[2811, 3034, 3360] targets=[[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]] release_info={2811: {'order': [0, 1, 2, 3], 'next_release': 71}, 3034: {'order': [3, 0, 1, 2], 'next_release': 74}, 3360: {'order': [2, 3, 0, 1], 'next_release': 55}} (payload_compensation_task.py:1701)[0m
+*** Can't create empty tensor
+Traceback (most recent call last):
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/runpy.py", line 194, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/runpy.py", line 87, in _run_code
+    exec(code, run_globals)
+  File "/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/rl_training/rl_games/runner.py", line 382, in <module>
+    runner.run(args)
+  File "/home/throne/.local/lib/python3.8/site-packages/rl_games/torch_runner.py", line 133, in run
+    self.run_train(args)
+  File "/home/throne/.local/lib/python3.8/site-packages/rl_games/torch_runner.py", line 116, in run_train
+    agent.train()
+  File "/home/throne/.local/lib/python3.8/site-packages/rl_games/common/a2c_common.py", line 1381, in train
+    step_time, play_time, update_time, sum_time, a_losses, c_losses, b_losses, entropies, kls, last_lr, lr_mul = self.train_epoch()
+  File "/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/rl_training/rl_games/a2c_aux_loss.py", line 415, in train_epoch
+    result = super().train_epoch()
+  File "/home/throne/.local/lib/python3.8/site-packages/rl_games/common/a2c_common.py", line 1232, in train_epoch
+    batch_dict = self.play_steps()
+  File "/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/rl_training/rl_games/a2c_aux_loss.py", line 130, in play_steps
+    self.obs, rewards, self.dones, infos = self.env_step(res_dict['actions'])
+  File "/home/throne/.local/lib/python3.8/site-packages/rl_games/common/a2c_common.py", line 541, in env_step
+    obs, rewards, dones, infos = self.vec_env.step(actions)
+  File "/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/rl_training/rl_games/runner.py", line 71, in step
+    return self.env.step(actions)
+  File "/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/rl_training/rl_games/runner.py", line 40, in step
+    observations, rewards, terminated, truncated, infos = super().step(action)
+  File "/home/throne/.local/lib/python3.8/site-packages/gym/core.py", line 280, in step
+    return self.env.step(action)
+  File "/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/task/payload_compensation_task/payload_compensation_task.py", line 1044, in step
+    reset_envs = self.sim_env.post_reward_calculation_step()
+  File "/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/env_manager/env_manager.py", line 430, in post_reward_calculation_step
+    envs_to_reset = self.reset_terminated_and_truncated_envs()
+  File "/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/env_manager/env_manager.py", line 408, in reset_terminated_and_truncated_envs
+    self.reset_idx(envs_to_reset)
+  File "/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/env_manager/env_manager.py", line 315, in reset_idx
+    self.robot_manager.reset_idx(env_ids)
+  File "/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/robots/robot_manager.py", line 478, in reset_idx
+    self.robot.reset_idx(env_ids)
+  File "/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/robots/base_multirotor.py", line 230, in reset_idx
+    self.update_states()
+  File "/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/robots/base_multirotor.py", line 339, in update_states
+    self.robot_vehicle_linvel[:] = quat_rotate_inverse(
+KeyboardInterrupt
+Warp 1.0.0 initialized:
+   CUDA Toolkit 11.5, Driver 12.6
+   Devices:
+     "cpu"      : "x86_64"
+     "cuda:0"   : "NVIDIA GeForce RTX 4060 Laptop GPU" (8 GiB, sm_89, mempool enabled)
+   Kernel cache:
+     /home/throne/.cache/warp/1.0.0
+[isaacgym:gymutil.py] Unknown args:  []
+Loading config:  aerial_gym/rl_training/rl_games/ppo_aerial_quad_aux.yaml
+[Runner] Registered custom agent: a2c_continuous_aux
+self.seed = 8
+Started to train
+[isaacgym:gymutil.py] Unknown args:  ['--train', '--file', 'aerial_gym/rl_training/rl_games/ppo_aerial_quad_aux.yaml', '--task', 'payload_compensation_task_teacher', '--experiment_name', 'teacher_debug_mag']
+WARNING: allocation matrix is not full rank. Rank: 4
+Box(-1.0, 1.0, (3,), float32) Box(-inf, inf, (20,), float32)
+seq_length: 4
+current training device: cuda:0
+build mlp: 28
+RunningMeanStd:  (1,)
+RunningMeanStd:  (20,)
+[A2CAgentWithAuxLoss] Auxiliary loss coefficient: 0.5
+[A2CAgentWithAuxLoss] BC loss: coef=20.0, alpha=0.999, min=0.0
+[A2CAgentWithAuxLoss] NaN防护: skip=True, reset=True, tolerance=5
+[A2CAgentWithAuxLoss] Registered teacher_actions in experience_buffer (shape: [horizon=256, actors=4096, action_dim=3])
+[A2CAgentWithAuxLoss] Registered privileged_obs in experience_buffer (shape: [horizon=256, actors=4096, priv_dim=7])
+[DaggerFrac] step=200 frac=0.00000000
+fps step: 177 fps step and policy inference: 168313 fps total: 141654 epoch: 1/16000 frames: 0
+saving next best rewards:  [254.65193]
+=> saving checkpoint 'runs/teacher_debug_mag_02-22-26-10/nn/teacher_debug_mag.pth'
+[PrivNet Debug] Base mag: 0.7569, Priv mag: 0.1551, Ratio: 0.2049
+[DaggerFrac] step=400 frac=0.00000000
+fps step: 235 fps step and policy inference: 219396 fps total: 176084 epoch: 2/16000 frames: 1048576
+saving next best rewards:  [926.7454]
+=> saving checkpoint 'runs/teacher_debug_mag_02-22-26-10/nn/teacher_debug_mag.pth'
+[DaggerFrac] step=600 frac=0.00000000
+fps step: 246 fps step and policy inference: 229253 fps total: 182494 epoch: 3/16000 frames: 2097152
+saving next best rewards:  [2073.5742]
+=> saving checkpoint 'runs/teacher_debug_mag_02-22-26-10/nn/teacher_debug_mag.pth'
+[DaggerFrac] step=800 frac=0.00000000
+[PrivNet Debug] Base mag: 0.7437, Priv mag: 0.1582, Ratio: 0.2128
+[DaggerFrac] step=1000 frac=0.00000000
+fps step: 293 fps step and policy inference: 270154 fps total: 207584 epoch: 4/16000 frames: 3145728
+saving next best rewards:  [2805.3762]
+=> saving checkpoint 'runs/teacher_debug_mag_02-22-26-10/nn/teacher_debug_mag.pth'
+[PrivNet Debug] Base mag: 0.7722, Priv mag: 0.1590, Ratio: 0.2058
+[DaggerFrac] step=1200 frac=0.00000000
+fps step: 225 fps step and policy inference: 210034 fps total: 169024 epoch: 5/16000 frames: 4194304
+[DaggerFrac] step=1400 frac=0.00000000
+[PrivNet Debug] Base mag: 0.6961, Priv mag: 0.1412, Ratio: 0.2029
+fps step: 246 fps step and policy inference: 229280 fps total: 182209 epoch: 6/16000 frames: 5242880
+saving next best rewards:  [5413.505]
+=> saving checkpoint 'runs/teacher_debug_mag_02-22-26-10/nn/teacher_debug_mag.pth'
+[DaggerFrac] step=1600 frac=0.00000000
+[PrivNet Debug] Base mag: 0.7053, Priv mag: 0.1261, Ratio: 0.1788
+fps step: 233 fps step and policy inference: 217714 fps total: 173192 epoch: 7/16000 frames: 6291456
+[DaggerFrac] step=1800 frac=0.00000000
+[DaggerFrac] step=2000 frac=0.00000000
+[PrivNet Debug] Base mag: 0.6834, Priv mag: 0.1409, Ratio: 0.2061
+fps step: 236 fps step and policy inference: 220129 fps total: 176416 epoch: 8/16000 frames: 7340032

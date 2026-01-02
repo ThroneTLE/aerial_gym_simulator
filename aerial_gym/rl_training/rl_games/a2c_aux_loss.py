@@ -13,6 +13,7 @@ from rl_games.algos_torch import torch_ext
 from rl_games.common import common_losses
 from rl_games.common.experience import ExperienceBuffer
 from rl_games.common.a2c_common import swap_and_flatten01
+from collections import defaultdict
 
 
 class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
@@ -56,7 +57,7 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
         print(f"[A2CAgentWithAuxLoss] NaN防护: skip={self.skip_nan_gradients}, reset={self.reset_optimizer_on_persistent_nan}, tolerance={self.nan_tolerance}")
         
     def init_tensors(self):
-        """Override to register teacher_actions in experience_buffer after it's created."""
+        """Override to register teacher_actions and privileged_obs in experience_buffer."""
         super().init_tensors()
         
         # Register teacher_actions in experience_buffer for proper minibatch generation
@@ -70,6 +71,18 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
         if 'teacher_actions' not in self.tensor_list:
             self.tensor_list.append('teacher_actions')
         print(f"[A2CAgentWithAuxLoss] Registered teacher_actions in experience_buffer (shape: [horizon={self.horizon_length}, actors={self.num_actors}, action_dim={action_dim}])")
+        
+        # Register privileged_obs in experience_buffer for aux loss computation
+        # Get privileged_obs dim from config or infer from first obs
+        priv_dim = self.network.priv_dim if hasattr(self.network, 'priv_dim') else 7
+        self.experience_buffer.tensor_dict['privileged_obs'] = torch.zeros(
+            (self.horizon_length, self.num_actors, priv_dim),
+            dtype=torch.float32,
+            device=self.ppo_device
+        )
+        if 'privileged_obs' not in self.tensor_list:
+            self.tensor_list.append('privileged_obs')
+        print(f"[A2CAgentWithAuxLoss] Registered privileged_obs in experience_buffer (shape: [horizon={self.horizon_length}, actors={self.num_actors}, priv_dim={priv_dim}])")
     
     def _get_current_bc_coef(self):
         """Get current BC coefficient with exponential decay."""
@@ -94,6 +107,16 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
                 res_dict = self.get_action_values(self.obs)
             self.experience_buffer.update_data('obses', n, self.obs['obs'])
             self.experience_buffer.update_data('dones', n, self.dones)
+            
+            # Store privileged_obs for aux loss computation during training
+            priv_obs = self.obs.get('privileged_obs', None)
+            if priv_obs is not None:
+                self.experience_buffer.update_data('privileged_obs', n, priv_obs)
+            else:
+                # Fill with zeros if not available
+                priv_shape = self.experience_buffer.tensor_dict['privileged_obs'].shape[-1]
+                zeros = torch.zeros((self.num_actors, priv_shape), device=self.ppo_device)
+                self.experience_buffer.update_data('privileged_obs', n, zeros)
 
             for k in update_list:
                 self.experience_buffer.update_data(k, n, res_dict[k]) 
@@ -185,7 +208,7 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
         return batch_dict
 
     def prepare_dataset(self, batch_dict):
-        """Override to include teacher_actions in dataset."""
+        """Override to include teacher_actions and privileged_obs in dataset."""
         # super().prepare_dataset(batch_dict) returns None, it sets self.dataset internally
         super().prepare_dataset(batch_dict)
         
@@ -214,9 +237,15 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
                                 self.dataset.update({'teacher_actions': self._teacher_actions_flat})
         else:
             self._teacher_actions_flat = None
+        
+        # Store privileged_obs flat for minibatch access in train_actor_critic
+        if 'privileged_obs' in batch_dict:
+            self._privileged_obs_flat = batch_dict['privileged_obs']
+        else:
+            self._privileged_obs_flat = None
 
     def train_actor_critic(self, input_dict):
-        """Override to pass teacher_actions to calc_gradients via input_dict."""
+        """Override to pass teacher_actions and privileged_obs to calc_gradients via input_dict."""
         # Add teacher_actions to input_dict if available
         teacher_actions = input_dict.get('teacher_actions', None)
         if not getattr(self, '_has_teacher_actions', False):
@@ -226,6 +255,14 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
             if curr_idx is not None:
                 teacher_actions = self._teacher_actions_flat[curr_idx]
         input_dict['teacher_actions'] = teacher_actions
+        
+        # Add privileged_obs to input_dict if available (same pattern as teacher_actions)
+        privileged_obs = input_dict.get('privileged_obs', None)
+        if privileged_obs is None and hasattr(self, '_privileged_obs_flat') and self._privileged_obs_flat is not None:
+            curr_idx = input_dict.get('idx', None)
+            if curr_idx is not None:
+                privileged_obs = self._privileged_obs_flat[curr_idx]
+        input_dict['privileged_obs'] = privileged_obs
         
         self.calc_gradients(input_dict)
         return self.train_result
@@ -424,7 +461,7 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
             if self.reset_optimizer_on_persistent_nan and self.nan_skip_count >= self.nan_tolerance:
                 print(f"[NaN Recovery] 连续{self.nan_skip_count}次NaN，重置优化器状态")
                 # Reset Adam state (clear momentum and variance)
-                self.optimizer.state = {}
+                self.optimizer.state = defaultdict(dict)
                 self.nan_skip_count = 0
                 
                 if self.writer is not None:
