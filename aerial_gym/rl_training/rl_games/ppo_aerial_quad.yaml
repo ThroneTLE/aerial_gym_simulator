@@ -11,7 +11,7 @@ params:
   network:
     name: privileged_actor_critic  # 特权编码器 + 策略/价值双头网络
     separate: False  # False=共享主干；True=actor/critic 各自独立主干（更耗显存，梯度解耦）
-    privileged_dim: 41  # 特权向量长度
+    privileged_dim: 7  # 特权向量长度
     privileged_embed: 8  # 编码后维度
     privileged_hidden: 128  # 编码器隐层宽度
     space:

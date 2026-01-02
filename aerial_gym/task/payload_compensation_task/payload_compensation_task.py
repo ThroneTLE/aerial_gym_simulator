@@ -1324,42 +1324,16 @@ class PayloadCompensationTask(BaseTask):
         self._apply_observation_noise()
 
         if self.teacher_mode:
-            # 特权向量：当前载荷 + 惯量/扰动/分配矩阵（去掉电机模型超大值，保持慢变量）
+            # 特权向量 (7维): 载荷质量(1) + 质心偏移(3) + 基础惯量对角项(3)
             priv_vec = torch.zeros((self.sim_env.num_envs, self.priv_vec_dim), device=self.device)
-            idx = 0
             # 0: payload mass
-            priv_vec[:, idx] = payload_obs["payload_mass"]
-            idx += 1
+            priv_vec[:, 0] = payload_obs["payload_mass"]
             # 1-3: COM offset
-            priv_vec[:, idx : idx + 3] = payload_obs["com_offset"]
-            idx += 3
+            priv_vec[:, 1:4] = payload_obs["com_offset"]
             # 4-6: base inertia diag
             base_inertia_diag = torch.diagonal(self.payload_manager.base_inertia, dim1=1, dim2=2)
             if base_inertia_diag.shape[0] >= self.sim_env.num_envs:
-                priv_vec[:, idx : idx + 3] = base_inertia_diag[: self.sim_env.num_envs]
-            idx += 3
-            # 7-9: last payload torque
-            priv_vec[:, idx : idx + 3] = self._last_tau_payload
-            idx += 3
-            # 10-33: allocation matrix (flatten 24)
-            alloc = np.array(BaseQuadCfg.control_allocator_config.allocation_matrix, dtype=np.float32).flatten()
-            alloc_t = torch.as_tensor(alloc, device=self.device)
-            end_alloc = idx + alloc_t.numel()
-            if end_alloc <= self.priv_vec_dim:
-                priv_vec[:, idx:end_alloc] = alloc_t
-            idx = end_alloc
-            # 34-39: disturbance max force/torque (6)
-            disturb = BaseQuadCfg.disturbance.max_force_and_torque_disturbance
-            disturb_t = torch.as_tensor(disturb, device=self.device, dtype=torch.float32)
-            end_disturb = idx + disturb_t.numel()
-            if end_disturb <= self.priv_vec_dim:
-                priv_vec[:, idx:end_disturb] = disturb_t
-            idx = end_disturb
-            # 40: prob_apply_disturbance
-            if idx < self.priv_vec_dim:
-                priv_vec[:, idx] = getattr(BaseQuadCfg.disturbance, "prob_apply_disturbance", 0.0)
-            # 其余预留字段保持 0
-            # raw 特权直接输出，由策略侧编码
+                priv_vec[:, 4:7] = base_inertia_diag[: self.sim_env.num_envs]
             self.task_obs["priviliged_obs"] = priv_vec
 
         self.task_obs["rewards"] = self.rewards

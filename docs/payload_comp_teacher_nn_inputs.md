@@ -16,14 +16,9 @@
 - 27      上一次释放的质量，kg  
 - 28      预警标志 `warning_flag`（0/1）
 
-## 特权向量（41 维，Teacher 模式下启用）
+## 特权向量（7 维，Teacher 模式下启用）
 - 0       当前载荷质量，kg  
 - 1:3     当前质心偏移，m  
-- 4:6     基础惯量对角项（名义机体）  
-- 7:9     最近一次 payload 扭矩（机体系），Nm  
-- 10:33   分配矩阵（4×6 展平，共 24 项）  
-- 34:39   外扰最大力/力矩（6 项）  
-- 40      施加扰动的概率 `prob_apply_disturbance`  
-- 其余预留为 0（已去掉电机模型相关参数，避免尺度过大）
+- 4:6     基础惯量对角项（名义机体）
 
 > 以上索引与维度对应 `aerial_gym/task/payload_compensation_task/payload_compensation_task.py::process_obs_for_task`。若修改特权维度，请同步调整 `privileged_observation_space_dim` 与策略侧编码器输入。***

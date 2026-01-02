@@ -45,10 +45,16 @@ class ExtractObsWrapper(gym.Wrapper):
             torch.zeros_like(terminated),
         )
 
+        # Extract teacher_actions for BC loss if available
+        teacher_actions = None
+        if isinstance(infos, dict) and "teacher_actions" in infos:
+            teacher_actions = infos["teacher_actions"]
+
         return (
             {
                 "obs": observations["observations"],
                 "privileged_obs": observations.get("priviliged_obs", None),
+                "teacher_actions": teacher_actions,
             },
             rewards,
             dones,

@@ -12,7 +12,7 @@ class task_config:
 
     # 新观测结构: 旋转矩阵(9) + 角速度(3) + 4位附着掩码(4) + 预警(1) + 上一时刻动作(3) = 20
     observation_space_dim = 20
-    privileged_observation_space_dim = 41
+    privileged_observation_space_dim = 7
     action_space_dim = 3  # thrust + roll torque + pitch torque (无 yaw)
     controller_action_dim = 8  # 保持与 Lee 控制器兼容，yaw 补偿位置设为 0
     dagger_frac = 0.0          # 初始教师动作占比
@@ -78,9 +78,9 @@ class task_config:
         "tilt_excess_coef": 0.0,
         "tilt_excess_exp": 0.0,
         # 模仿权重 - 分离推力和力矩
-        "imitation_weight": 4.0,  # 统一权重（当 thrust/torque 未指定时使用）
-        "imitation_weight_thrust": 4.0,  # 推力模仿权重（action[0]）
-        "imitation_weight_torque": 4.0,  # 力矩模仿权重（action[1:3]）
+        "imitation_weight": 0.0,  # 统一权重（当 thrust/torque 未指定时使用）
+        "imitation_weight_thrust": 8.0,  # 推力模仿权重（action[0]）
+        "imitation_weight_torque": 8.0,  # 力矩模仿权重（action[1:3]）
         # 动作幅度惩罚 - 防止不必要的残差输出和抖动
         "action_magnitude_penalty_coef": 0.0,  # 惩罚系数，越大越抑制输出 惩罚 = thrust² × thrust_coef + mean(torque²) × torque_coef
         "action_magnitude_penalty_thrust": 0.000,  # thrust 惩罚（可选单独设置）
@@ -90,7 +90,7 @@ class task_config:
     }
 
     crash_distance_threshold = 5.0
-    crash_tilt_threshold_deg = 45.0
+    crash_tilt_threshold_deg = 20.0
 
     payload_parameters = {
         "payload_mass": 0.02,

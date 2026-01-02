@@ -11,7 +11,7 @@ params:
   network:
     name: privileged_actor_critic  # 特权编码器 + 策略/价值双头网络
     separate: False  # False=共享主干；True=actor/critic 各自独立主干（更耗显存，梯度解耦）
-    privileged_dim: 41  # 特权向量长度
+    privileged_dim: 7  # 特权向量长度
     privileged_embed: 8  # 编码后维度
     privileged_hidden: 128  # 编码器隐层宽度
     aux_target_dim: 5  # 辅助损失目标维度: [mass, com_x, com_y, com_z, released_mass]
@@ -68,7 +68,7 @@ params:
     # 扰动样本优势加权（权重=1+coef*mask，mask 来自 infos['is_disturbance']）
     disturbance_adv_weight: 0.0
     # BC/DAgger 模仿损失系数（从 bc_coef 衰减到 bc_min_coef，乘 bc_alpha）
-    bc_coef: 0.1
+    bc_coef: 1.0
     bc_alpha: 0.999
     bc_min_coef: 0.1
     critic_coef: 1  # 价值损失权重（相对策略损失；大则稳定优势但可能拖慢策略更新）

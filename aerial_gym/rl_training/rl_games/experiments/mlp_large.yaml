@@ -11,7 +11,7 @@ params:
   network:
     name: privileged_actor_critic
     separate: False
-    privileged_dim: 41
+    privileged_dim: 7
     privileged_embed: 8
     privileged_hidden: 256  # 增大编码器
     aux_target_dim: 5
