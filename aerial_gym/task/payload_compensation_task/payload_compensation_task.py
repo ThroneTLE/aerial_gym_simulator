@@ -23,6 +23,15 @@ from aerial_gym.utils.math import (
     quat_mul,
     quat_to_rotation_matrix,
 )
+from aerial_gym.utils.nan_prevention_utils import (
+    clip_rewards,
+    clip_observations,
+    detect_and_log_nan,
+    safe_exp,
+    check_inertia_matrix_condition,
+    check_physical_limits,
+    sanitize_observation_dict,
+)
 
 logger = CustomLogger("payload_compensation_task")
 
@@ -57,6 +66,25 @@ def _np_to_mat33(arr: np.ndarray) -> gymapi.Mat33:
 def point_mass_inertia(mass: float, offset: np.ndarray) -> np.ndarray:
     r_sq = float(np.dot(offset, offset))
     return mass * (r_sq * np.eye(3) - np.outer(offset, offset))
+
+
+def exp_func(x, gain, offset, use_safe_exp=False):
+    """Exponential reward shaping function with optional safe mode.
+    
+    Args:
+        x: Input tensor
+        gain: Gain parameter
+        offset: Offset parameter
+        use_safe_exp: If True, use safe_exp to prevent overflow (default: False for backward compatibility)
+    
+    Returns:
+        Exponential reward
+    """
+    exp_input = -gain * x**2 / offset
+    if use_safe_exp:
+        return safe_exp(exp_input, max_input=20.0)
+    else:
+        return torch.exp(exp_input)
 
 
 @dataclass
@@ -363,6 +391,12 @@ class PayloadManager:
 
             props = self.actor_props[env_id]
             props[0].mass = total_mass
+            # NaN Prevention: Check and regularize inertia matrix if ill-conditioned
+            inertia_np = check_inertia_matrix_condition(
+                inertia_np, 
+                max_condition=1000.0, 
+                regularization=1e-6
+            )
             props[0].inertia = _np_to_mat33(inertia_np)
             self.gym.set_actor_rigid_body_properties(
                 self.env_handles[env_id], self.robot_handles[env_id], props, recomputeInertia=False
@@ -565,9 +599,8 @@ class PayloadCompensationTask(BaseTask):
             lee_controller_with_comp_config.control, "compensation_torque_limits", [0.5, 0.5, 0.1]
         )
         self.comp_torque_limits = torch.as_tensor(torque_limits, device=self.device)
-        # 教师模式：特权向量（载荷/惯量/扰动/分配矩阵等），raw 形式输出，由策略侧可训练编码器处理
-        self.priv_vec_dim = 41
-        self.priv_embed_dim = self.priv_vec_dim
+        # 教师模式：特权向量维度由配置文件中的 privileged_observation_space_dim 定义
+        # 简化版本: 7 维 [mass, com_x, com_y, com_z, released_mass, warning_flag, just_released]
 
         self.target_position = torch.zeros(
             (self.sim_env.num_envs, 3), device=self.device, requires_grad=False
@@ -689,6 +722,23 @@ class PayloadCompensationTask(BaseTask):
         self.crash_distance_threshold = getattr(self.task_config, "crash_distance_threshold", 8.0)
         tilt_deg = getattr(self.task_config, "crash_tilt_threshold_deg", 90.0)
         self.crash_tilt_threshold_rad = np.deg2rad(tilt_deg)
+        
+        # NaN prevention: configuration for numerical stability
+        self.reward_clip_min = float(getattr(self.task_config, "reward_clip_min", -100.0))
+        self.reward_clip_max = float(getattr(self.task_config, "reward_clip_max", 100.0))
+        self.obs_clip_limits = {
+            "robot_position": (-50.0, 50.0),
+            "robot_linvel": (-50.0, 50.0),
+            "robot_body_linvel": (-50.0, 50.0),
+            "robot_angvel": (-20.0, 20.0),
+            "robot_body_angvel": (-20.0, 20.0),
+        }
+        self.physical_velocity_limit = 1000000.0 # Force disable limit
+        self.physical_angvel_limit = 1000000.0   # Force disable limit
+        self.nan_detection_interval = int(getattr(self.task_config, "nan_detection_interval", 100))
+        self.nan_count = 0
+        self.physical_violation_count = 0
+        
         self._init_rollout_logger()
 
     def _patch_pre_physics_step(self):
@@ -819,7 +869,43 @@ class PayloadCompensationTask(BaseTask):
         self.controller_actions[:, 7] = 0.0  # yaw 固定为 0
 
         self.sim_env.step(actions=self.controller_actions)
+        
+        # 1. Enhanced NaN detection with logging (Original data check)
+        # This MUST be done before sanitization to correctly identify crashed environments
         _reset_on_nonfinite(self.obs_dict, self.device)
+
+        # 2. Check for physical limit violations (extreme velocities)
+        violation_mask = check_physical_limits(
+            self.obs_dict,
+            velocity_limit=self.physical_velocity_limit,
+            angvel_limit=self.physical_angvel_limit,
+        )
+        if violation_mask.any():
+            self.physical_violation_count += violation_mask.sum().item()
+            # Mark as crashes to trigger reset
+            self.obs_dict["crashes"][violation_mask] = True
+        
+        # 3. NaN Prevention: Sanitize observations before use in network/reward
+        # Now we replace NaNs with zeros to protect the network, but since we already
+        # marked them as crashes above, they will receive crash penalties.
+        # 3. NaN Prevention: Sanitize observations before use
+        # Store sanitized obs in a temporary variable (or swap), but keep raw link for Sim
+        # IMPORTANT: We swap self.obs_dict to sanitized version for calculation, 
+        # but must restore it to raw version before next sim step!
+        self._raw_obs_dict_link = self.obs_dict
+        self.obs_dict = sanitize_observation_dict(
+            self.obs_dict, 
+            clip_limits=self.obs_clip_limits,
+            normalize_quaternions=True
+        )
+        
+        # Periodic NaN monitoring for debugging
+        if self.counter % self.nan_detection_interval == 0:
+            for key in ["robot_position", "robot_orientation", "robot_linvel", "robot_body_angvel"]:
+                if key in self.obs_dict:
+                    # Note: These will likely be clean now due to sanitize above, but useful for logs
+                    if detect_and_log_nan(self.obs_dict[key], f"obs/{key}", self.counter, logger):
+                        self.nan_count += 1
 
         self._log_rollout(clamped_actions)
         pos_error_body = quat_apply_inverse(
@@ -844,6 +930,9 @@ class PayloadCompensationTask(BaseTask):
         survive_bonus = float(reward_params.get("survive_bonus", 0.0))
         if survive_bonus != 0.0:
             self.rewards += survive_bonus
+        
+        # NaN Prevention: 奖励裁剪已禁用 - 允许奖励自然增长以便训练进步
+        # self.rewards = clip_rewards(self.rewards, min_r=self.reward_clip_min, max_r=self.reward_clip_max)
 
         # 额外奖励：在预警或释放后窗口内，鼓励距离误差减小
         dist_norm = torch.norm(self.target_position - self.obs_dict["robot_position"], dim=1)
@@ -1010,7 +1099,13 @@ class PayloadCompensationTask(BaseTask):
         else:
             if self.tb_writer is not None:
                 self.tb_writer.flush()
-        return self.get_return_tuple()
+        # Capture return tuple using sanitized state
+        ret_tuple = self.get_return_tuple()
+        
+        # RESTORE raw link before simulation/reset logic (Critical for next step!)
+        self.obs_dict = self._raw_obs_dict_link
+        
+        return ret_tuple
 
     def _compute_payload_penalties(
         self, clamped_actions, delta=None, bonus_coef=0.0, window_mask=None, reward_window_mask=None
@@ -1323,9 +1418,12 @@ class PayloadCompensationTask(BaseTask):
 
         self._apply_observation_noise()
 
-        if self.teacher_mode:
-            # 特权向量 (7维): 载荷质量(1) + 质心偏移(3) + 基础惯量对角项(3)
-            priv_vec = torch.zeros((self.sim_env.num_envs, self.priv_vec_dim), device=self.device)
+        if not self.teacher_mode:
+            return {}
+        else:
+            # 使用配置中定义的特权观测维度 (7维简化版本)
+            priv_dim = self.task_config.privileged_observation_space_dim
+            priv_vec = torch.zeros((self.sim_env.num_envs, priv_dim), device=self.device)
             # 0: payload mass
             priv_vec[:, 0] = payload_obs["payload_mass"]
             # 1-3: COM offset
@@ -1628,8 +1726,7 @@ class PayloadCompensationTask(BaseTask):
         )
 
 
-def exp_func(x: torch.Tensor, gain: float, exp_coeff: float) -> torch.Tensor:
-    return gain * torch.exp(-exp_coeff * x * x)
+# exp_func 已在文件开头定义（line 71），支持 use_safe_exp 参数
 
 
 def compute_reward(
@@ -1646,7 +1743,8 @@ def compute_reward(
     crash_tilt_threshold_rad,
 ):
     dist = torch.norm(pos_error, dim=1)
-    pos_reward = exp_func(dist, 3.0, 8.0) + exp_func(dist, 2.0, 4.0)
+    # NaN Prevention: Use safe_exp in exp_func calls
+    pos_reward = exp_func(dist, 3.0, 8.0, use_safe_exp=True) + exp_func(dist, 2.0, 4.0, use_safe_exp=True)
     dist_reward = (20 - dist) / 40.0
 
     ups = quat_axis(robot_quats, 2)

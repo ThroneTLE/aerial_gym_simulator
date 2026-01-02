@@ -89,6 +89,10 @@ python -m aerial_gym.rl_training.rl_games.runner --train   --file aerial_gym/rl_
 
 export AERIAL_TB_LOGDIR=./runs/diagnostics_payload
 export AERIAL_TB_INTERVAL=100
+
+
+
+
 export AERIAL_FIXED_OBS_NORM=/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/fixed_stats.npz
 
 

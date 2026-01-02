@@ -12,6 +12,7 @@ from rl_games.algos_torch import a2c_continuous
 from rl_games.algos_torch import torch_ext
 from rl_games.common import common_losses
 from rl_games.common.experience import ExperienceBuffer
+from rl_games.common.a2c_common import swap_and_flatten01
 
 
 class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
@@ -43,8 +44,32 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
         # Storage for teacher actions during rollout
         self._teacher_actions_buffer = None
         
+        # NaN Prevention: gradient NaN detection and recovery
+        self.skip_nan_gradients = config.get('skip_nan_gradients', True)
+        self.reset_optimizer_on_persistent_nan = config.get('reset_optimizer_on_persistent_nan', True)
+        self.nan_tolerance = config.get('nan_tolerance', 5)
+        self.nan_skip_count = 0
+        self.total_nan_skips = 0
+        
         print(f"[A2CAgentWithAuxLoss] Auxiliary loss coefficient: {self.aux_loss_coef}")
         print(f"[A2CAgentWithAuxLoss] BC loss: coef={self.bc_coef}, alpha={self.bc_alpha}, min={self.bc_min_coef}")
+        print(f"[A2CAgentWithAuxLoss] NaN防护: skip={self.skip_nan_gradients}, reset={self.reset_optimizer_on_persistent_nan}, tolerance={self.nan_tolerance}")
+        
+    def init_tensors(self):
+        """Override to register teacher_actions in experience_buffer after it's created."""
+        super().init_tensors()
+        
+        # Register teacher_actions in experience_buffer for proper minibatch generation
+        action_dim = self.actions_num
+        self.experience_buffer.tensor_dict['teacher_actions'] = torch.zeros(
+            (self.horizon_length, self.num_actors, action_dim),
+            dtype=torch.float32,
+            device=self.ppo_device
+        )
+        # Add to tensor_list so it's included in get_transformed_list
+        if 'teacher_actions' not in self.tensor_list:
+            self.tensor_list.append('teacher_actions')
+        print(f"[A2CAgentWithAuxLoss] Registered teacher_actions in experience_buffer (shape: [horizon={self.horizon_length}, actors={self.num_actors}, action_dim={action_dim}])")
     
     def _get_current_bc_coef(self):
         """Get current BC coefficient with exponential decay."""
@@ -89,6 +114,21 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
                 shaped_rewards += self.gamma * res_dict['values'] * self.cast_obs(infos['time_outs']).unsqueeze(1).float()
 
             self.experience_buffer.update_data('rewards', n, shaped_rewards)
+            
+            # Store teacher_actions in experience_buffer
+            teacher_actions_for_buffer = None
+            if isinstance(self.obs, dict) and 'teacher_actions' in self.obs and self.obs['teacher_actions'] is not None:
+                teacher_actions_for_buffer = self.obs['teacher_actions']
+            elif 'teacher_actions' in infos:
+                teacher_actions_for_buffer = infos['teacher_actions']
+            
+            if teacher_actions_for_buffer is not None:
+                self.experience_buffer.update_data('teacher_actions', n, teacher_actions_for_buffer)
+                teacher_actions_list.append(teacher_actions_for_buffer.clone())
+            else:
+                # Fill with zeros if no teacher actions (shouldn't happen in teacher mode)
+                zeros = torch.zeros((self.num_actors, self.actions_num), device=self.ppo_device)
+                self.experience_buffer.update_data('teacher_actions', n, zeros)
 
             self.current_rewards += rewards
             self.current_shaped_rewards += shaped_rewards
@@ -100,26 +140,32 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
             self.game_shaped_rewards.update(self.current_shaped_rewards[done_indices])
             self.game_lengths.update(self.current_lengths[done_indices])
             self.algo_observer.process_infos(infos, done_indices)
-
+            
             not_dones = 1.0 - self.dones.float()
 
             self.current_rewards = self.current_rewards * not_dones.unsqueeze(1)
             self.current_shaped_rewards = self.current_shaped_rewards * not_dones.unsqueeze(1)
             self.current_lengths = self.current_lengths * not_dones
 
-            # Collect teacher actions from obs dict
-            if isinstance(self.obs, dict) and 'teacher_actions' in self.obs and self.obs['teacher_actions'] is not None:
-                teacher_actions_list.append(self.obs['teacher_actions'].clone())
-
         self.last_lr, self.entropy_coef = self.scheduler.update(self.last_lr, self.entropy_coef, self.epoch_num, 0, 0)
-       
-        # Store teacher actions if available
+        
+        # Get last values for GAE calculation
+        with torch.no_grad():
+            if self.has_central_value:
+                self.last_values = self.get_central_value(self.obs)
+            else:
+                res_dict = self.get_action_values(self.obs)
+                self.last_values = res_dict['values']
+        
+            # Store teacher actions if available
         if teacher_actions_list:
             # Stack along horizon dimension: (horizon, num_envs, action_dim)
             self._teacher_actions_buffer = torch.stack(teacher_actions_list, dim=0)
         else:
             self._teacher_actions_buffer = None
+        self._has_teacher_actions = bool(teacher_actions_list)
 
+        # GAE calculation
         fdones = self.dones.float()
         mb_fdones = self.experience_buffer.tensor_dict['dones'].float()
         mb_values = self.experience_buffer.tensor_dict['values']
@@ -127,38 +173,59 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
         mb_advs = self.discount_values(fdones, self.last_values, mb_fdones, mb_values, mb_rewards)
         mb_returns = mb_advs + mb_values
 
-        batch_dict = self.experience_buffer.get_transformed_list(torch_ext.swap_and_flatten01, self.tensor_list)
-        batch_dict['returns'] = torch_ext.swap_and_flatten01(mb_returns)
+        batch_dict = self.experience_buffer.get_transformed_list(swap_and_flatten01, self.tensor_list)
+        batch_dict['returns'] = swap_and_flatten01(mb_returns)
         batch_dict['played_frames'] = self.batch_size
         batch_dict['step_time'] = step_time
+        
+        # Add teacher_actions to batch_dict so they are included in dataset
+        if self._teacher_actions_buffer is not None and 'teacher_actions' not in batch_dict:
+            batch_dict['teacher_actions'] = swap_and_flatten01(self._teacher_actions_buffer)
 
         return batch_dict
 
     def prepare_dataset(self, batch_dict):
         """Override to include teacher_actions in dataset."""
-        result = super().prepare_dataset(batch_dict)
+        # super().prepare_dataset(batch_dict) returns None, it sets self.dataset internally
+        super().prepare_dataset(batch_dict)
         
-        # Flatten and store teacher actions for use in calc_gradients
+        # Fallback: ensure teacher_actions are in dataset if not added by super()
+        # This handles cases where super() creates a new dataset object ignoring extra keys in batch_dict
         if self._teacher_actions_buffer is not None:
-            # Swap and flatten: (horizon, num_envs, action_dim) -> (horizon * num_envs, action_dim)
-            self._teacher_actions_flat = torch_ext.swap_and_flatten01(self._teacher_actions_buffer)
+             self._teacher_actions_flat = swap_and_flatten01(self._teacher_actions_buffer)
+             
+             # Try to add to dataset if missing
+             key_missing = False
+             if hasattr(self, 'dataset'):
+                 if isinstance(self.dataset, dict):
+                     if 'teacher_actions' not in self.dataset:
+                         key_missing = True
+                 elif hasattr(self.dataset, 'keys') and 'teacher_actions' not in self.dataset.keys():
+                      key_missing = True
+                 
+                 if key_missing:
+                    if isinstance(self.dataset, dict):
+                        self.dataset['teacher_actions'] = self._teacher_actions_flat
+                    else:
+                        try:
+                            self.dataset['teacher_actions'] = self._teacher_actions_flat
+                        except TypeError:
+                            if hasattr(self.dataset, 'update'):
+                                self.dataset.update({'teacher_actions': self._teacher_actions_flat})
         else:
             self._teacher_actions_flat = None
-        
-        return result
 
     def train_actor_critic(self, input_dict):
         """Override to pass teacher_actions to calc_gradients via input_dict."""
         # Add teacher_actions to input_dict if available
-        if hasattr(self, '_teacher_actions_flat') and self._teacher_actions_flat is not None:
-            # Get the batch indices from dataset
+        teacher_actions = input_dict.get('teacher_actions', None)
+        if not getattr(self, '_has_teacher_actions', False):
+            teacher_actions = None
+        elif teacher_actions is None and hasattr(self, '_teacher_actions_flat') and self._teacher_actions_flat is not None:
             curr_idx = input_dict.get('idx', None)
-            if curr_idx is not None and self._teacher_actions_flat is not None:
-                input_dict['teacher_actions'] = self._teacher_actions_flat[curr_idx]
-            else:
-                input_dict['teacher_actions'] = None
-        else:
-            input_dict['teacher_actions'] = None
+            if curr_idx is not None:
+                teacher_actions = self._teacher_actions_flat[curr_idx]
+        input_dict['teacher_actions'] = teacher_actions
         
         self.calc_gradients(input_dict)
         return self.train_result
@@ -234,9 +301,19 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
             # === BC LOSS ===
             bc_loss = torch.zeros(1, device=self.ppo_device)
             teacher_actions = input_dict.get('teacher_actions', None)
-            if teacher_actions is not None and teacher_actions.shape == mu.shape:
-                # MSE between policy mean and teacher actions
-                bc_loss = F.mse_loss(mu, teacher_actions)
+
+            if teacher_actions is not None:
+                if not torch.is_tensor(teacher_actions):
+                    teacher_actions = torch.as_tensor(
+                        teacher_actions, device=mu.device, dtype=mu.dtype
+                    )
+                else:
+                    teacher_actions = teacher_actions.to(device=mu.device, dtype=mu.dtype)
+                if teacher_actions.shape != mu.shape and teacher_actions.numel() == mu.numel():
+                    teacher_actions = teacher_actions.view_as(mu)
+                if teacher_actions.shape == mu.shape:
+                    # MSE between policy mean and teacher actions
+                    bc_loss = F.mse_loss(mu, teacher_actions)
             # ==============
             
             losses, sum_mask = torch_ext.apply_masks([a_loss.unsqueeze(1), c_loss, entropy.unsqueeze(1), b_loss.unsqueeze(1)], rnn_masks)
@@ -258,7 +335,19 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
                     param.grad = None
 
         self.scaler.scale(loss).backward()
-        self.trancate_gradients_and_step()
+        
+        # NaN Prevention: Check gradients before optimizer step
+        grad_finite = self._check_and_handle_nan_gradients()
+        
+        if grad_finite:
+            self.trancate_gradients_and_step()
+        elif self.skip_nan_gradients:
+            # Skip this update, clear gradients
+            self.optimizer.zero_grad()
+            print(f"[NaN警告] Epoch {self.epoch_num}: 梯度包含NaN/Inf，跳过本次更新 (累计跳过: {self.total_nan_skips})")
+        else:
+            # Original behavior: proceed anyway (may cause crash)
+            self.trancate_gradients_and_step()
 
         with torch.no_grad():
             reduce_kl = rnn_masks is None
@@ -301,3 +390,49 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
                 self.writer.add_scalar('losses/bc_coef', self._current_bc_coef, self.epoch_num)
         
         return result
+    
+    def _check_and_handle_nan_gradients(self):
+        """
+        Check if gradients contain NaN/Inf and handle accordingly.
+        
+        Returns:
+            True if gradients are finite, False if NaN/Inf detected
+        """
+        if not self.skip_nan_gradients:
+            return True  # Skip check if disabled
+        
+        # Check all parameter gradients
+        has_nan = False
+        for name, param in self.model.named_parameters():
+            if param.grad is not None:
+                if not torch.isfinite(param.grad).all():
+                    has_nan = True
+                    nan_count = torch.isnan(param.grad).sum().item()
+                    inf_count = torch.isinf(param.grad).sum().item()
+                    print(f"  - NaN/Inf in gradient '{name}': NaN={nan_count}, Inf={inf_count}")
+                    break  # Stop checking after first NaN found
+        
+        if has_nan:
+            self.nan_skip_count += 1
+            self.total_nan_skips += 1
+            
+            # Log to tensorboard if available
+            if self.writer is not None:
+                self.writer.add_scalar('debug/nan_skip_count', self.total_nan_skips, self.epoch_num)
+            
+            # Reset optimizer state if persistent NaN
+            if self.reset_optimizer_on_persistent_nan and self.nan_skip_count >= self.nan_tolerance:
+                print(f"[NaN Recovery] 连续{self.nan_skip_count}次NaN，重置优化器状态")
+                # Reset Adam state (clear momentum and variance)
+                self.optimizer.state = {}
+                self.nan_skip_count = 0
+                
+                if self.writer is not None:
+                    self.writer.add_scalar('debug/optimizer_reset_count', 1, self.epoch_num)
+            
+            return False
+        else:
+            # Reset consecutive NaN counter on successful update
+            if self.nan_skip_count > 0:
+                self.nan_skip_count = 0
+            return True
