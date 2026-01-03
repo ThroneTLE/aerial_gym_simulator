@@ -94,7 +94,7 @@ class task_config:
 
     payload_parameters = {
         "payload_mass": 0.03,
-        "payload_mass_range": [0.01, 0.04],
+        "payload_mass_range": [0.00, 0.04],
         "randomize_payload_mass": True,
         "randomize_offsets_on_plane": True,
         "offset_plane_radial_jitter": 0.4,  #沿机臂方向的“半径扰动”，均匀分布 [-jitter, +jitter]
