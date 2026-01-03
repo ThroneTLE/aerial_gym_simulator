@@ -1087,11 +1087,75 @@ class PayloadCompensationTask(BaseTask):
             self.tb_writer.add_scalar("actions/comp_saturation_rate", comp_sat, self.counter)
             # 模仿误差监控（仅教师模式）
             if self.teacher_mode:
-                imit_err = torch.norm(clamped_actions - self.teacher_residual, dim=1).mean().item()
+                imit_err_per_env = torch.norm(clamped_actions - self.teacher_residual, dim=1)
+                imit_err = imit_err_per_env.mean().item()
                 self.tb_writer.add_scalar("imitation/err", imit_err, self.counter)
                 self.tb_writer.add_scalar("imitation/policy_err_raw", self._last_policy_imitation_err, self.counter)
                 self.tb_writer.add_scalar("imitation/err_for_decay", self._last_decay_imitation_err, self.counter)
-            self.tb_writer.flush()
+                
+                # 分场景 err 统计
+                mass = self.payload_manager.current_payload_mass
+                mass_median = mass.median()
+                
+                # 高质量 vs 低质量
+                high_mass_mask = mass > mass_median
+                low_mass_mask = ~high_mass_mask
+                if high_mass_mask.sum() > 10:
+                    err_high_mass = imit_err_per_env[high_mass_mask].mean().item()
+                    self.tb_writer.add_scalar("imitation/err_high_mass", err_high_mass, self.counter)
+                if low_mass_mask.sum() > 10:
+                    err_low_mass = imit_err_per_env[low_mass_mask].mean().item()
+                    self.tb_writer.add_scalar("imitation/err_low_mass", err_low_mass, self.counter)
+                
+                # 刚释放 vs 稳定期
+                just_released = getattr(self.payload_manager, 'just_released_mask', None)
+                if just_released is not None:
+                    released_mask = just_released.bool()
+                    stable_mask = ~released_mask
+                    if released_mask.sum() > 5:
+                        err_released = imit_err_per_env[released_mask].mean().item()
+                        self.tb_writer.add_scalar("imitation/err_just_released", err_released, self.counter)
+                    if stable_mask.sum() > 10:
+                        err_stable = imit_err_per_env[stable_mask].mean().item()
+                        self.tb_writer.add_scalar("imitation/err_stable", err_stable, self.counter)
+                # Mass-Thrust 相关性监控：检查策略是否学会根据质量调整推力
+                # 正相关 = 质量大时输出大推力（正确）
+                # 负相关 = 质量大时输出小推力（错误）
+                # 接近0 = 没学到关系
+                mass = self.payload_manager.current_payload_mass
+                policy_thrust = clamped_actions[:, 0]
+                teacher_thrust = self.teacher_residual[:, 0]
+                
+                # 计算皮尔逊相关系数
+                def pearson_corr(x, y):
+                    x_mean = x.mean()
+                    y_mean = y.mean()
+                    x_std = x.std() + 1e-8
+                    y_std = y.std() + 1e-8
+                    return ((x - x_mean) * (y - y_mean)).mean() / (x_std * y_std)
+                
+                # 只有当质量分布有足够方差时才计算相关性
+                mass_std = mass.std().item()
+                if mass_std > 0.005:  # 质量标准差 > 5g 时才计算
+                    corr_policy = pearson_corr(mass, policy_thrust).item()
+                    corr_teacher = pearson_corr(mass, teacher_thrust).item()
+                    
+                    # 使用 EMA 平滑
+                    ema_alpha = 0.1
+                    if not hasattr(self, '_ema_corr_policy'):
+                        self._ema_corr_policy = corr_policy
+                        self._ema_corr_teacher = corr_teacher
+                    else:
+                        self._ema_corr_policy = ema_alpha * corr_policy + (1 - ema_alpha) * self._ema_corr_policy
+                        self._ema_corr_teacher = ema_alpha * corr_teacher + (1 - ema_alpha) * self._ema_corr_teacher
+                    
+                    self.tb_writer.add_scalar("correlation/mass_vs_policy_thrust", self._ema_corr_policy, self.counter)
+                    self.tb_writer.add_scalar("correlation/mass_vs_teacher_thrust", self._ema_corr_teacher, self.counter)
+                    self.tb_writer.add_scalar("correlation/mass_std", mass_std, self.counter)
+                    # 相关性比值：policy/teacher，理想值=1
+                    if abs(self._ema_corr_teacher) > 0.1:
+                        corr_ratio = self._ema_corr_policy / self._ema_corr_teacher
+                        self.tb_writer.add_scalar("correlation/policy_teacher_ratio", corr_ratio, self.counter)
         # 记录/打印当前 dagger_frac，便于逐“epoch”（tb_log_interval）观察
         if self.teacher_mode:
             if self.tb_writer is not None:

@@ -16,7 +16,7 @@ params:
     privileged_hidden: 128  # 编码器隐层宽度
     aux_target_dim: 5  # 辅助损失目标维度: [mass, com_x, com_y, com_z, released_mass]
     aux_loss_weight: 1.0  # 辅助损失权重（网络内部）
-    use_oracle_mode: True  # True=输入真实特权值(Teacher)，False=输入aux decoder预测值(Student)
+    use_oracle_mode: False  # True=输入真实特权值(Teacher)，False=输入aux decoder预测值(Student)
     space:
       continuous:
         mu_activation: None  # 动作均值激活（None=线性输出，利于外部限幅）

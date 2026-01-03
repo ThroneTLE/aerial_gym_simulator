@@ -100,10 +100,10 @@ class task_config:
     compensation_torque_limits = [1.0, 1.0, 0.2]  # [roll, pitch, yaw] N·m
 
     payload_parameters = {
-        "payload_mass": 0.03,
-        "payload_mass_range": [0.00, 0.04],
+        "payload_mass": 0.02,
+        "payload_mass_range": [0.01, 0.03],
         "randomize_payload_mass": True,
-        "randomize_offsets_on_plane": False,
+        "randomize_offsets_on_plane": True,
         "offset_plane_radial_jitter": 0.4,  #沿机臂方向的“半径扰动”，均匀分布 [-jitter, +jitter]
         "offset_plane_z_jitter": 0.8,  #垂直方向的“高度扰动”，均匀分布 [-jitter, +jitter]
         "offset_plane_r_max": 0.4,   #机臂方向最大偏移距离
@@ -120,7 +120,7 @@ class task_config:
         "release_start_range": [50, 100],
         "release_interval_range": [300, 350],
         "warning_steps": 100,
-        "randomize_release":   True,  # 初始验证先固定
+        "randomize_release":   False,  # 初始验证先固定
         "log_release_events": False,
     }
 
