@@ -16,6 +16,7 @@ params:
     privileged_hidden: 128  # 编码器隐层宽度
     aux_target_dim: 5  # 辅助损失目标维度: [mass, com_x, com_y, com_z, released_mass]
     aux_loss_weight: 1.0  # 辅助损失权重（网络内部）
+    use_oracle_mode: True  # True=输入真实特权值(Teacher)，False=输入aux decoder预测值(Student)
     space:
       continuous:
         mu_activation: None  # 动作均值激活（None=线性输出，利于外部限幅）
@@ -44,13 +45,13 @@ params:
 
     name: teacher_aux  # 实验名称（日志/ckpt 前缀）
     reward_shaper:
-      scale_value: 0.05  # 全局奖励缩放，减小梯度/价值量级（过大易爆，过小学得慢）
+      scale_value: 0.1  # 全局奖励缩放，减小梯度/价值量级（过大易爆，过小学得慢）
 
     normalize_advantage: True  # 归一化 advantage（降低方差）
     gamma: 0.999  # 折扣因子（越小越短视）
     tau: 0.95  # GAE 衰减（越小 bias 高/variance 低）
     ppo: True  # 开启 PPO 裁剪模式
-    learning_rate: 2e-4  # 初始学习率 - 降低到 1e-4 防止 NaN
+    learning_rate: 3e-4  # 初始学习率 - 降低到 1e-4 防止 NaN
     lr_schedule: adaptive  # 基于 KL 的自适应 LR 调度
     kl_threshold: 0.01  # KL 超过阈值会降低 LR/回滚（越小越保守，clip_frac/KL 尖峰更少但收敛慢）
     save_best_after: 1  # 从第 N 个 epoch 后开始记录最佳
@@ -68,12 +69,12 @@ params:
     # 扰动样本优势加权（权重=1+coef*mask，mask 来自 infos['is_disturbance']）
     disturbance_adv_weight: 0.0
     # BC/DAgger 模仿损失系数（从 bc_coef 衰减到 bc_min_coef，乘 bc_alpha）
-    bc_coef: 10.0
-    bc_alpha: 0.9999
-    bc_min_coef: 1.5
+    bc_coef: 1.0
+    bc_alpha: 0.999
+    bc_min_coef: 0.5
     critic_coef: 0.5  # 价值损失权重（相对策略损失；大则稳定优势但可能拖慢策略更新）
     normalize_input: True  # base obs 用 running_mean_std；privileged_obs 用固定归一化（见 AERIAL_FIXED_OBS_NORM）
-    bounds_loss_coef: 0.001  # 动作越界惩罚系数（动作超出 [-1,1] 时的惩罚强度）
+    bounds_loss_coef: 0.000  # 动作越界惩罚系数（动作超出 [-1,1] 时的惩罚强度）
     max_epochs: 16000  # 最大训练 epoch 数（训练上限）
     normalize_value: True  # 对 value 做 running_mean_std 归一化（减小价值尺度漂移）
     use_diagnostics: True  # 输出诊断指标到日志（TB/文本）

@@ -8,7 +8,7 @@ import numpy as np
 
 import torch.nn.functional as F
 
-CKPT_PATH = "runs/teacher_aux_fixed_imitation_03-22-01-44/nn/teacher_aux_fixed_imitation.pth"
+CKPT_PATH = "runs/teacher_aux_fixed_imitation_03-22-36-27/nn/teacher_aux_fixed_imitation.pth"
 
 def main():
     print("=" * 60)

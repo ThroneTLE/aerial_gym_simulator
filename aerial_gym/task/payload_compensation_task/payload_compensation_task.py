@@ -593,11 +593,14 @@ class PayloadCompensationTask(BaseTask):
         self.teacher_residual = torch.zeros(
             (self.sim_env.num_envs, self.task_config.action_space_dim), device=self.device
         )
+        # 补偿限制：优先从 task_config 读取，fallback 到 controller config
         self.comp_thrust_limit = getattr(
-            lee_controller_with_comp_config.control, "compensation_thrust_limit", 0.3
+            self.task_config, "compensation_thrust_limit",
+            getattr(lee_controller_with_comp_config.control, "compensation_thrust_limit", 0.5)
         )
         torque_limits = getattr(
-            lee_controller_with_comp_config.control, "compensation_torque_limits", [0.5, 0.5, 0.1]
+            self.task_config, "compensation_torque_limits",
+            getattr(lee_controller_with_comp_config.control, "compensation_torque_limits", [0.5, 0.5, 0.1])
         )
         self.comp_torque_limits = torch.as_tensor(torque_limits, device=self.device)
         # 教师模式：特权向量维度由配置文件中的 privileged_observation_space_dim 定义

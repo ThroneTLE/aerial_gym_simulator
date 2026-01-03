@@ -29,16 +29,16 @@ class task_config:
 
     # 奖励仿照 xadapt：存活奖励为主，角速度/线加速度/动作振荡惩罚，移除位置/补偿项，模仿不计入 reward
     reward_parameters = {
-        "position_weight": 1.0,
-        "crash_penalty": -10.0,
+        "position_weight": 0.0,  # xadapt 不用位置奖励
+        "crash_penalty": -10.0,  # xadapt: -10
         "attitude_penalty_coef": 0.00,
         "release_attitude_boost": 1.0,
         "comp_torque_penalty_coef": 0.0,
         "comp_thrust_penalty_coef": 0.0,
         # 线速度惩罚关闭，改用线加速度惩罚
         "velocity_penalty_coef": 0.0,
-        "angvel_penalty_coef": 0.000, #0.2
-        "action_smoothness_coef": 1.00, #0.06
+        "angvel_penalty_coef": 0.2,  # xadapt: -0.2 (roll/pitch/yaw各0.2)
+        "action_smoothness_coef": 0.06,  # xadapt: -0.06 (oscillate_coeff)
         "tilt_warning_deg": 0.0,
         "tilt_warning_penalty": 0.0,
         "height_warning": 0.0,
@@ -64,7 +64,7 @@ class task_config:
         "delta_error_window_steps": 0,
         "delta_error_bonus_clip": 0.0,
         "release_reward_window_steps": 200,
-        "accel_penalty_away_coef": 0.00000,
+        "accel_penalty_away_coef": 0.01,  # xadapt: -0.01 (lin_accel_coeff)
         "accel_penalty_toward_coef": 0.0,
         "comp_penalty_high_threshold": 1.0,
         "comp_torque_penalty_high_coef": 0.0,
@@ -78,19 +78,26 @@ class task_config:
         "tilt_excess_coef": 0.0,
         "tilt_excess_exp": 0.0,
         # 模仿权重 - 分离推力和力矩
-        "imitation_weight": 0.0,  # 统一权重（当 thrust/torque 未指定时使用）
-        "imitation_weight_thrust": 0.0,  # 推力模仿权重（action[0]）
-        "imitation_weight_torque": 0.0,  # 力矩模仿权重（action[1:3]）
-        # 动作幅度惩罚 - 防止不必要的残差输出和抖动
-        "action_magnitude_penalty_coef": 0.0,  # 惩罚系数，越大越抑制输出 惩罚 = thrust² × thrust_coef + mean(torque²) × torque_coef
-        "action_magnitude_penalty_thrust": 0.000,  # thrust 惩罚（可选单独设置）
-        "action_magnitude_penalty_torque": 0.000,  # torque 惩罚（可选单独设置）
-        # 存活奖励
+        "imitation_weight": 0.0,  # 模仿通过 BC loss 实现，不在 reward 中
+        "imitation_weight_thrust": 0.0,
+        "imitation_weight_torque": 0.0,
+        # 动作幅度惩罚
+        "action_magnitude_penalty_coef": 0.0,
+        "action_magnitude_penalty_thrust": 0.0,
+        "action_magnitude_penalty_torque": 0.0,
+        # 存活奖励 - xadapt: 10
         "survive_bonus": 10.0,
     }
 
     crash_distance_threshold = 5.0
     crash_tilt_threshold_deg = 20.0
+
+    # 补偿限制（物理量级）
+    # 需要根据 payload_mass_range 和 offsets 计算: 
+    # thrust = max_mass × g = 0.04 × 9.81 = 0.39 N
+    # torque = max_mass × g × max_offset = 0.04 × 9.81 × 0.4 = 0.157 N·m
+    compensation_thrust_limit = 0.5  # N，留余量
+    compensation_torque_limits = [0.5, 0.5, 0.1]  # [roll, pitch, yaw] N·m
 
     payload_parameters = {
         "payload_mass": 0.03,
