@@ -29,7 +29,7 @@ class task_config:
 
     # 奖励仿照 xadapt：存活奖励为主，角速度/线加速度/动作振荡惩罚，移除位置/补偿项，模仿不计入 reward
     reward_parameters = {
-        "position_weight": 0.0,
+        "position_weight": 1.0,
         "crash_penalty": -10.0,
         "attitude_penalty_coef": 0.00,
         "release_attitude_boost": 1.0,
@@ -38,7 +38,7 @@ class task_config:
         # 线速度惩罚关闭，改用线加速度惩罚
         "velocity_penalty_coef": 0.0,
         "angvel_penalty_coef": 0.000, #0.2
-        "action_smoothness_coef": 0.00, #0.06
+        "action_smoothness_coef": 1.00, #0.06
         "tilt_warning_deg": 0.0,
         "tilt_warning_penalty": 0.0,
         "height_warning": 0.0,
@@ -78,9 +78,9 @@ class task_config:
         "tilt_excess_coef": 0.0,
         "tilt_excess_exp": 0.0,
         # 模仿权重 - 分离推力和力矩
-        "imitation_weight": 8.0,  # 统一权重（当 thrust/torque 未指定时使用）
-        "imitation_weight_thrust": 8.0,  # 推力模仿权重（action[0]）
-        "imitation_weight_torque": 8.0,  # 力矩模仿权重（action[1:3]）
+        "imitation_weight": 0.0,  # 统一权重（当 thrust/torque 未指定时使用）
+        "imitation_weight_thrust": 0.0,  # 推力模仿权重（action[0]）
+        "imitation_weight_torque": 0.0,  # 力矩模仿权重（action[1:3]）
         # 动作幅度惩罚 - 防止不必要的残差输出和抖动
         "action_magnitude_penalty_coef": 0.0,  # 惩罚系数，越大越抑制输出 惩罚 = thrust² × thrust_coef + mean(torque²) × torque_coef
         "action_magnitude_penalty_thrust": 0.000,  # thrust 惩罚（可选单独设置）
@@ -96,7 +96,7 @@ class task_config:
         "payload_mass": 0.03,
         "payload_mass_range": [0.00, 0.04],
         "randomize_payload_mass": True,
-        "randomize_offsets_on_plane": True,
+        "randomize_offsets_on_plane": False,
         "offset_plane_radial_jitter": 0.4,  #沿机臂方向的“半径扰动”，均匀分布 [-jitter, +jitter]
         "offset_plane_z_jitter": 0.8,  #垂直方向的“高度扰动”，均匀分布 [-jitter, +jitter]
         "offset_plane_r_max": 0.4,   #机臂方向最大偏移距离
