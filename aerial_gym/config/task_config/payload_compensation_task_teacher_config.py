@@ -93,11 +93,11 @@ class task_config:
     crash_tilt_threshold_deg = 20.0
 
     # 补偿限制（物理量级）
-    # 需要根据 payload_mass_range 和 offsets 计算: 
-    # thrust = max_mass × g = 0.04 × 9.81 = 0.39 N
-    # torque = max_mass × g × max_offset = 0.04 × 9.81 × 0.4 = 0.157 N·m
-    compensation_thrust_limit = 0.5  # N，留余量
-    compensation_torque_limits = [0.5, 0.5, 0.1]  # [roll, pitch, yaw] N·m
+    # 最大总载荷 = 4 × max_mass = 4 × 0.04 = 0.16 kg
+    # thrust = 0.16 × 9.81 = 1.57 N → 留余量设为 2.0
+    # torque = 0.16 × 9.81 × 0.4 = 0.628 N·m → 设为 1.0
+    compensation_thrust_limit = 2.0  # N，覆盖 4 个载荷总质量
+    compensation_torque_limits = [1.0, 1.0, 0.2]  # [roll, pitch, yaw] N·m
 
     payload_parameters = {
         "payload_mass": 0.03,

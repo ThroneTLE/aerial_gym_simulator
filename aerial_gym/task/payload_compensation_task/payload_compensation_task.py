@@ -1426,16 +1426,21 @@ class PayloadCompensationTask(BaseTask):
             return {}
         else:
             # 使用配置中定义的特权观测维度 (7维简化版本)
+            # 手动归一化到 [0, 1] 或 [-1, 1] 范围，避免 RunningObsNorm 数值问题
             priv_dim = self.task_config.privileged_observation_space_dim
             priv_vec = torch.zeros((self.sim_env.num_envs, priv_dim), device=self.device)
-            # 0: payload mass (scaled by 10: 0.01-0.16 → 0.1-1.6)
-            priv_vec[:, 0] = payload_obs["payload_mass"] * 10.0
-            # 1-3: COM offset (scaled by 2.5: ±0.4m → ±1.0)
-            priv_vec[:, 1:4] = payload_obs["com_offset"] * 2.5
-            # 4-6: base inertia diag (scaled by 1000: ~0.0001 → ~0.1)
+            # 0: payload mass (0~0.04 kg → 0~1)
+            max_mass = 0.04
+            priv_vec[:, 0] = payload_obs["payload_mass"] / max_mass
+            # 1-3: COM offset (-0.4~0.4 m → -1~1)
+            max_offset = 0.4
+            priv_vec[:, 1:4] = payload_obs["com_offset"] / max_offset
+            # 4-6: base inertia diag (~0.0008 → ~1，保持相对关系)
             base_inertia_diag = torch.diagonal(self.payload_manager.base_inertia, dim1=1, dim2=2)
             if base_inertia_diag.shape[0] >= self.sim_env.num_envs:
-                priv_vec[:, 4:7] = base_inertia_diag[: self.sim_env.num_envs] * 1000.0
+                # 归一化：除以典型惯量值
+                typical_inertia = 0.001  # kg·m²
+                priv_vec[:, 4:7] = base_inertia_diag[: self.sim_env.num_envs] / typical_inertia
             self.task_obs["priviliged_obs"] = priv_vec
 
         self.task_obs["rewards"] = self.rewards
