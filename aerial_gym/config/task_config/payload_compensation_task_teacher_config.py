@@ -23,7 +23,7 @@ class task_config:
     dagger_use_postmix_err = True  # 使用混合后的 imitation err 作为衰减判定，和 TB 曲线一致
     fix_yaw_residual_zero = True   # 教师残差的 yaw 力矩固定为 0
 
-    episode_len_steps = 1500
+    episode_len_steps = 2000
     return_state_before_reset = False
     teacher_mode = True  # 启用特权/模仿
 
@@ -37,8 +37,8 @@ class task_config:
         "comp_thrust_penalty_coef": 0.0,
         # 线速度惩罚关闭，改用线加速度惩罚
         "velocity_penalty_coef": 0.0,
-        "angvel_penalty_coef": 0.2,  # xadapt: -0.2 (roll/pitch/yaw各0.2)
-        "action_smoothness_coef": 0.06,  # xadapt: -0.06 (oscillate_coeff)
+        "angvel_penalty_coef": 0.00,  # xadapt: -0.2 (roll/pitch/yaw各0.2)
+        "action_smoothness_coef": 0.0,  # xadapt: -0.06 (oscillate_coeff)
         "tilt_warning_deg": 0.0,
         "tilt_warning_penalty": 0.0,
         "height_warning": 0.0,
@@ -64,7 +64,7 @@ class task_config:
         "delta_error_window_steps": 0,
         "delta_error_bonus_clip": 0.0,
         "release_reward_window_steps": 200,
-        "accel_penalty_away_coef": 0.01,  # xadapt: -0.01 (lin_accel_coeff)
+        "accel_penalty_away_coef": 0.0,  # xadapt: -0.01 (lin_accel_coeff)
         "accel_penalty_toward_coef": 0.0,
         "comp_penalty_high_threshold": 1.0,
         "comp_torque_penalty_high_coef": 0.0,
@@ -78,15 +78,15 @@ class task_config:
         "tilt_excess_coef": 0.0,
         "tilt_excess_exp": 0.0,
         # 模仿权重 - 分离推力和力矩
-        "imitation_weight": 0.0,  # 模仿通过 BC loss 实现，不在 reward 中
-        "imitation_weight_thrust": 0.0,
-        "imitation_weight_torque": 0.0,
+        "imitation_weight": 8.0,  # 模仿通过 BC loss 实现，不在 reward 中
+        "imitation_weight_thrust": 8.0,
+        "imitation_weight_torque": 8.0,
         # 动作幅度惩罚
         "action_magnitude_penalty_coef": 0.0,
         "action_magnitude_penalty_thrust": 0.0,
         "action_magnitude_penalty_torque": 0.0,
         # 存活奖励 - xadapt: 10
-        "survive_bonus": 10.0,
+        "survive_bonus": 5.0,
     }
 
     crash_distance_threshold = 5.0
@@ -101,9 +101,9 @@ class task_config:
 
     payload_parameters = {
         "payload_mass": 0.02,
-        "payload_mass_range": [0.01, 0.03],
-        "randomize_payload_mass": True,
-        "randomize_offsets_on_plane": True,
+        "payload_mass_range": [0.00, 0.03],
+        "randomize_payload_mass": False,
+        "randomize_offsets_on_plane": False,
         "offset_plane_radial_jitter": 0.4,  #沿机臂方向的“半径扰动”，均匀分布 [-jitter, +jitter]
         "offset_plane_z_jitter": 0.8,  #垂直方向的“高度扰动”，均匀分布 [-jitter, +jitter]
         "offset_plane_r_max": 0.4,   #机臂方向最大偏移距离
@@ -120,7 +120,7 @@ class task_config:
         "release_start_range": [50, 100],
         "release_interval_range": [300, 350],
         "warning_steps": 100,
-        "randomize_release":   False,  # 初始验证先固定
+        "randomize_release":   True,  # 初始验证先固定
         "log_release_events": False,
     }
 

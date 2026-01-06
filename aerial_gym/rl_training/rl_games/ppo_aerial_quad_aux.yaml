@@ -28,7 +28,7 @@ params:
           val: -10.0  # 初始 logstd 常数（log 标度；-2 ≈ std 0.135）
         fixed_sigma: True  # 启用可学习 logstd
         min_logstd: -10.0  # clamp 下限（约 std 0.018），防止过度收紧
-        max_logstd: -2.0   # clamp 上限（约 std 2.72），防止噪声无上限飙升
+        max_logstd: -6.0   # clamp 上限（约 std 2.72），防止噪声无上限飙升
     mlp:
       units: [256, 256, 128]  # MLP 隐层宽度（逐层）
       d2rl: False  # 是否使用 D2RL 结构（在输入拼接上一层输出，通常可提升稳定性但加大计算）
@@ -48,7 +48,7 @@ params:
       scale_value: 0.1  # 全局奖励缩放，减小梯度/价值量级（过大易爆，过小学得慢）
 
     normalize_advantage: True  # 归一化 advantage（降低方差）
-    gamma: 0.999  # 折扣因子（越小越短视）
+    gamma: 0.99  # 折扣因子（越小越短视）
     tau: 0.95  # GAE 衰减（越小 bias 高/variance 低）
     ppo: True  # 开启 PPO 裁剪模式
     learning_rate: 3e-4  # 初始学习率 - 降低到 1e-4 防止 NaN
@@ -70,8 +70,8 @@ params:
     disturbance_adv_weight: 0.0
     # BC/DAgger 模仿损失系数（从 bc_coef 衰减到 bc_min_coef，乘 bc_alpha）
     bc_coef: 1.0
-    bc_alpha: 0.999
-    bc_min_coef: 0.5
+    bc_alpha: 1.0
+    bc_min_coef: 0.4
     critic_coef: 0.5  # 价值损失权重（相对策略损失；大则稳定优势但可能拖慢策略更新）
     normalize_input: True  # base obs 用 running_mean_std；privileged_obs 用固定归一化（见 AERIAL_FIXED_OBS_NORM）
     bounds_loss_coef: 0.000  # 动作越界惩罚系数（动作超出 [-1,1] 时的惩罚强度）

@@ -19,7 +19,7 @@ import torch
 
 DEFAULT_ENV_NAME = "payload_compensation_task_teacher"
 DEFAULT_CONFIG = "aerial_gym/rl_training/rl_games/ppo_aerial_quad_aux.yaml"
-DEFAULT_CKPT = "runs/teacher_aux_fixed_imitation_03-23-25-05/nn/teacher_aux_fixed_imitation.pth"
+DEFAULT_CKPT = "runs/teacher_aux_fixed_imitation_07-06-31-47/nn/last_teacher_aux_fixed_imitation_ep_300_rew_9836.639.pth"
 
 plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "Arial Unicode MS", "Noto Sans CJK SC"]
 plt.rcParams["axes.unicode_minus"] = False
@@ -364,6 +364,90 @@ def plot_results(
             ax.legend()
         axes[-1].set_xlabel("步数")
         fig_act.suptitle("残差补偿对比（策略 vs 教师）")
+        
+        # 新增：力矩-角度关系图 (Roll 和 Pitch 分开)
+        if action_dim >= 3 and euler_history:
+            # 使用已经 unwrap 处理过的角度数据
+            roll_deg = eulers_deg[:, 0]
+            pitch_deg = eulers_deg[:, 1]
+            
+            # 策略的力矩输出 (dim 1 = roll torque, dim 2 = pitch torque)
+            policy_roll_torque = act_arr[:, 1]
+            policy_pitch_torque = act_arr[:, 2]
+            
+            # 教师的力矩输出（如有）
+            teacher_roll_torque = teacher_arr[:, 1] if teacher_arr is not None else None
+            teacher_pitch_torque = teacher_arr[:, 2] if teacher_arr is not None else None
+            
+            fig_torque_angle, (ax_roll, ax_pitch) = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
+            
+            # --- Roll ---
+            ax_roll_angle = ax_roll
+            ax_roll_torque = ax_roll.twinx()
+            
+            # 角度（左轴）
+            line_roll_angle, = ax_roll_angle.plot(steps, roll_deg, color='C0', linewidth=1.5, label='Roll 角度 (°)')
+            ax_roll_angle.set_ylabel('Roll 角度 (°)', color='C0')
+            ax_roll_angle.tick_params(axis='y', labelcolor='C0')
+            ax_roll_angle.axhline(0, color='C0', linestyle=':', alpha=0.3)
+            
+            # 力矩（右轴）
+            line_roll_policy, = ax_roll_torque.plot(steps, policy_roll_torque, color='C1', linewidth=1.2, label='Policy Roll 力矩')
+            if teacher_roll_torque is not None:
+                line_roll_teacher, = ax_roll_torque.plot(steps, teacher_roll_torque, color='C2', linestyle='--', linewidth=1.2, label='Teacher Roll 力矩')
+            ax_roll_torque.set_ylabel('Roll 力矩 (归一化)', color='C1')
+            ax_roll_torque.tick_params(axis='y', labelcolor='C1')
+            ax_roll_torque.axhline(0, color='C1', linestyle=':', alpha=0.3)
+            
+            # 标注释放点
+            for release_step, payload_idx in release_history:
+                ax_roll.axvline(release_step, color='r', linestyle=':', alpha=0.5)
+            
+            # 图例
+            lines = [line_roll_angle, line_roll_policy]
+            labels = [line_roll_angle.get_label(), line_roll_policy.get_label()]
+            if teacher_roll_torque is not None:
+                lines.append(line_roll_teacher)
+                labels.append(line_roll_teacher.get_label())
+            ax_roll.legend(lines, labels, loc='upper right')
+            ax_roll.set_title('Roll: 角度 vs 力矩补偿\n(正力矩 → 正角度变化)')
+            ax_roll.grid(True, alpha=0.3)
+            
+            # --- Pitch ---
+            ax_pitch_angle = ax_pitch
+            ax_pitch_torque = ax_pitch.twinx()
+            
+            # 角度（左轴）
+            line_pitch_angle, = ax_pitch_angle.plot(steps, pitch_deg, color='C3', linewidth=1.5, label='Pitch 角度 (°)')
+            ax_pitch_angle.set_ylabel('Pitch 角度 (°)', color='C3')
+            ax_pitch_angle.tick_params(axis='y', labelcolor='C3')
+            ax_pitch_angle.axhline(0, color='C3', linestyle=':', alpha=0.3)
+            
+            # 力矩（右轴）
+            line_pitch_policy, = ax_pitch_torque.plot(steps, policy_pitch_torque, color='C4', linewidth=1.2, label='Policy Pitch 力矩')
+            if teacher_pitch_torque is not None:
+                line_pitch_teacher, = ax_pitch_torque.plot(steps, teacher_pitch_torque, color='C5', linestyle='--', linewidth=1.2, label='Teacher Pitch 力矩')
+            ax_pitch_torque.set_ylabel('Pitch 力矩 (归一化)', color='C4')
+            ax_pitch_torque.tick_params(axis='y', labelcolor='C4')
+            ax_pitch_torque.axhline(0, color='C4', linestyle=':', alpha=0.3)
+            
+            # 标注释放点
+            for release_step, payload_idx in release_history:
+                ax_pitch.axvline(release_step, color='r', linestyle=':', alpha=0.5)
+            
+            # 图例
+            lines = [line_pitch_angle, line_pitch_policy]
+            labels = [line_pitch_angle.get_label(), line_pitch_policy.get_label()]
+            if teacher_pitch_torque is not None:
+                lines.append(line_pitch_teacher)
+                labels.append(line_pitch_teacher.get_label())
+            ax_pitch.legend(lines, labels, loc='upper right')
+            ax_pitch.set_title('Pitch: 角度 vs 力矩补偿\n(正力矩 → 正角度变化)')
+            ax_pitch.grid(True, alpha=0.3)
+            
+            ax_pitch.set_xlabel('步数')
+            fig_torque_angle.suptitle('力矩输出与姿态角关系', fontsize=14, fontweight='bold')
+            fig_torque_angle.tight_layout()
 
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
