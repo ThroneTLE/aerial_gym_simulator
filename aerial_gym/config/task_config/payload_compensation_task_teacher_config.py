@@ -23,7 +23,7 @@ class task_config:
     dagger_use_postmix_err = True  # 使用混合后的 imitation err 作为衰减判定，和 TB 曲线一致
     fix_yaw_residual_zero = True   # 教师残差的 yaw 力矩固定为 0
 
-    episode_len_steps = 2000
+    episode_len_steps = 1500
     return_state_before_reset = False
     teacher_mode = True  # 启用特权/模仿
 
@@ -86,7 +86,7 @@ class task_config:
         "action_magnitude_penalty_thrust": 0.0,
         "action_magnitude_penalty_torque": 0.0,
         # 存活奖励 - xadapt: 10
-        "survive_bonus": 5.0,
+        "survive_bonus": 10.0,
     }
 
     crash_distance_threshold = 5.0

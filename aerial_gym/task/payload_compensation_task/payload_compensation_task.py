@@ -1499,12 +1499,13 @@ class PayloadCompensationTask(BaseTask):
             # 1-3: COM offset (-0.4~0.4 m → -1~1)
             max_offset = 0.4
             priv_vec[:, 1:4] = payload_obs["com_offset"] / max_offset
-            # 4-6: base inertia diag (~0.0008 → ~1，保持相对关系)
-            base_inertia_diag = torch.diagonal(self.payload_manager.base_inertia, dim1=1, dim2=2)
-            if base_inertia_diag.shape[0] >= self.sim_env.num_envs:
-                # 归一化：除以典型惯量值
-                typical_inertia = 0.001  # kg·m²
-                priv_vec[:, 4:7] = base_inertia_diag[: self.sim_env.num_envs] / typical_inertia
+            # 4-6: true inertia diag (包含载荷贡献，与教师 torque 计算一致)
+            # 使用 _compute_true_inertia() 获取真实惯量，而非 base_inertia（名义值）
+            true_inertia = self._compute_true_inertia()  # [N, 3, 3]
+            true_inertia_diag = torch.diagonal(true_inertia, dim1=1, dim2=2)  # [N, 3]
+            # 归一化：除以典型惯量值
+            typical_inertia = 0.001  # kg·m²
+            priv_vec[:, 4:7] = true_inertia_diag / typical_inertia
             self.task_obs["priviliged_obs"] = priv_vec
 
         self.task_obs["rewards"] = self.rewards

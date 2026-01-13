@@ -349,8 +349,10 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
                 if teacher_actions.shape != mu.shape and teacher_actions.numel() == mu.numel():
                     teacher_actions = teacher_actions.view_as(mu)
                 if teacher_actions.shape == mu.shape:
-                    # MSE between policy mean and teacher actions
-                    bc_loss = F.mse_loss(mu, teacher_actions)
+                    # MSE between clamped policy mean and teacher actions
+                    # 关键修复：对 mu 做 clamp，使 BC loss 与 imitation error 度量一致
+                    mu_clamped = torch.clamp(mu, -1.0, 1.0)
+                    bc_loss = F.mse_loss(mu_clamped, teacher_actions)
             # ==============
             
             losses, sum_mask = torch_ext.apply_masks([a_loss.unsqueeze(1), c_loss, entropy.unsqueeze(1), b_loss.unsqueeze(1)], rnn_masks)

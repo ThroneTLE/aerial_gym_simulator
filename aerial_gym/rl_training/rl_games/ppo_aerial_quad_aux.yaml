@@ -16,7 +16,7 @@ params:
     privileged_hidden: 128  # 编码器隐层宽度
     aux_target_dim: 5  # 辅助损失目标维度: [mass, com_x, com_y, com_z, released_mass]
     aux_loss_weight: 1.0  # 辅助损失权重（网络内部）
-    use_oracle_mode: False  # True=输入真实特权值(Teacher)，False=输入aux decoder预测值(Student)
+    use_oracle_mode: True  # True=输入真实特权值(Teacher)，False=输入aux decoder预测值(Student)
     space:
       continuous:
         mu_activation: None  # 动作均值激活（None=线性输出，利于外部限幅）
@@ -69,7 +69,7 @@ params:
     # 扰动样本优势加权（权重=1+coef*mask，mask 来自 infos['is_disturbance']）
     disturbance_adv_weight: 0.0
     # BC/DAgger 模仿损失系数（从 bc_coef 衰减到 bc_min_coef，乘 bc_alpha）
-    bc_coef: 1.0
+    bc_coef: 10.0
     bc_alpha: 1.0
     bc_min_coef: 0.4
     critic_coef: 0.5  # 价值损失权重（相对策略损失；大则稳定优势但可能拖慢策略更新）
