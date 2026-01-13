@@ -150,7 +150,7 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
         thrust_physics = (g * payload_mass) / self.pinn_thrust_limit  # [batch]
         thrust_physics = torch.clamp(thrust_physics, -1.0, 1.0)
         
-        # === Compute physics-predicted torque (simplified: gravity torque only) ===
+        # === Compute physics-predicted torque (Dynamic: Gravity Torque) ===
         # Extract rotation matrix from obs [0:9] to get gravity in body frame
         rot_flat = obs[:, 0:9]  # [batch, 9]
         rot_mat = rot_flat.view(batch_size, 3, 3)  # [batch, 3, 3]
@@ -166,11 +166,11 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
         # Torque from gravity: tau = r x F
         tau_grav = torch.cross(com_offset, F_grav, dim=1)  # [batch, 3]
         
-        # === Compute inertia-related torque (simplified using angular velocity) ===
+        # === Compute inertia-related torque (Simplified) ===
         angvel = obs[:, 9:12]  # [batch, 3]
         
-        # For simplicity, use tau_inertia = 0 (small contribution at low angular velocities)
-        # Full formula would require I_true and I_nom matrices
+        # For simplicity, use tau_inertia = 0 (assuming low angular velocity or small gyroscopic effect)
+        # To strictly match Teacher, we would need I_true and I_nom here.
         tau_inertia = torch.zeros_like(tau_grav)
         
         # Total torque compensation (roll=index 0, pitch=index 1)
@@ -318,26 +318,7 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
         # Fallback: ensure teacher_actions are in dataset if not added by super()
         # This handles cases where super() creates a new dataset object ignoring extra keys in batch_dict
         if self._teacher_actions_buffer is not None:
-             self._teacher_actions_flat = swap_and_flatten01(self._teacher_actions_buffer)
-             
-             # Try to add to dataset if missing
-             key_missing = False
-             if hasattr(self, 'dataset'):
-                 if isinstance(self.dataset, dict):
-                     if 'teacher_actions' not in self.dataset:
-                         key_missing = True
-                 elif hasattr(self.dataset, 'keys') and 'teacher_actions' not in self.dataset.keys():
-                      key_missing = True
-                 
-                 if key_missing:
-                    if isinstance(self.dataset, dict):
-                        self.dataset['teacher_actions'] = self._teacher_actions_flat
-                    else:
-                        try:
-                            self.dataset['teacher_actions'] = self._teacher_actions_flat
-                        except TypeError:
-                            if hasattr(self.dataset, 'update'):
-                                self.dataset.update({'teacher_actions': self._teacher_actions_flat})
+            self._teacher_actions_flat = swap_and_flatten01(self._teacher_actions_buffer)
         else:
             self._teacher_actions_flat = None
         
@@ -346,6 +327,21 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
             self._privileged_obs_flat = batch_dict['privileged_obs']
         else:
             self._privileged_obs_flat = None
+
+        # Inject extra tensors into dataset.values_dict so they survive PPODataset slicing
+        if hasattr(self, 'dataset'):
+            dataset = self.dataset
+            values_dict = getattr(dataset, 'values_dict', None)
+            if values_dict is not None:
+                if self._teacher_actions_flat is not None and 'teacher_actions' not in values_dict:
+                    values_dict['teacher_actions'] = self._teacher_actions_flat
+                if self._privileged_obs_flat is not None and 'privileged_obs' not in values_dict:
+                    values_dict['privileged_obs'] = self._privileged_obs_flat
+            elif isinstance(dataset, dict):
+                if self._teacher_actions_flat is not None and 'teacher_actions' not in dataset:
+                    dataset['teacher_actions'] = self._teacher_actions_flat
+                if self._privileged_obs_flat is not None and 'privileged_obs' not in dataset:
+                    dataset['privileged_obs'] = self._privileged_obs_flat
 
     def train_actor_critic(self, input_dict):
         """Override to pass teacher_actions and privileged_obs to calc_gradients via input_dict."""
@@ -522,17 +518,8 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
                 obs_for_pinn = batch_dict.get('obs', input_dict.get('obs', None))
                 priv_for_pinn = batch_dict.get('privileged_obs', input_dict.get('privileged_obs', None))
                 
-                # Debug: 打印调试信息（每1000次epoch打印一次）
-                if self.epoch_num % 1000 == 0 or self.epoch_num < 5:
-                    print(f"[PINN Debug] epoch={self.epoch_num}, obs_for_pinn={obs_for_pinn is not None}, "
-                          f"priv_for_pinn={priv_for_pinn is not None}, "
-                          f"batch_dict_has_priv={'privileged_obs' in batch_dict}, "
-                          f"input_dict_has_priv={'privileged_obs' in input_dict and input_dict.get('privileged_obs') is not None}")
-                
                 if obs_for_pinn is not None and priv_for_pinn is not None:
                     pinn_loss = self.compute_pinn_loss(mu, obs_for_pinn, priv_for_pinn)
-                    if self.epoch_num % 1000 == 0 or self.epoch_num < 5:
-                        print(f"[PINN Debug] pinn_loss computed = {pinn_loss.item():.6f}")
             # ==============
             
             losses, sum_mask = torch_ext.apply_masks([a_loss.unsqueeze(1), c_loss, entropy.unsqueeze(1), b_loss.unsqueeze(1)], rnn_masks)
@@ -546,7 +533,7 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
             loss = a_loss + 0.5 * c_loss * self.critic_coef - entropy * self.entropy_coef + b_loss * bounds_coef
             loss = loss + aux_loss * self.aux_loss_coef
             loss = loss + bc_loss * current_bc_coef
-            loss = loss + pinn_loss * current_bc_coef  # PINN shares bc_coef with BC loss
+            loss = loss + pinn_loss * self.pinn_coef  # PINN uses independent coefficient
             
             if self.multi_gpu:
                 self.optimizer.zero_grad()

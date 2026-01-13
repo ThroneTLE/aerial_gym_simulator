@@ -19,7 +19,7 @@ import torch
 
 DEFAULT_ENV_NAME = "payload_compensation_task_teacher"
 DEFAULT_CONFIG = "aerial_gym/rl_training/rl_games/ppo_aerial_quad_aux.yaml"
-DEFAULT_CKPT = "runs/teacher_aux_fixed_imitation_13-19-07-24/nn/teacher_aux_fixed_imitation.pth"
+DEFAULT_CKPT = "runs/teacher_aux_fixed_imitation_13-21-14-52/nn/last_teacher_aux_fixed_imitation_ep_22_rew_-3.8923638.pth"
 plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "Arial Unicode MS", "Noto Sans CJK SC"]
 plt.rcParams["axes.unicode_minus"] = False
 
@@ -780,74 +780,81 @@ def _plot_observation_analysis(obs_history, save_path=None):
     obs_arr = np.array(obs_history)
     steps = np.arange(len(obs_arr))
     
-    fig, axes = plt.subplots(4, 1, figsize=(12, 16), sharex=True)
+    fig, axes = plt.subplots(5, 1, figsize=(12, 18), sharex=True)
     
     # 1. Rotation Matrix (0:9)
     # Plot diagonal elements to check for deviation from 1.0
     axes[0].plot(steps, obs_arr[:, 0], label="r00", alpha=0.5)
     axes[0].plot(steps, obs_arr[:, 4], label="r11", alpha=0.5)
     axes[0].plot(steps, obs_arr[:, 8], label="r22", alpha=0.5)
-    # Plot some off-diagonal elements
-    axes[0].plot(steps, obs_arr[:, 1], label="r01", alpha=0.3)
+    # Plot key off-diagonal elements
     axes[0].plot(steps, obs_arr[:, 2], label="r02 (Pitch)", color='red', alpha=0.8)
-    axes[0].plot(steps, obs_arr[:, 5], label="r12 (Roll)", color='blue', alpha=0.6, linestyle="--") # or r21 depending on convention
-    axes[0].plot(steps, obs_arr[:, 3], label="r10 (Yaw)", color='green', alpha=0.3, linestyle=":")
+    axes[0].plot(steps, obs_arr[:, 6], label="r20", color='red', alpha=0.4, linestyle="--")
+    axes[0].plot(steps, obs_arr[:, 5], label="r12 (Roll)", color='blue', alpha=0.8)
+    axes[0].plot(steps, obs_arr[:, 7], label="r21", color='blue', alpha=0.4, linestyle="--")
     
-    axes[0].set_title("Rotation Matrix (r02=Pitch, r12=Roll)")
-    axes[0].legend(loc="upper right", ncol=6)
+    axes[0].set_title("Rotation Matrix (r02=Pitch-like, r12=Roll-like)")
+    axes[0].legend(loc="upper right", ncol=4, fontsize=8)
     axes[0].grid(True, alpha=0.3)
     
     # 2. Angular Velocity (9:12)
-    # Check if this matches physical values or has scaling issues
     axes[1].plot(steps, obs_arr[:, 9], label="wx", color='C0')
     axes[1].plot(steps, obs_arr[:, 10], label="wy", color='C1')
     axes[1].plot(steps, obs_arr[:, 11], label="wz", color='C2')
-    axes[1].set_title("Angular Velocity (Input [9:12] - scaled?)")
-    axes[1].set_ylabel("Normalized Value")
-    axes[1].legend()
+    axes[1].set_title("Angular Velocity (Body-Frame)")
+    axes[1].set_ylabel("rad/s")
+    axes[1].legend(loc="upper right")
     axes[1].grid(True, alpha=0.3)
     
-    # 3. Prev Actions (17:20) + Warning Flag (16)
-    if obs_arr.shape[1] > 17:
-        ax2 = axes[2]
-        # Actions on left axis
-        ax2.plot(steps, obs_arr[:, 17], label="prev_thrust", linestyle="--", alpha=0.7)
-        ax2.plot(steps, obs_arr[:, 18], label="prev_roll", linestyle="--", alpha=0.7)
-        ax2.plot(steps, obs_arr[:, 19], label="prev_pitch", linestyle="--", alpha=0.7)
-        ax2.set_ylabel("Action Value")
-        ax2.legend(loc="upper left")
-        ax2.grid(True, alpha=0.3)
-        
-        # Warning flag on right axis (it's binary 0/1)
-        ax2_r = ax2.twinx()
-        ax2_r.plot(steps, obs_arr[:, 16], label="warning_flag", color="red", alpha=0.3, linewidth=2)
-        ax2_r.set_ylabel("Warning (0/1)", color="red")
-        ax2_r.tick_params(axis='y', labelcolor="red")
-        ax2_r.set_ylim(-0.1, 1.1)
-        
-        ax2.set_title("Previous Actions [17:20] & Warning Flag [16]")
+    # 3. Payload Masks (12:16)
+    if obs_arr.shape[1] > 15:
+        axes[2].step(steps, obs_arr[:, 12], label="M0 (Front R)", where='post')
+        axes[2].step(steps, obs_arr[:, 13], label="M1 (Front L)", where='post')
+        axes[2].step(steps, obs_arr[:, 14], label="M2 (Rear L)", where='post')
+        axes[2].step(steps, obs_arr[:, 15], label="M3 (Rear R)", where='post')
+        axes[2].set_title("Payload Attachment Masks (1=Attached, 0=Released)")
+        axes[2].set_ylim(-0.1, 1.1)
+        axes[2].legend(loc="upper right", ncol=4)
+        axes[2].grid(True, alpha=0.3)
 
-    # 4. Next Release Info (20:22)
+    # 4. Previous Actions (17:20) & Warning Flag (16)
+    if obs_arr.shape[1] > 19:
+        ax3 = axes[3]
+        ax3_r = ax3.twinx()
+        
+        # Actions on left axis
+        ax3.plot(steps, obs_arr[:, 17], label="prev_thrust", color='C4', alpha=0.8)
+        ax3.plot(steps, obs_arr[:, 18], label="prev_roll", color='C5', alpha=0.8)
+        ax3.plot(steps, obs_arr[:, 19], label="prev_pitch", color='C6', alpha=0.8)
+        ax3.set_ylabel("Action (-1 ~ 1)")
+        
+        # Warning flag on right axis
+        line_warn, = ax3_r.plot(steps, obs_arr[:, 16], label="warning", color="red", alpha=0.3, linewidth=2)
+        ax3_r.set_ylabel("Release Warning", color="red")
+        ax3_r.tick_params(axis='y', labelcolor="red")
+        ax3_r.set_ylim(-0.1, 1.1)
+        
+        ax3.set_title("Previous Actions & Release Warning")
+        ax3.legend(loc="upper left")
+        ax3.grid(True, alpha=0.3)
+
+    # 5. Extra Observation Info (20:22)
     if obs_arr.shape[1] > 21:
-        axes[3].plot(steps, obs_arr[:, 20], label="Next Index", color='purple')
-        axes[3].plot(steps, obs_arr[:, 21], label="Next Mass", color='orange')
-        axes[3].set_title("Next Release Prediction (Index [20] & Mass [21])")
-        axes[3].set_ylabel("Normalized Value")
-        axes[3].legend()
-        axes[3].grid(True, alpha=0.3)
-    
-    fig.suptitle("Observation Space Analysis")
-    fig.tight_layout()
-    
+        axes[4].plot(steps, obs_arr[:, 20], label="Next Release ID", color='purple')
+        axes[4].plot(steps, obs_arr[:, 21], label="Next Release Mass", color='orange')
+        axes[4].set_title("Additional Meta-Info (Next Release Prediction)")
+        axes[4].legend(loc="upper right")
+        axes[4].grid(True, alpha=0.3)
+    else:
+        axes[4].text(0.5, 0.5, "No additional observation dimensions (20-21)", 
+                   ha='center', va='center', transform=axes[4].transAxes)
+
+    fig.suptitle("Observation Space Analysis", fontsize=14, fontweight='bold')
+    fig.tight_layout(rect=[0, 0, 1, 0.96])
     
     if save_path:
         base, ext = os.path.splitext(save_path)
         fig.savefig(f"{base}_obs_analysis{ext}", dpi=150)
-
-    # Restoring code to main() logic (this likely needs to be inserted into main, but since we are editing the file tail, 
-    # we need to be careful. The user instruction implies fixing the file. 
-    # Since I cannot easily 'insert into main' from here without context, I will just remove this block from here
-    # and then apply another edit to insert it into main. This tool call just cleans the helper.)
     pass
 
 

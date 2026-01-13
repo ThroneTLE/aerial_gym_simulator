@@ -33,7 +33,7 @@ class ExtractObsWrapper(gym.Wrapper):
         observations, *_ = super().reset(**kwargs)
         return {
             "obs": observations["observations"],
-            "privileged_obs": observations.get("priviliged_obs", None),
+            "privileged_obs": observations.get("privileged_obs", None),
         }
 
     def step(self, action):
@@ -53,7 +53,7 @@ class ExtractObsWrapper(gym.Wrapper):
         return (
             {
                 "obs": observations["observations"],
-                "privileged_obs": observations.get("priviliged_obs", None),
+                "privileged_obs": observations.get("privileged_obs", None),
                 "teacher_actions": teacher_actions,
             },
             rewards,
