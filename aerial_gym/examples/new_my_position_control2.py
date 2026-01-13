@@ -19,8 +19,7 @@ import torch
 
 DEFAULT_ENV_NAME = "payload_compensation_task_teacher"
 DEFAULT_CONFIG = "aerial_gym/rl_training/rl_games/ppo_aerial_quad_aux.yaml"
-DEFAULT_CKPT = "runs/teacher_aux_fixed_imitation_07-06-31-47/nn/last_teacher_aux_fixed_imitation_ep_300_rew_9836.639.pth"
-
+DEFAULT_CKPT = "runs/teacher_aux_fixed_imitation_13-19-07-24/nn/teacher_aux_fixed_imitation.pth"
 plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "Arial Unicode MS", "Noto Sans CJK SC"]
 plt.rcParams["axes.unicode_minus"] = False
 
@@ -223,10 +222,14 @@ def plot_results(
     target_history=None,
     ideal_circle=None,
     save_path: Optional[str] = None,
+    obs_history=None,
 ):
     if not z_history:
         print("无可绘制数据。")
         return
+        
+    if obs_history is not None:
+        _plot_observation_analysis(obs_history, save_path)
 
     steps = np.arange(len(z_history))
     eulers = np.unwrap(np.array(euler_history), axis=0)
@@ -608,6 +611,20 @@ def main() -> None:
         )
 
     device = torch.device(task.device)
+    
+    # Auto-detect normalize_input from checkpoint
+    has_rms = any(k.startswith("running_mean_std") for k in checkpoint["model"].keys())
+    
+    if "params" not in cfg: cfg["params"] = {}
+    if "config" not in cfg["params"]: cfg["params"]["config"] = {}
+    
+    if has_rms:
+        print("Checkpoint indicates normalize_input=True. Forcing config to match.")
+        cfg["params"]["config"]["normalize_input"] = True
+    else:
+        print("Checkpoint indicates normalize_input=False. Forcing config to match.")
+        cfg["params"]["config"]["normalize_input"] = False
+
     model = build_model(cfg, obs_dim, action_dim, task.sim_env.num_envs, device)
     model.load_state_dict(checkpoint["model"], strict=True)
     if getattr(model, "normalize_input", False) and "running_mean_std" in checkpoint:
@@ -622,6 +639,7 @@ def main() -> None:
     release_history: List[Tuple[int, int]] = []
     policy_actions: List[np.ndarray] = []
     teacher_actions: List[np.ndarray] = []
+    obs_history: List[np.ndarray] = []  # Record full observation vector
     early_enabled = bool(args.early_plot)
     episode_len_limit = int(getattr(task.task_config, "episode_len_steps", args.steps)) + 1
     episode_steps = torch.zeros(task.sim_env.num_envs, device=device, dtype=torch.long)
@@ -700,6 +718,7 @@ def main() -> None:
             z_history.append(pos[2])
             euler_history.append(euler)
             policy_actions.append(action[env_id].detach().cpu().numpy())
+            obs_history.append(obs[env_id].detach().cpu().numpy())
 
             if isinstance(infos, dict) and "teacher_actions" in infos:
                 teacher_actions.append(
@@ -736,7 +755,9 @@ def main() -> None:
         target_history=target_history,
         ideal_circle=ideal_circle,
         save_path=save_path,
+        obs_history=obs_history,
     )
+
     if early_enabled:
         plot_early_episode_stats(
             early_records,
@@ -752,6 +773,82 @@ def main() -> None:
         task.close()
     except AttributeError as exc:
         print(f"Warning: task.close() failed ({exc}), skipping explicit cleanup.")
+
+def _plot_observation_analysis(obs_history, save_path=None):
+    if not obs_history:
+        return
+    obs_arr = np.array(obs_history)
+    steps = np.arange(len(obs_arr))
+    
+    fig, axes = plt.subplots(4, 1, figsize=(12, 16), sharex=True)
+    
+    # 1. Rotation Matrix (0:9)
+    # Plot diagonal elements to check for deviation from 1.0
+    axes[0].plot(steps, obs_arr[:, 0], label="r00", alpha=0.5)
+    axes[0].plot(steps, obs_arr[:, 4], label="r11", alpha=0.5)
+    axes[0].plot(steps, obs_arr[:, 8], label="r22", alpha=0.5)
+    # Plot some off-diagonal elements
+    axes[0].plot(steps, obs_arr[:, 1], label="r01", alpha=0.3)
+    axes[0].plot(steps, obs_arr[:, 2], label="r02 (Pitch)", color='red', alpha=0.8)
+    axes[0].plot(steps, obs_arr[:, 5], label="r12 (Roll)", color='blue', alpha=0.6, linestyle="--") # or r21 depending on convention
+    axes[0].plot(steps, obs_arr[:, 3], label="r10 (Yaw)", color='green', alpha=0.3, linestyle=":")
+    
+    axes[0].set_title("Rotation Matrix (r02=Pitch, r12=Roll)")
+    axes[0].legend(loc="upper right", ncol=6)
+    axes[0].grid(True, alpha=0.3)
+    
+    # 2. Angular Velocity (9:12)
+    # Check if this matches physical values or has scaling issues
+    axes[1].plot(steps, obs_arr[:, 9], label="wx", color='C0')
+    axes[1].plot(steps, obs_arr[:, 10], label="wy", color='C1')
+    axes[1].plot(steps, obs_arr[:, 11], label="wz", color='C2')
+    axes[1].set_title("Angular Velocity (Input [9:12] - scaled?)")
+    axes[1].set_ylabel("Normalized Value")
+    axes[1].legend()
+    axes[1].grid(True, alpha=0.3)
+    
+    # 3. Prev Actions (17:20) + Warning Flag (16)
+    if obs_arr.shape[1] > 17:
+        ax2 = axes[2]
+        # Actions on left axis
+        ax2.plot(steps, obs_arr[:, 17], label="prev_thrust", linestyle="--", alpha=0.7)
+        ax2.plot(steps, obs_arr[:, 18], label="prev_roll", linestyle="--", alpha=0.7)
+        ax2.plot(steps, obs_arr[:, 19], label="prev_pitch", linestyle="--", alpha=0.7)
+        ax2.set_ylabel("Action Value")
+        ax2.legend(loc="upper left")
+        ax2.grid(True, alpha=0.3)
+        
+        # Warning flag on right axis (it's binary 0/1)
+        ax2_r = ax2.twinx()
+        ax2_r.plot(steps, obs_arr[:, 16], label="warning_flag", color="red", alpha=0.3, linewidth=2)
+        ax2_r.set_ylabel("Warning (0/1)", color="red")
+        ax2_r.tick_params(axis='y', labelcolor="red")
+        ax2_r.set_ylim(-0.1, 1.1)
+        
+        ax2.set_title("Previous Actions [17:20] & Warning Flag [16]")
+
+    # 4. Next Release Info (20:22)
+    if obs_arr.shape[1] > 21:
+        axes[3].plot(steps, obs_arr[:, 20], label="Next Index", color='purple')
+        axes[3].plot(steps, obs_arr[:, 21], label="Next Mass", color='orange')
+        axes[3].set_title("Next Release Prediction (Index [20] & Mass [21])")
+        axes[3].set_ylabel("Normalized Value")
+        axes[3].legend()
+        axes[3].grid(True, alpha=0.3)
+    
+    fig.suptitle("Observation Space Analysis")
+    fig.tight_layout()
+    
+    
+    if save_path:
+        base, ext = os.path.splitext(save_path)
+        fig.savefig(f"{base}_obs_analysis{ext}", dpi=150)
+
+    # Restoring code to main() logic (this likely needs to be inserted into main, but since we are editing the file tail, 
+    # we need to be careful. The user instruction implies fixing the file. 
+    # Since I cannot easily 'insert into main' from here without context, I will just remove this block from here
+    # and then apply another edit to insert it into main. This tool call just cleans the helper.)
+    pass
 
 
 if __name__ == "__main__":

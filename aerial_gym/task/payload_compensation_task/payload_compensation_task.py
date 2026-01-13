@@ -643,7 +643,7 @@ class PayloadCompensationTask(BaseTask):
                 device=self.device,
                 requires_grad=False,
             ),
-            "priviliged_obs": torch.zeros(
+            "privileged_obs": torch.zeros(
                 (self.sim_env.num_envs, self.task_config.privileged_observation_space_dim),
                 device=self.device,
                 requires_grad=False,
@@ -1056,8 +1056,8 @@ class PayloadCompensationTask(BaseTask):
             # 额外诊断：观测/动作范数，便于定位模仿误差飙升原因
             obs_base_norm = torch.norm(self.task_obs["observations"], dim=1).mean().item()
             self.tb_writer.add_scalar("debug/obs_base_norm", obs_base_norm, self.counter)
-            if self.teacher_mode and "priviliged_obs" in self.task_obs:
-                priv_norm = torch.norm(self.task_obs["priviliged_obs"], dim=1).mean().item()
+            if self.teacher_mode and "privileged_obs" in self.task_obs:
+                priv_norm = torch.norm(self.task_obs["privileged_obs"], dim=1).mean().item()
                 self.tb_writer.add_scalar("debug/priv_norm", priv_norm, self.counter)
             # 策略/教师动作范数
             policy_norm = torch.norm(clamped_actions, dim=1).mean().item()
@@ -1506,7 +1506,7 @@ class PayloadCompensationTask(BaseTask):
             # 归一化：除以典型惯量值
             typical_inertia = 0.001  # kg·m²
             priv_vec[:, 4:7] = true_inertia_diag / typical_inertia
-            self.task_obs["priviliged_obs"] = priv_vec
+            self.task_obs["privileged_obs"] = priv_vec
 
         self.task_obs["rewards"] = self.rewards
         self.task_obs["terminations"] = self.terminations

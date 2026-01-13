@@ -10,8 +10,8 @@ class task_config:
     headless = True
     device = "cuda:0"
 
-    # 新观测结构: 旋转矩阵(9) + 角速度(3) + 4位附着掩码(4) + 预警(1) + 上一时刻动作(3) = 20
-    observation_space_dim = 20
+    # 新观测结构: 旋转矩阵(9) + 角速度(3) + 4位附着掩码(4) + 预警(1) + 上一时刻动作(3) + 下一释放信息(2) = 22
+    observation_space_dim = 22
     privileged_observation_space_dim = 7
     action_space_dim = 3  # thrust + roll torque + pitch torque (无 yaw)
     controller_action_dim = 8  # 保持与 Lee 控制器兼容，yaw 补偿位置设为 0
@@ -78,15 +78,19 @@ class task_config:
         "tilt_excess_coef": 0.0,
         "tilt_excess_exp": 0.0,
         # 模仿权重 - 分离推力和力矩
-        "imitation_weight": 8.0,  # 模仿通过 BC loss 实现，不在 reward 中
-        "imitation_weight_thrust": 8.0,
-        "imitation_weight_torque": 8.0,
+        "imitation_weight": 0.0,  # 模仿通过 BC loss 实现，不在 reward 中
+        "imitation_weight_thrust": 0.0,
+        "imitation_weight_torque": 0.0,
         # 动作幅度惩罚
         "action_magnitude_penalty_coef": 0.0,
         "action_magnitude_penalty_thrust": 0.0,
         "action_magnitude_penalty_torque": 0.0,
+        # 物理感知模仿奖励 - 考虑质量和惯量的误差惩罚
+        # 将动作误差转换为实际物理效应（加速度/角加速度）
+        # 物理自然决定重要性：力矩误差 / 小惯量 >> 推力误差 / 大质量
+        "physics_imitation_weight": 0.001,  # 总权重系数 (建议 0.01~0.1，因为角加速度量级大)
         # 存活奖励 - xadapt: 10
-        "survive_bonus": 10.0,
+        "survive_bonus": 0.0,
     }
 
     crash_distance_threshold = 5.0
@@ -96,13 +100,13 @@ class task_config:
     # 最大总载荷 = 4 × max_mass = 4 × 0.04 = 0.16 kg
     # thrust = 0.16 × 9.81 = 1.57 N → 留余量设为 2.0
     # torque = 0.16 × 9.81 × 0.4 = 0.628 N·m → 设为 1.0
-    compensation_thrust_limit = 2.0  # N，覆盖 4 个载荷总质量
-    compensation_torque_limits = [1.0, 1.0, 0.2]  # [roll, pitch, yaw] N·m
+    compensation_thrust_limit = 2.5  # N，匹配 controller config
+    compensation_torque_limits = [0.4, 0.4, 0.0]  # [roll, pitch, yaw] N·m，匹配 controller config
 
     payload_parameters = {
         "payload_mass": 0.02,
         "payload_mass_range": [0.00, 0.03],
-        "randomize_payload_mass": False,
+        "randomize_payload_mass": True,
         "randomize_offsets_on_plane": False,
         "offset_plane_radial_jitter": 0.4,  #沿机臂方向的“半径扰动”，均匀分布 [-jitter, +jitter]
         "offset_plane_z_jitter": 0.8,  #垂直方向的“高度扰动”，均匀分布 [-jitter, +jitter]
@@ -119,8 +123,8 @@ class task_config:
         "release_interval": 300,
         "release_start_range": [50, 100],
         "release_interval_range": [300, 350],
-        "warning_steps": 100,
-        "randomize_release":   True,  # 初始验证先固定
+        "warning_steps": 2,
+        "randomize_release":   False,  # 初始验证先固定
         "log_release_events": False,
     }
 
