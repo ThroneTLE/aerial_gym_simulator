@@ -38,7 +38,7 @@ class task_config:
         # 线速度惩罚关闭，改用线加速度惩罚
         "velocity_penalty_coef": 0.0,
         "angvel_penalty_coef": 0.00,  # xadapt: -0.2 (roll/pitch/yaw各0.2)
-        "action_smoothness_coef": 0.0,  # xadapt: -0.06 (oscillate_coeff)
+        "action_smoothness_coef": 10.0,  # xadapt: -0.06 (oscillate_coeff)
         "tilt_warning_deg": 0.0,
         "tilt_warning_penalty": 0.0,
         "height_warning": 0.0,
@@ -78,9 +78,9 @@ class task_config:
         "tilt_excess_coef": 0.0,
         "tilt_excess_exp": 0.0,
         # 模仿权重 - 分离推力和力矩
-        "imitation_weight": 0.0,  # 模仿通过 BC loss 实现，不在 reward 中
-        "imitation_weight_thrust": 0.0,
-        "imitation_weight_torque": 0.0,
+        "imitation_weight": 8.0,  # 模仿通过 BC loss 实现，不在 reward 中
+        "imitation_weight_thrust": 8.0,
+        "imitation_weight_torque": 8.0,
         # 动作幅度惩罚
         "action_magnitude_penalty_coef": 0.0,
         "action_magnitude_penalty_thrust": 0.0,

@@ -45,7 +45,7 @@ params:
 
     name: teacher_aux  # 实验名称（日志/ckpt 前缀）
     reward_shaper:
-      scale_value: 0.01  # 全局奖励缩放，减小梯度/价值量级（过大易爆，过小学得慢）
+      scale_value: 1.0  # 全局奖励缩放，减小梯度/价值量级（过大易爆，过小学得慢）
 
     normalize_advantage: True  # 归一化 advantage（降低方差）
     gamma: 0.99  # 折扣因子（越小越短视）
@@ -69,13 +69,16 @@ params:
     # 扰动样本优势加权（权重=1+coef*mask，mask 来自 infos['is_disturbance']）
     disturbance_adv_weight: 0.0
     # BC/DAgger 模仿损失系数（从 bc_coef 衰减到 bc_min_coef，乘 bc_alpha）
-    bc_coef: 50.0
-    bc_alpha: 0.999
+    bc_coef: 10.0
+    bc_alpha: 0.9
     bc_min_coef: 0.5
+    # 分离推力和扭矩的BC权重 (如果设置，覆盖 bc_coef)
+    bc_coef_thrust: 5.0   # 推力补偿BC权重
+    bc_coef_torque: 15.0  # 扭矩补偿BC权重
     
     # PINN 物理损失配置
     use_pinn_loss: True
-    pinn_coef: 00.0  # 物理损失权重 (独立于 BC loss)
+    pinn_coef: 0.0  # 物理损失权重 (独立于 BC loss)
     critic_coef: 0.5  # 价值损失权重（相对策略损失；大则稳定优势但可能拖慢策略更新）
     normalize_input: True  # base obs 用 running_mean_std；privileged_obs 用固定归一化（见 AERIAL_FIXED_OBS_NORM）
     bounds_loss_coef: 0.000  # 动作越界惩罚系数（动作超出 [-1,1] 时的惩罚强度）

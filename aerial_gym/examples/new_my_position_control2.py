@@ -19,7 +19,7 @@ import torch
 
 DEFAULT_ENV_NAME = "payload_compensation_task_teacher"
 DEFAULT_CONFIG = "aerial_gym/rl_training/rl_games/ppo_aerial_quad_aux.yaml"
-DEFAULT_CKPT = "runs/teacher_aux_fixed_imitation_14-11-07-51/nn/last_teacher_aux_fixed_imitation_ep_52_rew_14360.29.pth"
+DEFAULT_CKPT = "runs/teacher_aux_fixed_imitation_14-12-42-20/nn/last_teacher_aux_fixed_imitation_ep_32_rew_14559.351.pth"
 plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "Arial Unicode MS", "Noto Sans CJK SC"]
 plt.rcParams["axes.unicode_minus"] = False
 
@@ -39,7 +39,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run privileged RL-Games checkpoint with task observations."
     )
-    parser.add_argument("--num_envs", type=int, default=1, help="Number of parallel envs.")
+    parser.add_argument("--num_envs", type=int, default=1024, help="Number of parallel envs.")
     parser.add_argument("--steps", type=int, default=1500, help="Number of simulation steps.")
     parser.add_argument(
         "--headless",
