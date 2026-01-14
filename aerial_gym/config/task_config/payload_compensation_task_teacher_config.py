@@ -18,7 +18,7 @@ class task_config:
 
 
 
-    episode_len_steps = 1500
+    episode_len_steps = 2500  # 前1000步飞行 + 1500步释放任务
     return_state_before_reset = False
     teacher_mode = True  # 启用特权/模仿
 
@@ -79,9 +79,9 @@ class task_config:
             [-0.4, 0.0, -0.4],
             [0.0, 0.4, -0.4],
         ],
-        "release_start": 50,
+        "release_start": 1000,  # 前1000步预热飞行，之后开始释放任务
         "release_interval": 300,
-        "release_start_range": [50, 100],
+        "release_start_range": [900, 1100],  # 随机化释放开始时间
         "release_interval_range": [300, 350],
         "warning_steps": 0,
         "randomize_release":   True,  # 初始验证先固定

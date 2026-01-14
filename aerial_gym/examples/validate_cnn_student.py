@@ -35,7 +35,7 @@ import torch
 import torch.nn as nn
 
 DEFAULT_ENV_NAME = "payload_compensation_task_teacher"
-DEFAULT_CONFIG = "aerial_gym/rl_training/rl_games/ppo_aerial_quad.yaml"
+DEFAULT_CONFIG = "aerial_gym/rl_training/rl_games/ppo_aerial_quad_aux.yaml"
 DEFAULT_TEACHER_CKPT = "runs/teacher_residual_stage1_27-17-06-04/nn/teacher_residual_stage1.pth"
 
 plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "Arial Unicode MS", "Noto Sans CJK SC"]
@@ -177,21 +177,29 @@ def build_model(
     return network
 
 
-def load_teacher_encoder(checkpoint_path: str, device: str):
-    """Load teacher's privileged encoder from checkpoint."""
+def load_teacher_encoder(checkpoint_path: str, device: str, priv_dim: int = 7):
+    """Load teacher's privileged encoder from checkpoint.
+    
+    Auto-detects priv_dim from checkpoint and supports both RunningObsNorm and FixedObsNorm.
+    """
     checkpoint = torch.load(checkpoint_path, map_location=device)
     model_state = checkpoint.get("model", checkpoint)
     
-    # Extract priv_encoder weights (keys like: a2c_network.priv_encoder.0.weight)
+    # Extract priv_encoder weights and normalization params
     priv_encoder_state = {}
+    priv_norm_running_mean = None
+    priv_norm_running_var = None
     priv_norm_mean = None
     priv_norm_std = None
     
     for key, value in model_state.items():
         if "a2c_network.priv_encoder" in key:
-            # Remove prefix: a2c_network.priv_encoder.0.weight -> 0.weight
             local_key = key.replace("a2c_network.priv_encoder.", "")
             priv_encoder_state[local_key] = value
+        elif "a2c_network.priv_norm.running_mean" in key:
+            priv_norm_running_mean = value
+        elif "a2c_network.priv_norm.running_var" in key:
+            priv_norm_running_var = value
         elif "a2c_network.priv_norm.mean" in key:
             priv_norm_mean = value
         elif "a2c_network.priv_norm.std" in key:
@@ -200,25 +208,35 @@ def load_teacher_encoder(checkpoint_path: str, device: str):
     if not priv_encoder_state:
         raise RuntimeError(f"No priv_encoder weights found in checkpoint. Keys: {list(model_state.keys())[:10]}")
     
-    priv_dim = 41
+    # Auto-detect priv_dim from first encoder layer
+    first_layer_key = "0.weight"
+    if first_layer_key in priv_encoder_state:
+        detected_priv_dim = priv_encoder_state[first_layer_key].shape[1]
+        if detected_priv_dim != priv_dim:
+            print(f"  [Auto-detect] priv_dim from checkpoint: {detected_priv_dim}")
+            priv_dim = detected_priv_dim
+    
     hidden = 128
     embed_dim = 8
+    use_running_norm = priv_norm_running_mean is not None
     
-    # Build encoder with normalization
     class TeacherEncoder(nn.Module):
-        def __init__(self, priv_dim, hidden, embed_dim, norm_mean, norm_std):
+        def __init__(self, priv_dim, hidden, embed_dim, running_mean, running_var, fixed_mean, fixed_std, use_running):
             super().__init__()
-            # Fixed normalization
-            if norm_mean is not None:
-                self.register_buffer("norm_mean", norm_mean.float())
-            else:
-                self.register_buffer("norm_mean", torch.zeros(priv_dim))
-            if norm_std is not None:
-                self.register_buffer("norm_std", norm_std.float())
-            else:
-                self.register_buffer("norm_std", torch.ones(priv_dim))
+            self.eps = 1e-6
+            self.clip_range = 10.0
             
-            # Encoder layers
+            if use_running and running_mean is not None:
+                self.register_buffer("running_mean", running_mean.float())
+                self.register_buffer("running_var", running_var.float() if running_var is not None else torch.ones(priv_dim))
+            elif fixed_mean is not None:
+                self.register_buffer("running_mean", fixed_mean.float())
+                std = fixed_std.float() if fixed_std is not None else torch.ones(priv_dim)
+                self.register_buffer("running_var", std ** 2)
+            else:
+                self.register_buffer("running_mean", torch.zeros(priv_dim))
+                self.register_buffer("running_var", torch.ones(priv_dim))
+            
             self.encoder = nn.Sequential(
                 nn.Linear(priv_dim, hidden),
                 nn.ELU(),
@@ -228,25 +246,26 @@ def load_teacher_encoder(checkpoint_path: str, device: str):
             )
         
         def forward(self, x):
-            # Apply normalization
-            x = (x - self.norm_mean) / (self.norm_std + 1e-6)
-            return self.encoder(x)
+            std = torch.sqrt(self.running_var + self.eps)
+            normalized = (x - self.running_mean) / std
+            normalized = torch.clamp(normalized, -self.clip_range, self.clip_range)
+            return self.encoder(normalized)
     
     teacher_encoder = TeacherEncoder(
-        priv_dim, hidden, embed_dim, priv_norm_mean, priv_norm_std
+        priv_dim, hidden, embed_dim,
+        priv_norm_running_mean, priv_norm_running_var,
+        priv_norm_mean, priv_norm_std,
+        use_running_norm
     ).to(device)
     
-    # Load encoder weights
     teacher_encoder.encoder.load_state_dict(priv_encoder_state)
     
     for param in teacher_encoder.parameters():
         param.requires_grad = False
     teacher_encoder.eval()
     
-    print(f"Loaded teacher encoder: {priv_dim} -> {embed_dim}")
-    if priv_norm_mean is not None:
-        print(f"  norm_mean: {priv_norm_mean[:5].tolist()}...")
-        print(f"  norm_std: {priv_norm_std[:5].tolist()}...")
+    norm_type = "RunningObsNorm" if use_running_norm else "FixedObsNorm"
+    print(f"Loaded teacher encoder: {priv_dim} -> {embed_dim} ({norm_type})")
     
     return teacher_encoder
 

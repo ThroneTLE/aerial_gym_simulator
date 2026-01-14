@@ -166,6 +166,22 @@ python -m aerial_gym.rl_training.rl_games.runner \
   --experiment_name teacher_aux_fixed_imitation \
   --num_envs 4096 \
   --headless True
+
+python aerial_gym/rl_training/train_cnn_student.py \
+    --teacher_checkpoint runs/teacher_aux_fixed_imitation_14-19-16-50/nn/last_teacher_aux_fixed_imitation_ep_34_rew_13236.196.pth \
+    --use_attention \
+    --random_preflight_steps 1000 \
+    --preflight_waypoint_range 0.5 \
+    --history_len 100 \
+    --experiment_name cnn_stage2_waypoint
+
+python aerial_gym/examples/validate_cnn_stage2.py \
+    --teacher_checkpoint runs/teacher_aux_fixed_imitation_14-19-16-50/nn/last_teacher_aux_fixed_imitation_ep_34_rew_13236.196.pth \
+    --cnn_checkpoint runs/cnn_stage2_hist100_14-20-28-37/nn/best_cnn_encoder.pth \
+    --history_len 100 \
+    --steps 1500 \
+    --show_plot True
+
 ## 2025-02-21 Teacher 残差原型
 - `aerial_gym/config/task_config/payload_compensation_task_config.py` 增加 `imitation_weight`（默认为 0）供模仿项权重使用。
 - 新增 `aerial_gym/config/task_config/payload_compensation_task_teacher_config.py`：开启 `teacher_mode`，观测维度为 29+52（raw 特权拼接到 obs），特权 obs_dim=52，由策略侧可训练编码器处理，增加 `dagger_frac=0.7` 作为教师混合比例。
