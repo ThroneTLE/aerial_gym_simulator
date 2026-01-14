@@ -70,14 +70,7 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
         self.nan_skip_count = 0
         self.total_nan_skips = 0
         
-        # PINN (Physics-Informed) Loss: enforce physics constraints on policy output
-        self.use_pinn_loss = config.get('use_pinn_loss', False)
-        self.pinn_coef = config.get('pinn_coef', 1.0)
-        # Physics constants for PINN - defaults match payload_compensation_task_teacher_config
-        # These will be overwritten from task config if available
-        self.pinn_gravity = 9.81
-        self.pinn_thrust_limit = config.get('pinn_thrust_limit', 2.0)  # matches task config
-        self.pinn_torque_limits = config.get('pinn_torque_limits', [1.0, 1.0])  # matches task config [roll, pitch]
+
         
         print(f"[A2CAgentWithAuxLoss] Auxiliary loss coefficient: {self.aux_loss_coef}")
         print(f"[A2CAgentWithAuxLoss] BC loss: coef={self.bc_coef}, alpha={self.bc_alpha}, min={self.bc_min_coef}")
@@ -122,77 +115,7 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
         decayed = self.bc_coef * (self.bc_alpha ** self._bc_update_count)
         return max(self.bc_min_coef, decayed)
     
-    def compute_pinn_loss(self, mu, obs, privileged_obs):
-        """Compute Physics-Informed Neural Network loss (Steady-State Version).
-        
-        PINN loss enforces the policy output to match the physics formula for
-        PERSISTENT (steady-state) compensation, NOT dynamic compensation.
-        
-        This matches the Teacher's behavior:
-        - Compensation only changes when payload is released
-        - Assumes hover state (gravity = [0, 0, -g] in body frame)
-        - Does NOT vary with real-time attitude changes
-        
-        Formula:
-        - thrust = |g| * payload_mass / thrust_limit
-        - torque = -cross(com_offset, [0, 0, -g] * mass) / torque_limit
-        
-        Args:
-            mu: Policy output [batch, 3] (thrust, roll, pitch)
-            obs: Base observations [batch, obs_dim] (not used for steady-state)
-            privileged_obs: Privileged observations [batch, priv_dim]
-                Index 0: payload_mass (normalized by 0.04)
-                Index 1-3: com_offset (normalized by 0.4)
-        
-        Returns:
-            pinn_loss: Scalar loss value
-        """
-        if not self.use_pinn_loss or privileged_obs is None:
-            return torch.zeros(1, device=mu.device)
-        
-        batch_size = mu.shape[0]
-        device = mu.device
-        
-        # === Extract physics parameters from privileged_obs ===
-        # Denormalize values
-        payload_mass = privileged_obs[:, 0] * 0.04  # [batch] kg
-        com_offset = privileged_obs[:, 1:4] * 0.4   # [batch, 3] meters
-        
-        # === Compute physics-predicted thrust (steady-state) ===
-        g = self.pinn_gravity
-        thrust_physics = (g * payload_mass) / self.pinn_thrust_limit  # [batch]
-        thrust_physics = torch.clamp(thrust_physics, -1.0, 1.0)
-        
-        # === Compute physics-predicted torque (STEADY-STATE: Hover Assumption) ===
-        # Unlike dynamic version, we assume hover state where:
-        # - Gravity in body frame = [0, 0, -g] (same as world frame when level)
-        # - This makes torque ONLY depend on mass and COM offset, NOT on current attitude
-        # 
-        # Gravity force on payload (in body frame, hover assumption):
-        # F_grav = mass * [0, 0, -g]
-        F_grav = torch.zeros(batch_size, 3, device=device)
-        F_grav[:, 2] = -g * payload_mass  # [batch, 3]
-        
-        # Torque from gravity: tau = r x F
-        # For r = [rx, ry, rz] and F = [0, 0, Fz]:
-        # tau = [ry*Fz - rz*0, rz*0 - rx*Fz, rx*0 - ry*0] = [ry*Fz, -rx*Fz, 0]
-        tau_grav = torch.cross(com_offset, F_grav, dim=1)  # [batch, 3]
-        
-        # Total torque compensation (roll=index 0, pitch=index 1)
-        # Teacher uses: residual = -tau_payload / torque_limits
-        total_tau = -tau_grav[:, 0:2]  # [batch, 2]
-        torque_limits = torch.tensor(self.pinn_torque_limits, device=device)
-        torque_physics = total_tau / torque_limits.unsqueeze(0)  # [batch, 2]
-        torque_physics = torch.clamp(torque_physics, -1.0, 1.0)
-        
-        # === Combine physics predictions ===
-        physics_pred = torch.cat([thrust_physics.unsqueeze(-1), torque_physics], dim=-1)  # [batch, 3]
-        
-        # === PINN loss: MSE between policy output and physics prediction ===
-        mu_clamped = torch.clamp(mu, -1.0, 1.0)
-        pinn_loss = F.mse_loss(mu_clamped, physics_pred)
-        
-        return pinn_loss
+
     
     def play_steps(self):
         """Override to collect teacher_actions during rollout."""
@@ -433,11 +356,6 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
             
             # === AUXILIARY LOSS ===
             aux_loss = torch.zeros(1, device=self.ppo_device)
-            if hasattr(self.model, 'a2c_network') and hasattr(self.model.a2c_network, 'get_aux_loss'):
-                aux_loss = self.model.a2c_network.get_aux_loss()
-                if not torch.is_tensor(aux_loss):
-                    aux_loss = torch.tensor(aux_loss, device=self.ppo_device)
-                aux_loss = aux_loss.mean()  # Ensure scalar
             # ======================
             
             # === BC LOSS (with optional physics weighting) ===
@@ -523,16 +441,7 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
                             bc_loss = F.mse_loss(mu_clamped, teacher_actions)
             # ==============
             
-            # === PINN Loss (Physics-Informed) ===
-            pinn_loss = torch.zeros(1, device=self.ppo_device)
-            if self.use_pinn_loss:
-                # Use batch_dict or fall back to input_dict for privileged_obs
-                obs_for_pinn = batch_dict.get('obs', input_dict.get('obs', None))
-                priv_for_pinn = batch_dict.get('privileged_obs', input_dict.get('privileged_obs', None))
-                
-                if obs_for_pinn is not None and priv_for_pinn is not None:
-                    pinn_loss = self.compute_pinn_loss(mu, obs_for_pinn, priv_for_pinn)
-            # ==============
+
             
             losses, sum_mask = torch_ext.apply_masks([a_loss.unsqueeze(1), c_loss, entropy.unsqueeze(1), b_loss.unsqueeze(1)], rnn_masks)
             a_loss, c_loss, entropy, b_loss = losses[0], losses[1], losses[2], losses[3]
@@ -543,7 +452,6 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
             current_bc_coef = self._get_current_bc_coef()
             
             loss = a_loss + 0.5 * c_loss * self.critic_coef - entropy * self.entropy_coef + b_loss * bounds_coef
-            loss = loss + aux_loss * self.aux_loss_coef
             
             # BC loss: 支持分离推力/扭矩权重
             if self.bc_coef_thrust is not None or self.bc_coef_torque is not None:
@@ -555,7 +463,7 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
                 # 使用统一的 bc_coef
                 loss = loss + bc_loss * current_bc_coef
             
-            loss = loss + pinn_loss * self.pinn_coef  # PINN uses independent coefficient
+
             
             if self.multi_gpu:
                 self.optimizer.zero_grad()
@@ -598,7 +506,7 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
         self._bc_loss = bc_loss.item() if torch.is_tensor(bc_loss) else bc_loss
         self._bc_loss_thrust = bc_loss_thrust.item() if torch.is_tensor(bc_loss_thrust) else bc_loss_thrust
         self._bc_loss_torque = bc_loss_torque.item() if torch.is_tensor(bc_loss_torque) else bc_loss_torque
-        self._pinn_loss = pinn_loss.item() if torch.is_tensor(pinn_loss) else pinn_loss
+
         self._current_bc_coef = current_bc_coef
 
         self.train_result = (a_loss, c_loss, entropy, \

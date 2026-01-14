@@ -91,9 +91,9 @@ class task_config:
     randomization_parameters = False
     observation_parameters = {      
         # 特权观测控制 (Privileged Obs Control)
-        "include_priv_mass": False,    # 索引 0: payload mass
-        "include_priv_com": False,     # 索引 1-3: COM offset
-        "include_priv_inertia": False, # 索引 4-6: true inertia
+        "include_priv_mass": True,    # 索引 0: payload mass
+        "include_priv_com": True,     # 索引 1-3: COM offset
+        "include_priv_inertia": True, # 索引 4-6: true inertia
         
         # 基础观测控制 (Basic Obs Control) - 对 [observations] 向量进行屏蔽
         "include_base_rot": True,         # 索引 0-8: 旋转矩阵

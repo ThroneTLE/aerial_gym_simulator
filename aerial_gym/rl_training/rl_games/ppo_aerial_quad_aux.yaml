@@ -14,8 +14,7 @@ params:
     privileged_dim: 7  # 特权向量长度
     privileged_embed: 8  # 编码后维度
     privileged_hidden: 128  # 编码器隐层宽度
-    aux_target_dim: 5  # 辅助损失目标维度: [mass, com_x, com_y, com_z, released_mass]
-    aux_loss_weight: 1.0  # 辅助损失权重（网络内部）
+
     use_oracle_mode: False  # True=输入真实特权值(Teacher)，False=输入aux decoder预测值(Student)
     space:
       continuous:
@@ -76,9 +75,7 @@ params:
     bc_coef_thrust: 1000.0   # 推力补偿BC权重
     bc_coef_torque: 500.0  # 扭矩补偿BC权重
     
-    # PINN 物理损失配置
-    use_pinn_loss: True
-    pinn_coef: 0.0  # 物理损失权重 (独立于 BC loss)
+
     critic_coef: 0.5  # 价值损失权重（相对策略损失；大则稳定优势但可能拖慢策略更新）
     normalize_input: True  # base obs 用 running_mean_std；privileged_obs 用固定归一化（见 AERIAL_FIXED_OBS_NORM）
     bounds_loss_coef: 0.000  # 动作越界惩罚系数（动作超出 [-1,1] 时的惩罚强度）
@@ -88,14 +85,9 @@ params:
     value_bootstrap: True  # 终止时是否用 value 做 bootstrap（True 可减小方差，但对非终止型截断需注意偏差）
     use_smooth_clamp: False  # 是否对 value 误差做平滑截断（防止 value_loss 尖峰）
     
-    # 辅助损失系数（在 A2CAgentWithAuxLoss 中使用）
-    aux_loss_coef: 0.0  # 辅助损失权重
+
     
-    # PINN (Physics-Informed) Loss: 强制策略输出符合物理公式
-    # PINN 与 BC 共享 bc_coef 权重
-    use_pinn_loss: True  # 启用 PINN 损失
-    pinn_thrust_limit: 2.0  # 匹配 controller_config (2.0 N)
-    pinn_torque_limits: [1.0, 1.0]  # 匹配 controller_config [roll, pitch] (1.0, 1.0 N·m)
+
     
     # === NaN Prevention & Numerical Stability ===
     # 奖励裁剪范围（已禁用 - 设为极大值以允许奖励自然增长）
