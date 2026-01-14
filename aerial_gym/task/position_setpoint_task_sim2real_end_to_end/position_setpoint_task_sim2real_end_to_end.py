@@ -110,7 +110,7 @@ class PositionSetpointTaskSim2RealEndToEnd(BaseTask):
         self.num_envs = self.sim_env.num_envs
 
         # Currently only the "observations" are sent to the actor and critic.
-        # The "priviliged_obs" are not handled so far in sample-factory
+        # The "privileged_obs" are not handled so far in sample-factory
 
         self.task_obs = {
             "observations": torch.zeros(
@@ -118,7 +118,7 @@ class PositionSetpointTaskSim2RealEndToEnd(BaseTask):
                 device=self.device,
                 requires_grad=False,
             ),
-            "priviliged_obs": torch.zeros(
+            "privileged_obs": torch.zeros(
                 (
                     self.sim_env.num_envs,
                     self.task_config.privileged_observation_space_dim,

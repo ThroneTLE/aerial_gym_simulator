@@ -105,7 +105,7 @@ def run_diagnostic(args):
     with torch.no_grad():
         for step in range(args.steps):
             obs = torch.as_tensor(task.task_obs["observations"], device=device, dtype=torch.float32)
-            priv = task.task_obs.get("priviliged_obs", None)
+            priv = task.task_obs.get("privileged_obs", None)
             if priv is not None:
                 priv = torch.as_tensor(priv, device=device, dtype=torch.float32)
             

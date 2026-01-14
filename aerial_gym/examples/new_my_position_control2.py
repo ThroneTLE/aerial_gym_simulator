@@ -19,7 +19,7 @@ import torch
 
 DEFAULT_ENV_NAME = "payload_compensation_task_teacher"
 DEFAULT_CONFIG = "aerial_gym/rl_training/rl_games/ppo_aerial_quad_aux.yaml"
-DEFAULT_CKPT = "runs/teacher_aux_fixed_imitation_14-13-02-39/nn/teacher_aux_fixed_imitation.pth"
+DEFAULT_CKPT = "runs/teacher_aux_fixed_imitation_14-14-49-27/nn/last_teacher_aux_fixed_imitation_ep_20_rew_14534.06.pth"
 plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "Arial Unicode MS", "Noto Sans CJK SC"]
 plt.rcParams["axes.unicode_minus"] = False
 
@@ -666,7 +666,7 @@ def main() -> None:
             obs = torch.as_tensor(
                 task.task_obs["observations"], device=device, dtype=torch.float32
             )
-            priv = task.task_obs.get("priviliged_obs", None)
+            priv = task.task_obs.get("privileged_obs", None)
             if priv is not None:
                 priv = torch.as_tensor(priv, device=device, dtype=torch.float32)
             input_dict = {

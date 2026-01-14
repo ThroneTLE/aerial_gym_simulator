@@ -288,7 +288,7 @@ A sample task for position setpoint navigation (without sensors or obstacles) is
                     device=self.device,
                     requires_grad=False,
                 ),
-                "priviliged_obs": torch.zeros(
+                "privileged_obs": torch.zeros(
                     (self.sim_env.num_envs, self.task_config.privileged_observation_space_dim),
                     device=self.device,
                     requires_grad=False,

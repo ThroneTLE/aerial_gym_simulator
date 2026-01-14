@@ -226,7 +226,7 @@ def collect_training_sample(
     # Get current observation
     obs_dict = task.obs_dict
     base_obs = task.task_obs["observations"]  # (num_envs, 29)
-    priv_obs = task.task_obs.get("priviliged_obs", None)  # (num_envs, 41)
+    priv_obs = task.task_obs.get("privileged_obs", None)  # (num_envs, 41)
     
     if priv_obs is None:
         raise RuntimeError("Task must provide privileged observations for teacher supervision")
@@ -417,7 +417,7 @@ def main():
             obs = torch.as_tensor(
                 task.task_obs["observations"], device=device, dtype=torch.float32
             )
-            priv = task.task_obs.get("priviliged_obs", None)
+            priv = task.task_obs.get("privileged_obs", None)
             if priv is not None:
                 priv = torch.as_tensor(priv, device=device, dtype=torch.float32)
             

@@ -171,7 +171,7 @@ python -m aerial_gym.rl_training.rl_games.runner \
 - 新增 `aerial_gym/config/task_config/payload_compensation_task_teacher_config.py`：开启 `teacher_mode`，观测维度为 29+52（raw 特权拼接到 obs），特权 obs_dim=52，由策略侧可训练编码器处理，增加 `dagger_frac=0.7` 作为教师混合比例。
 - `aerial_gym/task/payload_compensation_task/payload_compensation_task.py`：
   - 引入 `teacher_mode` 开关与补偿限幅缓存（从 `lee_controller_with_comp_config` 读取）。
-  - 特权向量扩展为 52 维（质量/COM/基惯量对角/最近一次 payload torque/推力常数/时间常数/分配矩阵/扰动上限等），raw 输出到 `priviliged_obs` 并拼接到 observations，编码由策略侧完成。
+  - 特权向量扩展为 52 维（质量/COM/基惯量对角/最近一次 payload torque/推力常数/时间常数/分配矩阵/扰动上限等），raw 输出到 `privileged_obs` 并拼接到 observations，编码由策略侧完成。
   - 计算教师残差目标：补偿 thrust=payload 质量×|g|，torque=payload 力矩（body），按限幅归一化到 [-1,1]。
   - 奖励中加入模仿项：`imitation_weight * ||action - teacher_residual||^2`（负向），仅在 teacher_mode 且权重>0 时生效。
 - `aerial_gym/rl_training/rl_games/ppo_aerial_quad.yaml`：

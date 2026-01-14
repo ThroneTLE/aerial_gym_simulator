@@ -40,13 +40,13 @@ def main():
     print(f"  teacher_residual: {task.teacher_residual.tolist()}")
     
     print("\n privileged_obs:")
-    priv = task.task_obs.get('priviliged_obs', None)
+    priv = task.task_obs.get('privileged_obs', None)
     if priv is not None:
         print(f"  shape: {priv.shape}")
         print(f"  values env0: {priv[0].tolist()}")
         print(f"  values env1: {priv[1].tolist()}")
     else:
-        print("  ⚠️ priviliged_obs 为 None!")
+        print("  ⚠️ privileged_obs 为 None!")
     
     # 检查 infos 中的 teacher_actions
     print("\ninfos 中的 teacher_actions:")

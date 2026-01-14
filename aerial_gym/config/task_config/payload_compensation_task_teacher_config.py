@@ -38,7 +38,7 @@ class task_config:
         # 线速度惩罚关闭，改用线加速度惩罚
         "velocity_penalty_coef": 0.0,
         "angvel_penalty_coef": 0.00,  # xadapt: -0.2 (roll/pitch/yaw各0.2)
-        "action_smoothness_coef": 10.0,  # xadapt: -0.06 (oscillate_coeff)
+        "action_smoothness_coef": 0.0,  # xadapt: -0.06 (oscillate_coeff)
         "tilt_warning_deg": 0.0,
         "tilt_warning_penalty": 0.0,
         "height_warning": 0.0,
@@ -51,7 +51,7 @@ class task_config:
         "stability_penalty": 0.0,
         "stability_velocity_penalty": 0.0,
         "position_error_penalty_coef": 0.0,
-        "z_error_penalty_coef": 50.0,
+        "z_error_penalty_coef": 0.0,
         "yaw_penalty_coef": 0.0,
         "hover_bonus_radius": 0.0,
         "hover_bonus_tilt_deg": 0.0,

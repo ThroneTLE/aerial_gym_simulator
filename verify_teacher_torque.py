@@ -154,7 +154,7 @@ def main():
     task.payload_manager._update_mass_properties(torch.arange(8, device=task.device))
     task.step(dummy_action)
     
-    priv_obs = task.task_obs.get("priviliged_obs", None)
+    priv_obs = task.task_obs.get("privileged_obs", None)
     if priv_obs is not None:
         print(f"\nPrivileged obs 维度: {priv_obs.shape}")
         print("Privileged obs 内容 (前8个环境):")

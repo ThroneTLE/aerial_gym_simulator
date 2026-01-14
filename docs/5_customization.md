@@ -216,7 +216,7 @@ You can refer to the example file in `tasks/custom_task` and implement your own 
                     device=self.device,
                     requires_grad=False,
                 ),
-                "priviliged_obs": torch.zeros(
+                "privileged_obs": torch.zeros(
                     (self.sim_env.num_envs, self.task_config.privileged_observation_space_dim),
                     device=self.device,
                     requires_grad=False,

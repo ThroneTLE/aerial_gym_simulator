@@ -124,14 +124,14 @@ class PositionSetpointTask(BaseTask):
 
         # 任务观测字典，用于返回给 RL 智能体
         # 目前只将 "observations" 发送给 Actor 和 Critic。
-        # "priviliged_obs" 尚未在 sample-factory 中处理
+        # "privileged_obs" 尚未在 sample-factory 中处理
         self.task_obs = {
             "observations": torch.zeros(
                 (self.sim_env.num_envs, self.task_config.observation_space_dim),
                 device=self.device,
                 requires_grad=False,
             ),
-            "priviliged_obs": torch.zeros(
+            "privileged_obs": torch.zeros(
                 (
                     self.sim_env.num_envs,
                     self.task_config.privileged_observation_space_dim,

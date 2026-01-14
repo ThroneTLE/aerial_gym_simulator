@@ -25,7 +25,7 @@ def _update_stats(mean, m2, count, batch):
 def _collect_stats(task, steps, warmup):
     obs, *_ = task.reset()
     base = obs["observations"]
-    priv = obs.get("priviliged_obs")
+    priv = obs.get("privileged_obs")
     if priv is None:
         raise RuntimeError("No privileged_obs in task output; use teacher task config.")
 
@@ -50,7 +50,7 @@ def _collect_stats(task, steps, warmup):
         ) * 2.0 - 1.0
         obs, *_ = task.step(actions)
         base = obs["observations"]
-        priv = obs.get("priviliged_obs")
+        priv = obs.get("privileged_obs")
         if priv is None:
             raise RuntimeError("privileged_obs missing during rollout.")
         base_mean, base_m2, base_count = _update_stats(base_mean, base_m2, base_count, base)

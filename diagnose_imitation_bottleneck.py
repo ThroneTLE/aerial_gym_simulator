@@ -84,7 +84,7 @@ def check_observation_info():
     
     # 获取观测和教师
     obs = task.obs_dict.get("obs", None)
-    priv_obs = task.task_obs.get("priviliged_obs", None)
+    priv_obs = task.task_obs.get("privileged_obs", None)
     teacher = task.teacher_residual.clone()
     
     print("\n观测结构:")

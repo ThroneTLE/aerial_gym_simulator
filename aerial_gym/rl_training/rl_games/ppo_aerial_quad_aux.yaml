@@ -28,7 +28,7 @@ params:
           val: -10.0  # 初始 logstd 常数（log 标度；-2 ≈ std 0.135）
         fixed_sigma: False  # 启用可学习 logstd
         min_logstd: -10.0  # clamp 下限（约 std 0.018），防止过度收紧
-        max_logstd: -6.0   # clamp 上限（约 std 2.72），防止噪声无上限飙升
+        max_logstd: -3.0   # clamp 上限（约 std 2.72），防止噪声无上限飙升
     mlp:
       units: [256, 256, 128]  # MLP 隐层宽度（逐层）
       d2rl: False  # 是否使用 D2RL 结构（在输入拼接上一层输出，通常可提升稳定性但加大计算）
@@ -70,11 +70,11 @@ params:
     disturbance_adv_weight: 0.0
     # BC/DAgger 模仿损失系数（从 bc_coef 衰减到 bc_min_coef，乘 bc_alpha）
     bc_coef: 10.0
-    bc_alpha: 0.9
+    bc_alpha: 0.95
     bc_min_coef: 0.5
     # 分离推力和扭矩的BC权重 (如果设置，覆盖 bc_coef)
-    bc_coef_thrust: 5.0   # 推力补偿BC权重
-    bc_coef_torque: 15.0  # 扭矩补偿BC权重
+    bc_coef_thrust: 1000.0   # 推力补偿BC权重
+    bc_coef_torque: 100.0  # 扭矩补偿BC权重
     
     # PINN 物理损失配置
     use_pinn_loss: True
