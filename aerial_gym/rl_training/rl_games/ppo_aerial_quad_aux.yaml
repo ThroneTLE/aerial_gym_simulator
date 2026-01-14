@@ -70,7 +70,7 @@ params:
     disturbance_adv_weight: 0.0
     # BC/DAgger 模仿损失系数（从 bc_coef 衰减到 bc_min_coef，乘 bc_alpha）
     bc_coef: 10.0
-    bc_alpha: 0.95
+    bc_alpha: 0.99
     bc_min_coef: 0.5
     # 分离推力和扭矩的BC权重 (如果设置，覆盖 bc_coef)
     bc_coef_thrust: 1000.0   # 推力补偿BC权重
@@ -89,7 +89,7 @@ params:
     use_smooth_clamp: False  # 是否对 value 误差做平滑截断（防止 value_loss 尖峰）
     
     # 辅助损失系数（在 A2CAgentWithAuxLoss 中使用）
-    aux_loss_coef: 5.0  # 辅助损失权重
+    aux_loss_coef: 0.0  # 辅助损失权重
     
     # PINN (Physics-Informed) Loss: 强制策略输出符合物理公式
     # PINN 与 BC 共享 bc_coef 权重

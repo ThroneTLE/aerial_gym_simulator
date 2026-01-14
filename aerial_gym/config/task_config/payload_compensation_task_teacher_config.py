@@ -10,18 +10,13 @@ class task_config:
     headless = True
     device = "cuda:0"
 
-    # 新观测结构: 旋转矩阵(9) + 角速度(3) + 4位附着掩码(4) + 预警(1) + 上一时刻动作(3) + 下一释放信息(2) = 22
-    observation_space_dim = 22
+    # 新观测结构: 旋转矩阵(9) + 角速度(3) + 4位附着掩码(4) + 预警(1) + 上一时刻动作(3) = 20
+    observation_space_dim = 20
     privileged_observation_space_dim = 7
     action_space_dim = 3  # thrust + roll torque + pitch torque (无 yaw)
     controller_action_dim = 8  # 保持与 Lee 控制器兼容，yaw 补偿位置设为 0
-    dagger_frac = 0.0          # 初始教师动作占比
-    dagger_decay_reward = 15000.0  # 均值奖励达到此值后开始衰减
-    dagger_decay_rate = 0.99      # 每步衰减系数
-    dagger_min_frac = 0.0          # 衰减下限（保留少量教师）
-    imitation_err_threshold = 0.5# 仅当误差低于该阈值才衰减
-    dagger_use_postmix_err = True  # 使用混合后的 imitation err 作为衰减判定，和 TB 曲线一致
-    fix_yaw_residual_zero = True   # 教师残差的 yaw 力矩固定为 0
+
+
 
     episode_len_steps = 1500
     return_state_before_reset = False
@@ -33,58 +28,23 @@ class task_config:
         "crash_penalty": -10.0,  # xadapt: -10
         "attitude_penalty_coef": 0.00,
         "release_attitude_boost": 1.0,
-        "comp_torque_penalty_coef": 0.0,
-        "comp_thrust_penalty_coef": 0.0,
+
         # 线速度惩罚关闭，改用线加速度惩罚
         "velocity_penalty_coef": 0.0,
-        "angvel_penalty_coef": 0.00,  # xadapt: -0.2 (roll/pitch/yaw各0.2)
+        "angvel_penalty_coef": 10.00,  # xadapt: -0.2 (roll/pitch/yaw各0.2)
         "action_smoothness_coef": 0.0,  # xadapt: -0.06 (oscillate_coeff)
-        "tilt_warning_deg": 0.0,
-        "tilt_warning_penalty": 0.0,
-        "height_warning": 0.0,
-        "height_warning_penalty": 0.0,
-        "height_safe_bonus": 0.0,
-        "release_tilt_limit_deg": 0.0,
-        "release_tilt_penalty": 0.0,
-        "stability_radius": 0.0,
-        "stability_tilt_deg": 0.0,
-        "stability_penalty": 0.0,
-        "stability_velocity_penalty": 0.0,
+
         "position_error_penalty_coef": 0.0,
         "z_error_penalty_coef": 0.0,
-        "yaw_penalty_coef": 0.0,
-        "hover_bonus_radius": 0.0,
-        "hover_bonus_tilt_deg": 0.0,
-        "hover_bonus_velocity": 0.0,
-        "hover_bonus": 0.0,
-        "release_stability_steps": 50,
-        "release_hover_boost": 0.000000,
-        "release_angvel_boost": 0.00000,
-        "delta_error_bonus_coef": 0.0,
-        "delta_error_window_steps": 0,
-        "delta_error_bonus_clip": 0.0,
-        "release_reward_window_steps": 200,
+
         "accel_penalty_away_coef": 0.0,  # xadapt: -0.01 (lin_accel_coeff)
         "accel_penalty_toward_coef": 0.0,
-        "comp_penalty_high_threshold": 1.0,
-        "comp_torque_penalty_high_coef": 0.0,
-        "comp_thrust_penalty_high_coef": 0.0,
-        "comp_window_penalty_scale": 1,
-        "vel_window_penalty_scale": 1,
-        "smooth_window_penalty_scale": 1,
-        "comp_activation_bonus_coef": 0.0,
-        "vel_away_penalty_coef": 0.0,
-        "tilt_excess_threshold_deg": 0.0,
-        "tilt_excess_coef": 0.0,
-        "tilt_excess_exp": 0.0,
+
         # 模仿权重 - 分离推力和力矩
         "imitation_weight": 8.0,  # 模仿通过 BC loss 实现，不在 reward 中
         "imitation_weight_thrust": 8.0,
         "imitation_weight_torque": 8.0,
-        # 动作幅度惩罚
-        "action_magnitude_penalty_coef": 0.0,
-        "action_magnitude_penalty_thrust": 0.0,
-        "action_magnitude_penalty_torque": 0.0,
+
         # 物理感知模仿奖励 - 考虑质量和惯量的误差惩罚
         # 将动作误差转换为实际物理效应（加速度/角加速度）
         # 物理自然决定重要性：力矩误差 / 小惯量 >> 推力误差 / 大质量
@@ -129,10 +89,18 @@ class task_config:
     }
 
     randomization_parameters = False
-    observation_parameters = {
-        "include_payload_mass": False,  # base obs 是否包含载荷质量
-        "include_payload_com": False,  # base obs 是否包含载荷质心偏移
-        "include_last_release_mass": False,  # base obs 是否包含上次释放质量
+    observation_parameters = {      
+        # 特权观测控制 (Privileged Obs Control)
+        "include_priv_mass": False,    # 索引 0: payload mass
+        "include_priv_com": False,     # 索引 1-3: COM offset
+        "include_priv_inertia": False, # 索引 4-6: true inertia
+        
+        # 基础观测控制 (Basic Obs Control) - 对 [observations] 向量进行屏蔽
+        "include_base_rot": True,         # 索引 0-8: 旋转矩阵
+        "include_base_angvel": True,      # 索引 9-11: 机体角速度
+        "include_base_attached": True,    # 索引 12-15: 附着掩码
+        "include_base_warning": True,     # 索引 16: 预警标志
+        "include_base_prev_action": True, # 索引 17-19: 上一动作
     }
 
     curriculum_parameters = None

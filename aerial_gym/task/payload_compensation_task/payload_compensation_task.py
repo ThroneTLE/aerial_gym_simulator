@@ -524,7 +524,7 @@ class PayloadCompensationTask(BaseTask):
         self._dagger_init_frac = self.dagger_frac
         self._dagger_updates = 0
         self.imitation_err_threshold = float(getattr(self.task_config, "imitation_err_threshold", 1e9))
-        self.fix_yaw_residual_zero = bool(getattr(self.task_config, "fix_yaw_residual_zero", False))
+
         self.dagger_use_postmix_err = bool(getattr(self.task_config, "dagger_use_postmix_err", False))
         self._last_policy_imitation_err = 0.0
         self._last_decay_imitation_err = 0.0
@@ -824,43 +824,23 @@ class PayloadCompensationTask(BaseTask):
         if self.teacher_mode:
             self._update_teacher_residual()
             clamped_policy_actions = torch.clamp(self.actions, -1.0, 1.0)
+            
+            # 始终使用策略动作（无 DAgger 混合）
+            self.actions = clamped_policy_actions
+            
+            # 计算模仿误差用于记录
             policy_imitation_err = torch.norm(
-                clamped_policy_actions - self.teacher_residual, dim=1
+                 clamped_policy_actions - self.teacher_residual, dim=1
             ).mean().item()
             self._last_policy_imitation_err = policy_imitation_err
-            decay_err = policy_imitation_err
-            if self.dagger_use_postmix_err:
-                mixed_preview = self.dagger_frac * self.teacher_residual + (1.0 - self.dagger_frac) * clamped_policy_actions
-                decay_err = torch.norm(mixed_preview - self.teacher_residual, dim=1).mean().item()
-            self._last_decay_imitation_err = decay_err
-            # 按回合衰减 DAgger 比例（类似 SB3 BC alpha^updates）
-            if self.counter > 0 and self.counter % self.task_config.episode_len_steps == 0:
-                # 仅在模仿误差足够低时衰减（可选使用混合后的误差）
-                if decay_err <= self.imitation_err_threshold:
-                    prev_frac = self.dagger_frac
-                    self._dagger_updates += 1
-                    target_frac = self._dagger_init_frac * (self.dagger_decay_rate ** self._dagger_updates)
-                    self.dagger_frac = max(self.dagger_min_frac, target_frac)
-                    print(
-                        f"[DaggerDecay] step={self.counter} err={decay_err:.4f} "
-                        f"raw={policy_imitation_err:.4f} frac={prev_frac:.3f}->{self.dagger_frac:.3f}"
-                    )
-            # DAgger 风格：用教师动作与策略残差混合，早期偏向教师
-            dagger_frac = max(0.0, min(1.0, self.dagger_frac))
-            if dagger_frac > 0.0:
-                actions = dagger_frac * self.teacher_residual + (1.0 - dagger_frac) * clamped_policy_actions
-                self.actions = actions
 
         self.controller_actions[:, 0:3] = self.target_position
         self.controller_actions[:, 3] = 0.0
         clamped_actions = torch.clamp(self.actions, -1.0, 1.0)
         # 基础奖励/补偿常开，不再使用窗口掩码
         reward_params = self.task_config.reward_parameters
-        reward_window_steps = int(reward_params.get("release_reward_window_steps", 0))
-        reward_window_mask = torch.ones_like(
-            self.payload_manager.release_warning_flag, dtype=torch.bool, device=self.device
-        )
-        reward_window_mask_f = reward_window_mask.float()
+
+
 
         # 动作映射 (3维 -> 8维控制器):
         # action[0] -> controller[4] thrust 补偿
@@ -938,24 +918,7 @@ class PayloadCompensationTask(BaseTask):
         # NaN Prevention: 奖励裁剪已禁用 - 允许奖励自然增长以便训练进步
         # self.rewards = clip_rewards(self.rewards, min_r=self.reward_clip_min, max_r=self.reward_clip_max)
 
-        # 额外奖励：在预警或释放后窗口内，鼓励距离误差减小
-        dist_norm = torch.norm(self.target_position - self.obs_dict["robot_position"], dim=1)
-        delta = self.prev_pos_dist - dist_norm
-        self.prev_pos_dist = dist_norm
-        bonus_coef = reward_params.get("delta_error_bonus_coef", 0.0)
-        bonus_clip = reward_params.get("delta_error_bonus_clip", None)
-        window_steps = int(reward_params.get("delta_error_window_steps", 0))
-        window_mask = torch.zeros_like(self.payload_manager.step_counter, dtype=torch.bool)
-        if window_steps > 0:
-            window_mask = self.payload_manager.step_counter < window_steps
-        delta_for_log = delta
-        if bonus_coef != 0.0:
-            delta_clamped = torch.clamp_min(delta, 0.0)
-            if bonus_clip is not None and bonus_clip > 0.0:
-                delta_clamped = torch.clamp(delta_clamped, max=bonus_clip)
-            bonus = delta_clamped * bonus_coef * window_mask.float()
-            self.rewards += bonus
-            delta_for_log = delta_clamped
+
 
         # 记录位置相关奖励分量，便于 TB 观察
         dist = torch.norm(pos_error_body, dim=1)
@@ -967,13 +930,7 @@ class PayloadCompensationTask(BaseTask):
         spinnage = torch.norm(self.obs_dict["robot_body_angvel"], dim=1)
         ang_vel_reward = (1.0 / (1.0 + spinnage * spinnage)) * 3
 
-        self.rewards += self._compute_payload_penalties(
-            clamped_actions,
-            delta=delta_for_log,
-            bonus_coef=bonus_coef,
-            window_mask=window_mask,
-            reward_window_mask=reward_window_mask,
-        )
+        self.rewards += self._compute_payload_penalties(clamped_actions)
 
         # 模仿专家残差（仅 Teacher 模式生效）
         imitation_w = float(reward_params.get("imitation_weight", 0.0))
@@ -994,23 +951,7 @@ class PayloadCompensationTask(BaseTask):
             imit_penalty = w_thrust * thrust_err + w_torque * torque_err
             self.rewards -= imit_penalty
 
-        # 动作幅度惩罚 - 防止不必要的残差输出和抖动
-        action_mag_coef = float(reward_params.get("action_magnitude_penalty_coef", 0.0))
-        if action_mag_coef > 0.0:
-            # 可单独设置 thrust 和 torque 的惩罚系数
-            thrust_mag_coef = float(reward_params.get("action_magnitude_penalty_thrust", action_mag_coef))
-            torque_mag_coef = float(reward_params.get("action_magnitude_penalty_torque", action_mag_coef))
-            
-            # 惩罚动作幅度的平方（L2 正则化）
-            thrust_magnitude = clamped_actions[:, 0] ** 2
-            torque_magnitude = torch.mean(clamped_actions[:, 1:3] ** 2, dim=1)
-            
-            action_mag_penalty = thrust_mag_coef * thrust_magnitude + torque_mag_coef * torque_magnitude
-            self.rewards -= action_mag_penalty
-            
-            # 记录到 TB
-            if hasattr(self, "_last_reward_components") and isinstance(self._last_reward_components, dict):
-                self._last_reward_components["action_magnitude_penalty"] = _mean_detached(action_mag_penalty)
+
 
         # 补充 TB 记录：位置/姿态基础项（均为 batch 均值）
         if hasattr(self, "_last_reward_components") and isinstance(self._last_reward_components, dict):
@@ -1157,13 +1098,8 @@ class PayloadCompensationTask(BaseTask):
                         corr_ratio = self._ema_corr_policy / self._ema_corr_teacher
                         self.tb_writer.add_scalar("correlation/policy_teacher_ratio", corr_ratio, self.counter)
         # 记录/打印当前 dagger_frac，便于逐“epoch”（tb_log_interval）观察
-        if self.teacher_mode:
-            if self.tb_writer is not None:
-                self.tb_writer.add_scalar("imitation/dagger_frac", self.dagger_frac, self.counter)
-            if self.counter % self.tb_log_interval == 0:
-                print(f"[DaggerFrac] step={self.counter} frac={self.dagger_frac:.8f}")
-            if self.tb_writer is not None:
-                self.tb_writer.flush()
+        if self.tb_writer is not None:
+             self.tb_writer.flush()
         else:
             if self.tb_writer is not None:
                 self.tb_writer.flush()
@@ -1193,26 +1129,13 @@ class PayloadCompensationTask(BaseTask):
         )
         attitude_term = base_penalty * release_multiplier
 
-        # 分段补偿惩罚：小幅动作惩罚轻，大幅补偿额外加重
-        torque_actions = clamped_actions[:, 1:]
-        torque_coef = reward_cfg["comp_torque_penalty_coef"]
-        torque_high_coef = reward_cfg.get("comp_torque_penalty_high_coef", torque_coef)
-        comp_high_thresh = reward_cfg.get("comp_penalty_high_threshold", 1.0)
-        torque_nominal = torch.sum(torque_actions**2, dim=1)
-        torque_excess = torch.clamp(torch.abs(torque_actions) - comp_high_thresh, min=0.0)
-        torque_excess_penalty = torch.sum(torque_excess**2, dim=1)
-        comp_penalty = -(torque_coef * torque_nominal + torque_high_coef * torque_excess_penalty)
 
-        thrust_abs = torch.abs(clamped_actions[:, 0])
-        thrust_coef = reward_cfg.get("comp_thrust_penalty_coef", 0.0)
-        thrust_high_coef = reward_cfg.get("comp_thrust_penalty_high_coef", thrust_coef)
-        thrust_excess = torch.clamp(thrust_abs - comp_high_thresh, min=0.0)
-        thrust_penalty = -(thrust_coef * thrust_abs + thrust_high_coef * thrust_excess**2)
 
         # 加速度惩罚：远离目标的加速度始终重罚，朝向目标的加速度随距离变近惩罚加重
         accel_away_coef = reward_cfg.get("accel_penalty_away_coef", 0.0)
         accel_toward_coef = reward_cfg.get("accel_penalty_toward_coef", 0.0)
-        accel_penalty = torch.zeros_like(thrust_penalty)
+        accel_penalty = torch.zeros(self.sim_env.num_envs, device=self.device)
+
         if accel_away_coef > 0.0 or accel_toward_coef > 0.0:
             accel_vec = self.obs_dict["robot_body_linvel"] - self.prev_linvel
             dir_to_target = pos_error / (torch.norm(pos_error, dim=1, keepdim=True) + 1e-6)
@@ -1232,114 +1155,25 @@ class PayloadCompensationTask(BaseTask):
         ang_coef = reward_cfg.get("angvel_penalty_coef", 0.0)
         ang_penalty = -ang_coef * torch.norm(self.obs_dict["robot_body_angvel"], dim=1)
 
-        yaw_penalty_coef = reward_cfg.get("yaw_penalty_coef", 0.0)
-        yaw_penalty = -yaw_penalty_coef * yaw_error
+
 
         pos_penalty_coef = reward_cfg.get("position_error_penalty_coef", 0.0)
         pos_penalty = -pos_penalty_coef * torch.norm(pos_error, dim=1)
         z_penalty_coef = reward_cfg.get("z_error_penalty_coef", 0.0)
         z_penalty = -z_penalty_coef * torch.abs(pos_error[:, 2])
 
-        tilt_warn = reward_cfg.get("tilt_warning_deg", 0.0)
-        tilt_penalty = 0.0
-        if tilt_warn > 0.0:
-            tilt_warn_rad = np.deg2rad(float(tilt_warn))
-            tilt_penalty = reward_cfg.get("tilt_warning_penalty", 0.0) * (
-                (torch.abs(euler[:, 0]) > tilt_warn_rad)
-                | (torch.abs(euler[:, 1]) > tilt_warn_rad)
-            ).float()
 
-        height_warn = reward_cfg.get("height_warning", 0.0)
-        height_penalty = 0.0
-        height_safe_bonus = reward_cfg.get("height_safe_bonus", 0.0)
-        if height_warn > 0.0:
-            height_below = torch.clamp(height_warn - self.obs_dict["robot_position"][:, 2], min=0.0)
-            height_warn_scaled = height_below / max(height_warn, 1e-3)
-            height_penalty_coef = reward_cfg.get("height_warning_penalty", 0.0)
-            height_penalty = -height_penalty_coef * height_warn_scaled
-            if height_safe_bonus != 0.0:
-                safe_mask = (self.obs_dict["robot_position"][:, 2] >= height_warn).float()
-                height_penalty += height_safe_bonus * safe_mask
 
-        release_limit = reward_cfg.get("release_tilt_limit_deg", 0.0)
-        release_penalty = 0.0
-        if release_limit > 0.0:
-            limit_rad = np.deg2rad(float(release_limit))
-            violation = (torch.abs(euler[:, 0]) > limit_rad) | (
-                torch.abs(euler[:, 1]) > limit_rad
-            )
-            release_penalty = reward_cfg.get("release_tilt_penalty", 0.0) * (
-                violation & self.payload_manager.just_released_flag
-            ).float()
 
-        stability_radius = float(reward_cfg.get("stability_radius", 0.0))
-        stability_penalty_coef = reward_cfg.get("stability_penalty", 0.0)
-        stability_vel_coef = reward_cfg.get("stability_velocity_penalty", 0.0)
-        stability_tilt_deg = float(reward_cfg.get("stability_tilt_deg", 0.0))
-        stability_term = torch.zeros_like(roll_pitch_error)
 
-        # 在释放预警期间，减弱姿态/位置惩罚，让策略有余地预备动作
-        warn_mask = self.payload_manager.release_warning_flag.float()
-        warn_scale_att = 0.7
-        warn_scale_pos = 0.85
-        if warn_mask.any():
-            base_penalty = base_penalty * (1.0 - warn_mask + warn_scale_att * warn_mask)
-            pos_penalty = pos_penalty * (1.0 - warn_mask + warn_scale_pos * warn_mask)
-        if stability_radius > 0.0:
-            pos_norm = torch.norm(pos_error, dim=1)
-            near_mask = (pos_norm < stability_radius).float()
-            stability_term = stability_penalty_coef * near_mask
 
-            if stability_tilt_deg > 0.0:
-                limit_rad = np.deg2rad(stability_tilt_deg)
-                tilt_violation = (
-                    (torch.abs(euler[:, 0]) > limit_rad)
-                    | (torch.abs(euler[:, 1]) > limit_rad)
-                ).float()
-                stability_term = stability_term * tilt_violation
 
-            if stability_vel_coef != 0.0:
-                vel_norm = torch.norm(self.obs_dict["robot_body_linvel"], dim=1)
-                stability_term += -stability_vel_coef * vel_norm * near_mask
 
-        # Hover bonus: reward staying close to target with low tilt and low velocity
-        hover_bonus_radius = float(reward_cfg.get("hover_bonus_radius", 0.0))
-        hover_bonus_tilt_deg = float(reward_cfg.get("hover_bonus_tilt_deg", 0.0))
-        hover_bonus_vel = float(reward_cfg.get("hover_bonus_velocity", 0.0))
-        hover_bonus = reward_cfg.get("hover_bonus", 0.0)
-        hover_term = torch.zeros_like(roll_pitch_error)
-        release_stability_steps = int(reward_cfg.get("release_stability_steps", 0))
-        release_hover_boost = float(reward_cfg.get("release_hover_boost", 1.0))
-        release_angvel_boost = float(reward_cfg.get("release_angvel_boost", 1.0))
-        if hover_bonus_radius > 0.0 and hover_bonus != 0.0:
-            pos_norm = torch.norm(pos_error, dim=1)
-            near_mask = (pos_norm < hover_bonus_radius).float()
-            tilt_mask = torch.ones_like(near_mask)
-            if hover_bonus_tilt_deg > 0.0:
-                limit_rad = np.deg2rad(hover_bonus_tilt_deg)
-                tilt_mask = (
-                    (torch.abs(euler[:, 0]) < limit_rad) & (torch.abs(euler[:, 1]) < limit_rad)
-                ).float()
-            vel_mask = torch.ones_like(near_mask)
-            if hover_bonus_vel > 0.0:
-                vel_norm = torch.norm(self.obs_dict["robot_body_linvel"], dim=1)
-                vel_mask = (vel_norm < hover_bonus_vel).float()
-            hover_term = hover_bonus * near_mask * tilt_mask * vel_mask
 
-        # Boost stability signals shortly after each release.
-        post_release_mask = torch.zeros_like(hover_term)
-        if release_stability_steps > 0:
-            post_release_mask = (
-                (self.payload_manager.step_counter < release_stability_steps)
-                & self.payload_manager.attached_mask.any(dim=1)
-            ).float()
-            decay = 1.0 - torch.clamp(
-                self.payload_manager.step_counter.float() / release_stability_steps, min=0.0, max=1.0
-            )
-            if release_hover_boost != 1.0:
-                hover_term = hover_term * (1.0 + (release_hover_boost - 1.0) * post_release_mask * decay)
-            if release_angvel_boost != 1.0:
-                ang_penalty = ang_penalty * (1.0 + (release_angvel_boost - 1.0) * post_release_mask * decay)
+
+
+
+
 
         # Default delta/window tracking for logging if caller passes nothing.
         if delta is None:
@@ -1358,41 +1192,20 @@ class PayloadCompensationTask(BaseTask):
         reward_window_mask = reward_window_mask.to(self.device)
         reward_window_mask_float = reward_window_mask.float()
 
-        comp_activation_coef = reward_cfg.get("comp_activation_bonus_coef", 0.0)
-        comp_activation_term = 0.0
-        if comp_activation_coef != 0.0:
-            comp_action_mag = torch.norm(torque_actions, dim=1)
-            comp_activation_term = comp_activation_coef * comp_action_mag * window_mask_float
 
-        if window_mask.any():
-            comp_scale = reward_cfg.get("comp_window_penalty_scale", 0.5)
-            vel_scale = reward_cfg.get("vel_window_penalty_scale", 0.5)
-            smooth_scale = reward_cfg.get("smooth_window_penalty_scale", 0.7)
-            comp_penalty = comp_penalty * (1.0 - window_mask_float + comp_scale * window_mask_float)
-            thrust_penalty = thrust_penalty * (1.0 - window_mask_float + comp_scale * window_mask_float)
-            velocity_penalty = velocity_penalty * (1.0 - window_mask_float + vel_scale * window_mask_float)
-            ang_penalty = ang_penalty * (1.0 - window_mask_float + vel_scale * window_mask_float)
-            smooth_penalty = smooth_penalty * (1.0 - window_mask_float + smooth_scale * window_mask_float)
 
         raw_components = {
             "attitude": _mean_detached(attitude_term),
             "position": _mean_detached(pos_penalty),
             "z_position": _mean_detached(z_penalty),
-            "yaw": _mean_detached(yaw_penalty),
+
             "velocity": _mean_detached(velocity_penalty),
             "angular_velocity": _mean_detached(ang_penalty),
             "smooth": _mean_detached(smooth_penalty),
-            "comp_torque": _mean_detached(comp_penalty),
-            "comp_thrust": _mean_detached(thrust_penalty),
-            "comp_activation": _mean_detached(comp_activation_term),
-            "stability": _mean_detached(stability_term),
-            "tilt_warn": _mean_detached(tilt_penalty),
-            "height_warn": _mean_detached(height_penalty),
-            "release_tilt": _mean_detached(release_penalty),
-            "hover_bonus": _mean_detached(hover_term),
-            "delta_error_bonus": _mean_detached(
-                torch.clamp_min(delta, 0.0) * bonus_coef * window_mask.float()
-            ),
+
+
+
+
             "acceleration": _mean_detached(accel_penalty),
         }
         # 过滤掉恒为零的条目，避免空白 TB 图
@@ -1402,21 +1215,17 @@ class PayloadCompensationTask(BaseTask):
 
         return reward_window_mask_float * (
             attitude_term
-            + comp_penalty
-            + thrust_penalty
+
             + accel_penalty
             + velocity_penalty
             + ang_penalty
             + smooth_penalty
-            + tilt_penalty
-            + height_penalty
-            + release_penalty
-            + stability_term
-            + hover_term
+
+
             + pos_penalty
             + z_penalty
-            + yaw_penalty
-            + comp_activation_term
+
+
         )
 
     def _get_tb_log_dir(self) -> str:
@@ -1484,6 +1293,21 @@ class PayloadCompensationTask(BaseTask):
         # 上一时刻动作 (3维: thrust, roll, pitch)
         self.task_obs["observations"][:, 17:20] = self.prev_actions
 
+        # [Masking] Zero out Basic components based on config
+        obs_params = self.task_config.observation_parameters
+        obs_tensor = self.task_obs["observations"]
+        
+        if not obs_params.get("include_base_rot", True):
+            obs_tensor[:, 0:9] = 0.0
+        if not obs_params.get("include_base_angvel", True):
+            obs_tensor[:, 9:12] = 0.0
+        if not obs_params.get("include_base_attached", True):
+            obs_tensor[:, 12:16] = 0.0
+        if not obs_params.get("include_base_warning", True):
+            obs_tensor[:, 16] = 0.0
+        if not obs_params.get("include_base_prev_action", True):
+            obs_tensor[:, 17:20] = 0.0
+
         self._apply_observation_noise()
 
         if not self.teacher_mode:
@@ -1506,6 +1330,16 @@ class PayloadCompensationTask(BaseTask):
             # 归一化：除以典型惯量值
             typical_inertia = 0.001  # kg·m²
             priv_vec[:, 4:7] = true_inertia_diag / typical_inertia
+
+            # [Masking] Zero out components based on config
+            obs_params = self.task_config.observation_parameters
+            if not obs_params.get("include_priv_mass", True):
+                priv_vec[:, 0] = 0.0
+            if not obs_params.get("include_priv_com", True):
+                priv_vec[:, 1:4] = 0.0
+            if not obs_params.get("include_priv_inertia", True):
+                priv_vec[:, 4:7] = 0.0
+
             self.task_obs["privileged_obs"] = priv_vec
 
         self.task_obs["rewards"] = self.rewards
@@ -1840,23 +1674,9 @@ def compute_reward(
     crashes[:] = torch.where(tilt_angle > crash_tilt_threshold_rad, torch.ones_like(crashes), crashes)
 
     # 远离目标方向的速度惩罚：速度在 pos_error 方向上的正投影
-    vel_away_coef = float(parameter_dict.get("vel_away_penalty_coef", 0.0))
-    if vel_away_coef != 0.0:
-        dir_vec = torch.zeros_like(pos_error)
-        nonzero = dist > 1e-6
-        dir_vec[nonzero] = pos_error[nonzero] / dist[nonzero].unsqueeze(1)
-        v_away = torch.sum(lin_vels * dir_vec, dim=1)
-        v_away = torch.clamp(v_away, min=0.0)
-        total_reward -= vel_away_coef * v_away
 
-    tilt_excess_coef = float(parameter_dict.get("tilt_excess_coef", 0.0))
-    tilt_excess_exp = float(parameter_dict.get("tilt_excess_exp", 0.0))
-    tilt_excess_threshold = float(parameter_dict.get("tilt_excess_threshold_deg", 0.0))
-    if tilt_excess_coef != 0.0 and tilt_excess_exp > 0.0 and tilt_excess_threshold > 0.0:
-        threshold_rad = np.deg2rad(tilt_excess_threshold)
-        excess = torch.clamp(tilt_angle - threshold_rad, min=0.0)
-        if torch.any(excess > 0):
-            total_reward -= tilt_excess_coef * (torch.exp(tilt_excess_exp * excess) - 1.0)
+
+
     total_reward[:] = torch.where(
         crashes > 0.0, parameter_dict["crash_penalty"] * torch.ones_like(total_reward), total_reward
     )
