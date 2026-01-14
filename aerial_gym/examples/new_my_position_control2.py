@@ -19,7 +19,7 @@ import torch
 
 DEFAULT_ENV_NAME = "payload_compensation_task_teacher"
 DEFAULT_CONFIG = "aerial_gym/rl_training/rl_games/ppo_aerial_quad_aux.yaml"
-DEFAULT_CKPT = "runs/teacher_aux_fixed_imitation_14-14-49-27/nn/last_teacher_aux_fixed_imitation_ep_20_rew_14534.06.pth"
+DEFAULT_CKPT = "runs/teacher_aux_fixed_imitation_14-15-24-16/nn/last_teacher_aux_fixed_imitation_ep_71_rew_13613.92.pth"
 plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "Arial Unicode MS", "Noto Sans CJK SC"]
 plt.rcParams["axes.unicode_minus"] = False
 

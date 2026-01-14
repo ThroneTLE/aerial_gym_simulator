@@ -74,7 +74,7 @@ params:
     bc_min_coef: 0.5
     # 分离推力和扭矩的BC权重 (如果设置，覆盖 bc_coef)
     bc_coef_thrust: 1000.0   # 推力补偿BC权重
-    bc_coef_torque: 100.0  # 扭矩补偿BC权重
+    bc_coef_torque: 500.0  # 扭矩补偿BC权重
     
     # PINN 物理损失配置
     use_pinn_loss: True
