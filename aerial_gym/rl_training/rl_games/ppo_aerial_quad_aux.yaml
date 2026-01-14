@@ -26,7 +26,7 @@ params:
         sigma_init:
           name: const_initializer  # logstd 初始化方式
           val: -10.0  # 初始 logstd 常数（log 标度；-2 ≈ std 0.135）
-        fixed_sigma: True  # 启用可学习 logstd
+        fixed_sigma: False  # 启用可学习 logstd
         min_logstd: -10.0  # clamp 下限（约 std 0.018），防止过度收紧
         max_logstd: -6.0   # clamp 上限（约 std 2.72），防止噪声无上限飙升
     mlp:
