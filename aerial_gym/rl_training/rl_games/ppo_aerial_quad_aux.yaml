@@ -16,7 +16,7 @@ params:
     privileged_hidden: 128  # 编码器隐层宽度
     aux_target_dim: 5  # 辅助损失目标维度: [mass, com_x, com_y, com_z, released_mass]
     aux_loss_weight: 1.0  # 辅助损失权重（网络内部）
-    use_oracle_mode: True  # True=输入真实特权值(Teacher)，False=输入aux decoder预测值(Student)
+    use_oracle_mode: False  # True=输入真实特权值(Teacher)，False=输入aux decoder预测值(Student)
     space:
       continuous:
         mu_activation: None  # 动作均值激活（None=线性输出，利于外部限幅）
@@ -25,8 +25,8 @@ params:
           name: default  # 均值初始化方式（rl-games 内置）
         sigma_init:
           name: const_initializer  # logstd 初始化方式
-          val: -100.0  # 初始 logstd 常数（log 标度；-2 ≈ std 0.135）
-        fixed_sigma: False  # 启用可学习 logstd
+          val: -10.0  # 初始 logstd 常数（log 标度；-2 ≈ std 0.135）
+        fixed_sigma: True  # 启用可学习 logstd
         min_logstd: -10.0  # clamp 下限（约 std 0.018），防止过度收紧
         max_logstd: -6.0   # clamp 上限（约 std 2.72），防止噪声无上限飙升
     mlp:
@@ -58,9 +58,9 @@ params:
     save_frequency: 1  # 每隔多少个 epoch 额外保存一次 checkpoint，便于事后挑选最小 imitation/err
     score_to_win: 100000000  # 达到该分数视为"成功"停止条件
     grad_norm: 0.5  # 全局梯度裁剪范数上限（从1.0降低到0.5，更严格防止梯度爆炸）
-    entropy_coef: 0.2000  # 熵系数（鼓励探索，防止过早收敛；过大动作噪声重，过小易收敛到尖锐策略）
+    entropy_coef: 0.00  # 熵系数（鼓励探索，防止过早收敛；过大动作噪声重，过小易收敛到尖锐策略）
     truncate_grads: True  # 是否截断梯度（RNN 训练时常开，避免反向过长）
-    e_clip: 0.0  # PPO 裁剪范围（从0.2降低到0.15，更保守的策略更新，提升稳定性）
+    e_clip: 0.200  # PPO 裁剪范围（从0.2降低到0.15，更保守的策略更新，提升稳定性）
     clip_value: True  # 是否对 value 也做裁剪 - 启用防止 value 爆炸
     num_actors: 2048  # 参与采样的环境/actor 数
     horizon_length: 256  # 每个 actor 收集的 rollout 长度 - 从 32 增加到 256
@@ -69,15 +69,15 @@ params:
     # 扰动样本优势加权（权重=1+coef*mask，mask 来自 infos['is_disturbance']）
     disturbance_adv_weight: 0.0
     # BC/DAgger 模仿损失系数（从 bc_coef 衰减到 bc_min_coef，乘 bc_alpha）
-    bc_coef: 1.0
-    bc_alpha: 1.0
-    bc_min_coef: 0.01
+    bc_coef: 50.0
+    bc_alpha: 0.999
+    bc_min_coef: 0.5
     
     # PINN 物理损失配置
     use_pinn_loss: True
-    pinn_coef: 1.0  # 物理损失权重 (独立于 BC loss)
+    pinn_coef: 00.0  # 物理损失权重 (独立于 BC loss)
     critic_coef: 0.5  # 价值损失权重（相对策略损失；大则稳定优势但可能拖慢策略更新）
-    normalize_input: False  # base obs 用 running_mean_std；privileged_obs 用固定归一化（见 AERIAL_FIXED_OBS_NORM）
+    normalize_input: True  # base obs 用 running_mean_std；privileged_obs 用固定归一化（见 AERIAL_FIXED_OBS_NORM）
     bounds_loss_coef: 0.000  # 动作越界惩罚系数（动作超出 [-1,1] 时的惩罚强度）
     max_epochs: 16000  # 最大训练 epoch 数（训练上限）
     normalize_value: True  # 对 value 做 running_mean_std 归一化（减小价值尺度漂移）
@@ -86,13 +86,13 @@ params:
     use_smooth_clamp: False  # 是否对 value 误差做平滑截断（防止 value_loss 尖峰）
     
     # 辅助损失系数（在 A2CAgentWithAuxLoss 中使用）
-    aux_loss_coef: 1.0  # 辅助损失权重
+    aux_loss_coef: 5.0  # 辅助损失权重
     
     # PINN (Physics-Informed) Loss: 强制策略输出符合物理公式
     # PINN 与 BC 共享 bc_coef 权重
     use_pinn_loss: True  # 启用 PINN 损失
-    pinn_thrust_limit: 2.5  # 匹配 controller_config (2.5 N)
-    pinn_torque_limits: [0.4, 0.4]  # 匹配 controller_config [roll, pitch] (0.4, 0.4 N·m)
+    pinn_thrust_limit: 2.0  # 匹配 controller_config (2.0 N)
+    pinn_torque_limits: [1.0, 1.0]  # 匹配 controller_config [roll, pitch] (1.0, 1.0 N·m)
     
     # === NaN Prevention & Numerical Stability ===
     # 奖励裁剪范围（已禁用 - 设为极大值以允许奖励自然增长）

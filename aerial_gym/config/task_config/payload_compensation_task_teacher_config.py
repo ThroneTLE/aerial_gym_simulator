@@ -88,20 +88,20 @@ class task_config:
         # 物理感知模仿奖励 - 考虑质量和惯量的误差惩罚
         # 将动作误差转换为实际物理效应（加速度/角加速度）
         # 物理自然决定重要性：力矩误差 / 小惯量 >> 推力误差 / 大质量
-        "physics_imitation_weight": 1.0,  # 总权重系数 (建议 0.01~0.1，因为角加速度量级大)
+        "physics_imitation_weight": 0.0,  # 总权重系数 (建议 0.01~0.1，因为角加速度量级大)
         # 存活奖励 - xadapt: 10
-        "survive_bonus": 0.0,
+        "survive_bonus": 10.0,
     }
 
-    crash_distance_threshold = 5.0
+    crash_distance_threshold = 1.0
     crash_tilt_threshold_deg = 20.0
 
     # 补偿限制（物理量级）
     # 最大总载荷 = 4 × max_mass = 4 × 0.04 = 0.16 kg
     # thrust = 0.16 × 9.81 = 1.57 N → 留余量设为 2.0
     # torque = 0.16 × 9.81 × 0.4 = 0.628 N·m → 设为 1.0
-    compensation_thrust_limit = 2.5  # N，匹配 controller config
-    compensation_torque_limits = [0.4, 0.4, 0.0]  # [roll, pitch, yaw] N·m，匹配 controller config
+    compensation_thrust_limit = 2.0  # N，匹配 controller config (覆盖4个载荷总重)
+    compensation_torque_limits = [1.0, 1.0, 0.2]  # [roll, pitch, yaw] N·m，匹配 controller config
 
     payload_parameters = {
         "payload_mass": 0.02,
@@ -124,7 +124,7 @@ class task_config:
         "release_start_range": [50, 100],
         "release_interval_range": [300, 350],
         "warning_steps": 0,
-        "randomize_release":   False,  # 初始验证先固定
+        "randomize_release":   True,  # 初始验证先固定
         "log_release_events": False,
     }
 
