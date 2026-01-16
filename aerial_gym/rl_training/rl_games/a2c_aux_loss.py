@@ -115,6 +115,42 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
         decayed = self.bc_coef * (self.bc_alpha ** self._bc_update_count)
         return max(self.bc_min_coef, decayed)
     
+    def get_action_values(self, obs):
+        """
+        Override to pass privileged_obs to the network during rollout.
+        
+        原问题：rl-games 默认只传 obs['obs']，导致 rollout 时策略拿不到 privileged_obs，
+        但 training 更新时有 privileged_obs，造成 on-policy mismatch。
+        
+        修复：显式把 privileged_obs 加入 input_dict，让网络在采样时也能用到。
+        """
+        # 预处理 base obs（与父类保持一致）
+        processed_obs = self._preproc_obs(obs['obs'])
+        
+        self.model.eval()
+        
+        # 构建 input_dict，关键是加入 privileged_obs
+        input_dict = {
+            'is_train': False,
+            'prev_actions': None, 
+            'obs': processed_obs,
+            'rnn_states': self.rnn_states,
+            # ====== 关键修复：传递 privileged_obs ======
+            'privileged_obs': obs.get('privileged_obs', None),
+        }
+        
+        with torch.no_grad():
+            res_dict = self.model(input_dict)
+            if self.has_central_value:
+                states = obs['states']
+                central_input = {
+                    'is_train': False,
+                    'states': states,
+                }
+                value = self.get_central_value(central_input)
+                res_dict['values'] = value
+        
+        return res_dict
 
     
     def play_steps(self):
@@ -356,6 +392,12 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
             
             # === AUXILIARY LOSS ===
             aux_loss = torch.zeros(1, device=self.ppo_device)
+            if hasattr(self.model, 'a2c_network'):
+                if hasattr(self.model.a2c_network, 'get_aux_loss'):
+                    aux_loss = self.model.a2c_network.get_aux_loss()
+            elif hasattr(self.model, 'network'):
+                 if hasattr(self.model.network, 'get_aux_loss'):
+                    aux_loss = self.model.network.get_aux_loss()
             # ======================
             
             # === BC LOSS (with optional physics weighting) ===
@@ -451,7 +493,7 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
             bounds_coef = self.bounds_loss_coef if self.bounds_loss_coef is not None else 0.0
             current_bc_coef = self._get_current_bc_coef()
             
-            loss = a_loss + 0.5 * c_loss * self.critic_coef - entropy * self.entropy_coef + b_loss * bounds_coef
+            loss = a_loss + 0.5 * c_loss * self.critic_coef - entropy * self.entropy_coef + b_loss * bounds_coef + aux_loss
             
             # BC loss: 支持分离推力/扭矩权重
             if self.bc_coef_thrust is not None or self.bc_coef_torque is not None:
@@ -471,7 +513,28 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
                 for param in self.model.parameters():
                     param.grad = None
 
+        # ====== 保存各 loss 组件用于梯度分析 ======
+        # (必须在 backward 前保存，因为 backward 后计算图被释放)
+        self._loss_components = {
+            'ppo_actor': a_loss.detach().clone(),
+            'ppo_critic': (0.5 * c_loss * self.critic_coef).detach().clone(),
+            'entropy': (-entropy * self.entropy_coef).detach().clone(),
+            'aux': aux_loss.detach().clone() if torch.is_tensor(aux_loss) else torch.tensor(0.0),
+            'bc_thrust': (bc_loss_thrust * (self.bc_coef_thrust or current_bc_coef)).detach().clone() if torch.is_tensor(bc_loss_thrust) else torch.tensor(0.0),
+            'bc_torque': (bc_loss_torque * (self.bc_coef_torque or current_bc_coef)).detach().clone() if torch.is_tensor(bc_loss_torque) else torch.tensor(0.0),
+        }
+
         self.scaler.scale(loss).backward()
+        
+        # ========================================
+        # 梯度贡献监控：在 backward 后计算各参数的梯度范数
+        # ========================================
+        # 每N个epoch进行一次梯度分析（避免每步都做，影响性能）
+        analyze_gradient = (self.epoch_num % 5 == 0)  # 每5个epoch分析一次
+        
+        if analyze_gradient and hasattr(self, 'writer') and self.writer is not None:
+            self._log_gradient_norms()
+            self._log_loss_contributions()
         
         # NaN Prevention: Check gradients before optimizer step
         grad_finite = self._check_and_handle_nan_gradients()
@@ -526,8 +589,6 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
                 self.writer.add_scalar('losses/aux_loss', self._aux_loss, self.epoch_num)
             if hasattr(self, '_bc_loss'):
                 self.writer.add_scalar('losses/bc_loss', self._bc_loss, self.epoch_num)
-                if self.use_pinn_loss:
-                    self.writer.add_scalar('losses/pinn_loss', self._pinn_loss, self.epoch_num)
             # 分别记录推力和扭矩的BC loss，便于分析拟合问题
             if hasattr(self, '_bc_loss_thrust'):
                 self.writer.add_scalar('losses/bc_loss_thrust', self._bc_loss_thrust, self.epoch_num)
@@ -535,6 +596,7 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
                 self.writer.add_scalar('losses/bc_loss_torque', self._bc_loss_torque, self.epoch_num)
             if hasattr(self, '_current_bc_coef'):
                 self.writer.add_scalar('losses/bc_coef', self._current_bc_coef, self.epoch_num)
+        
         
         return result
     
@@ -583,3 +645,89 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
             if self.nan_skip_count > 0:
                 self.nan_skip_count = 0
             return True
+    
+    def _log_gradient_norms(self):
+        """
+        直接从 backward 后的梯度统计各模块的梯度范数。
+        
+        按网络组件分组记录梯度范数，帮助分析各损失对训练的影响。
+        """
+        grad_stats = {
+            'actor': 0.0,      # actor MLP 层
+            'critic': 0.0,     # critic/value 层
+            'encoder': 0.0,    # 特权编码器
+            'decoder': 0.0,    # aux decoder
+            'other': 0.0,      # 其他层
+            'total': 0.0,      # 总梯度范数
+        }
+        
+        # 统计各模块的梯度
+        for name, param in self.model.named_parameters():
+            if param.grad is None:
+                continue
+            
+            grad_norm = param.grad.norm(2).item() ** 2
+            grad_stats['total'] += grad_norm
+            
+            # 按名称分类
+            name_lower = name.lower()
+            if 'priv_encoder' in name_lower or 'encoder' in name_lower:
+                grad_stats['encoder'] += grad_norm
+            elif 'aux_decoder' in name_lower or 'decoder' in name_lower:
+                grad_stats['decoder'] += grad_norm
+            elif 'value' in name_lower or 'critic' in name_lower:
+                grad_stats['critic'] += grad_norm
+            elif 'actor' in name_lower or 'mu' in name_lower or 'sigma' in name_lower:
+                grad_stats['actor'] += grad_norm
+            else:
+                grad_stats['other'] += grad_norm
+        
+        # 转换为 L2 范数
+        for key in grad_stats:
+            grad_stats[key] = grad_stats[key] ** 0.5
+        
+        # 记录到 TensorBoard
+        for key, value in grad_stats.items():
+            self.writer.add_scalar(f'gradient_norms/{key}', value, self.epoch_num)
+        
+        # 计算并记录相对贡献比例
+        total = grad_stats['total'] + 1e-8
+        for key in ['actor', 'critic', 'encoder', 'decoder']:
+            pct = (grad_stats[key] / total) * 100
+            self.writer.add_scalar(f'gradient_pct/{key}', pct, self.epoch_num)
+
+    def _log_loss_contributions(self):
+        """
+        记录各 Loss 组件的数值和相对贡献到 TensorBoard。
+        
+        这样可以直观看到 BC、PPO、Aux 各自对总 loss 的贡献程度。
+        """
+        if not hasattr(self, '_loss_components') or self._loss_components is None:
+            return
+        
+        components = self._loss_components
+        
+        # 记录各 loss 的绝对值
+        for name, value in components.items():
+            if torch.is_tensor(value):
+                self.writer.add_scalar(f'loss_components/{name}', value.item(), self.epoch_num)
+        
+        # 计算总 loss 绝对值（用于计算比例）
+        total_loss = sum(v.abs().item() if torch.is_tensor(v) else 0 for v in components.values())
+        
+        if total_loss > 1e-8:
+            # 记录各 loss 的相对贡献（百分比）
+            for name, value in components.items():
+                if torch.is_tensor(value):
+                    pct = (value.abs().item() / total_loss) * 100
+                    self.writer.add_scalar(f'loss_contribution_pct/{name}', pct, self.epoch_num)
+        
+        # BC 总贡献 = thrust + torque
+        bc_total_pct = 0
+        if 'bc_thrust' in components and 'bc_torque' in components:
+            bc_thrust_val = components['bc_thrust'].abs().item() if torch.is_tensor(components['bc_thrust']) else 0
+            bc_torque_val = components['bc_torque'].abs().item() if torch.is_tensor(components['bc_torque']) else 0
+            bc_total = bc_thrust_val + bc_torque_val
+            if total_loss > 1e-8:
+                bc_total_pct = (bc_total / total_loss) * 100
+                self.writer.add_scalar(f'loss_contribution_pct/bc_total', bc_total_pct, self.epoch_num)

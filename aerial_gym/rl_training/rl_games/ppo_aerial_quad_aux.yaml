@@ -14,9 +14,9 @@ params:
     privileged_dim: 7  # 特权向量长度
     privileged_embed: 8  # 编码后维度
     privileged_hidden: 128  # 编码器隐层宽度
-    aux_loss_coef: 1.0  # 辅助损失系数（重构损失）
+    aux_loss_coef: 100.0  # 辅助损失系数（可以设大一些，因为梯度被 aux_grad_scale 缩放了）
+    aux_grad_scale: 0.05  # aux_loss 梯度回传到 encoder 的比例（0=完全detach, 0.01=1%回传推荐, 1.0=完全回传可能不稳定）
 
-    use_oracle_mode: False  # True=输入真实特权值(Teacher)，False=输入aux decoder预测值(Student)
     space:
       continuous:
         mu_activation: None  # 动作均值激活（None=线性输出，利于外部限幅）
@@ -26,7 +26,7 @@ params:
         sigma_init:
           name: const_initializer  # logstd 初始化方式
           val: -10.0  # 初始 logstd 常数（log 标度；-2 ≈ std 0.135）
-        fixed_sigma: False  # 启用可学习 logstd
+        fixed_sigma: True  # 启用可学习 logstd
         min_logstd: -10.0  # clamp 下限（约 std 0.018），防止过度收紧
         max_logstd: -3.0   # clamp 上限（约 std 2.72），防止噪声无上限飙升
     mlp:
@@ -57,7 +57,7 @@ params:
     save_best_after: 1  # 从第 N 个 epoch 后开始记录最佳
     save_frequency: 1  # 每隔多少个 epoch 额外保存一次 checkpoint，便于事后挑选最小 imitation/err
     score_to_win: 100000000  # 达到该分数视为"成功"停止条件
-    grad_norm: 0.5  # 全局梯度裁剪范数上限（从1.0降低到0.5，更严格防止梯度爆炸）
+    grad_norm: 1.0  # 全局梯度裁剪范数上限（从1.0降低到0.5，更严格防止梯度爆炸）
     entropy_coef: 0.00  # 熵系数（鼓励探索，防止过早收敛；过大动作噪声重，过小易收敛到尖锐策略）
     truncate_grads: True  # 是否截断梯度（RNN 训练时常开，避免反向过长）
     e_clip: 0.200  # PPO 裁剪范围（从0.2降低到0.15，更保守的策略更新，提升稳定性）
@@ -70,7 +70,7 @@ params:
     disturbance_adv_weight: 0.0
     # BC/DAgger 模仿损失系数（从 bc_coef 衰减到 bc_min_coef，乘 bc_alpha）
     bc_coef: 10.0
-    bc_alpha: 0.99
+    bc_alpha: 0.999
     bc_min_coef: 0.5
     # 分离推力和扭矩的BC权重 (如果设置，覆盖 bc_coef)
     bc_coef_thrust: 1000.0   # 推力补偿BC权重

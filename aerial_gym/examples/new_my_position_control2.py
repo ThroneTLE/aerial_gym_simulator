@@ -19,7 +19,7 @@ import torch
 
 DEFAULT_ENV_NAME = "payload_compensation_task_teacher"
 DEFAULT_CONFIG = "aerial_gym/rl_training/rl_games/ppo_aerial_quad_aux.yaml"
-DEFAULT_CKPT = "runs/teacher_aux_fixed_imitation_14-19-16-50/nn/last_teacher_aux_fixed_imitation_ep_34_rew_13236.196.pth"
+DEFAULT_CKPT = "runs/teacher_aux_fixed_imitation_16-20-33-12/nn/last_teacher_aux_fixed_imitation_ep_70_rew_15007.915.pth"
 plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "Arial Unicode MS", "Noto Sans CJK SC"]
 plt.rcParams["axes.unicode_minus"] = False
 
@@ -210,6 +210,204 @@ def _add_axis_sliders(fig, axes):
     slider_x.on_changed(_apply_scale)
     slider_y.on_changed(_apply_scale)
     return slider_x, slider_y
+
+
+def plot_multi_env_results(
+    all_z_history: List[np.ndarray],
+    all_euler_history: List[np.ndarray],
+    all_policy_actions: List[np.ndarray],
+    all_teacher_actions: Optional[List[np.ndarray]] = None,
+    release_history: Optional[List[Tuple[int, int]]] = None,
+    save_path: Optional[str] = None,
+):
+    """
+    绘制多环境的平均值曲线（带标准差阴影）。
+    
+    Args:
+        all_z_history: List of [num_envs] arrays, one per step
+        all_euler_history: List of [num_envs, 3] arrays
+        all_policy_actions: List of [num_envs, action_dim] arrays
+        all_teacher_actions: Optional list of [num_envs, action_dim] arrays
+        release_history: List of (step, payload_idx) tuples (from env_id=0)
+        save_path: Optional path to save figures
+    """
+    if not all_z_history:
+        return
+    
+    release_history = release_history or []
+    num_steps = len(all_z_history)
+    steps = np.arange(num_steps)
+    
+    # Stack to [steps, num_envs, ...]
+    z_arr = np.stack(all_z_history, axis=0)  # [steps, num_envs]
+    euler_arr = np.stack(all_euler_history, axis=0)  # [steps, num_envs, 3]
+    action_arr = np.stack(all_policy_actions, axis=0)  # [steps, num_envs, action_dim]
+    
+    # 计算平均值和标准差
+    z_mean = z_arr.mean(axis=1)
+    z_std = z_arr.std(axis=1)
+    
+    # ====== 修复角度统计问题 ======
+    # 问题：不同环境的初始朝向不同，直接平均没有意义
+    # 解决：统计相对于初始角度的变化量 (delta)
+    euler_initial = euler_arr[0:1, :, :]  # [1, num_envs, 3] 第0步的角度
+    euler_delta = euler_arr - euler_initial  # [steps, num_envs, 3] 相对变化
+    
+    # 对 delta 进行 unwrap（处理 ±π 跳变）
+    euler_delta_unwrapped = np.zeros_like(euler_delta)
+    for env_idx in range(euler_delta.shape[1]):
+        for angle_idx in range(3):
+            euler_delta_unwrapped[:, env_idx, angle_idx] = np.unwrap(euler_delta[:, env_idx, angle_idx])
+    
+    # 现在可以安全地计算平均变化和标准差
+    euler_delta_mean = euler_delta_unwrapped.mean(axis=1)  # [steps, 3]
+    euler_delta_std = euler_delta_unwrapped.std(axis=1)
+    
+    action_mean = action_arr.mean(axis=1)  # [steps, action_dim]
+    action_std = action_arr.std(axis=1)
+    
+    # Convert euler delta to degrees
+    euler_delta_mean_deg = np.rad2deg(euler_delta_mean)
+    euler_delta_std_deg = np.rad2deg(euler_delta_std)
+    
+    num_envs = z_arr.shape[1]
+    
+    # ====== 图1: Z轴高度 + 姿态角 ======
+    fig, (ax_z, ax_euler) = plt.subplots(2, 1, figsize=(12, 8))
+    fig.suptitle(f"多环境平均值 (N={num_envs})", fontsize=14, fontweight='bold')
+    
+    # Z轴高度：平均值 + 标准差阴影
+    ax_z.plot(steps, z_mean, label=f"Z 高度 (平均)", color='C0', linewidth=2)
+    ax_z.fill_between(steps, z_mean - z_std, z_mean + z_std, alpha=0.3, color='C0', label="±1σ")
+    ax_z.set_xlabel("步数")
+    ax_z.set_ylabel("Z 轴高度 (米)")
+    ax_z.set_title("无人机 Z 轴位置 (多环境平均)")
+    ax_z.grid(True, alpha=0.3)
+    ax_z.legend()
+    
+    # 标注释放点（来自 env_id=0）
+    for release_step, payload_idx in release_history:
+        ax_z.axvline(release_step, color='r', linestyle='--', alpha=0.6)
+    
+    # 姿态角变化：Roll, Pitch, Yaw (相对于初始值的变化量)
+    colors = ['C1', 'C2', 'C3']
+    labels = ['ΔRoll', 'ΔPitch', 'ΔYaw']
+    for i, (color, label) in enumerate(zip(colors, labels)):
+        ax_euler.plot(steps, euler_delta_mean_deg[:, i], label=f"{label} (°)", color=color, linewidth=1.5)
+        ax_euler.fill_between(
+            steps, 
+            euler_delta_mean_deg[:, i] - euler_delta_std_deg[:, i],
+            euler_delta_mean_deg[:, i] + euler_delta_std_deg[:, i],
+            alpha=0.2, color=color
+        )
+    ax_euler.set_xlabel("步数")
+    ax_euler.set_ylabel("角度变化 (°)")
+    ax_euler.set_title("无人机姿态角变化量 (多环境平均, 相对初始值)")
+    ax_euler.grid(True, alpha=0.3)
+    ax_euler.legend()
+    ax_euler.axhline(0, color='gray', linestyle=':', alpha=0.5)
+    
+    for release_step, _ in release_history:
+        ax_euler.axvline(release_step, color='r', linestyle='--', alpha=0.6)
+    
+    fig.tight_layout()
+    
+    # ====== 图2: 动作对比 (策略 vs 教师) ======
+    action_dim = action_mean.shape[1]
+    has_teacher = all_teacher_actions is not None and len(all_teacher_actions) == num_steps
+    
+    if has_teacher:
+        teacher_arr = np.stack(all_teacher_actions, axis=0)  # [steps, num_envs, action_dim]
+        teacher_mean = teacher_arr.mean(axis=1)
+        teacher_std = teacher_arr.std(axis=1)
+        
+        # 计算模仿误差：|policy - teacher|
+        imitation_error = np.abs(action_arr - teacher_arr)  # [steps, num_envs, action_dim]
+        imitation_error_mean = imitation_error.mean(axis=1)  # [steps, action_dim]
+        imitation_error_std = imitation_error.std(axis=1)
+        
+        # 计算每个 step 的相关性 R² (衡量 policy 跟随 teacher 的程度)
+        correlation_per_step = np.zeros((num_steps, action_dim))
+        for t in range(num_steps):
+            for d in range(action_dim):
+                p = action_arr[t, :, d]
+                te = teacher_arr[t, :, d]
+                if np.std(te) > 1e-6:  # 避免除零
+                    corr = np.corrcoef(p, te)[0, 1]
+                    correlation_per_step[t, d] = corr ** 2  # R²
+                else:
+                    correlation_per_step[t, d] = 1.0  # teacher 无变化时认为完美跟随
+    
+    # ====== 图2a: 模仿误差分布 ======
+    fig_act, axes = plt.subplots(action_dim, 1, figsize=(12, max(6, 2.5 * action_dim)), sharex=True)
+    if action_dim == 1:
+        axes = [axes]
+    
+    fig_act.suptitle(f"模仿误差 |Policy - Teacher| (多环境, N={num_envs})", fontsize=14, fontweight='bold')
+    
+    action_labels = ['Thrust 误差'] + [f'Torque {i} 误差' for i in range(1, action_dim)]
+    
+    for i, ax in enumerate(axes):
+        if has_teacher:
+            ax.plot(steps, imitation_error_mean[:, i], label='平均误差', color='C3', linewidth=1.5)
+            ax.fill_between(
+                steps,
+                imitation_error_mean[:, i] - imitation_error_std[:, i],
+                imitation_error_mean[:, i] + imitation_error_std[:, i],
+                alpha=0.3, color='C3'
+            )
+            # 添加整体平均误差文本
+            overall_mae = imitation_error_mean[:, i].mean()
+            ax.axhline(overall_mae, color='C3', linestyle='--', alpha=0.5)
+            ax.text(num_steps * 0.02, overall_mae * 1.1, f'MAE={overall_mae:.4f}', fontsize=9, color='C3')
+        else:
+            ax.text(0.5, 0.5, 'No Teacher Data', transform=ax.transAxes, ha='center', va='center')
+        
+        ax.set_ylabel(action_labels[i])
+        ax.grid(True, alpha=0.3)
+        ax.legend(loc='upper right')
+        
+        for release_step, _ in release_history:
+            ax.axvline(release_step, color='r', linestyle=':', alpha=0.4)
+    
+    axes[-1].set_xlabel("步数")
+    fig_act.tight_layout()
+    
+    # ====== 图2b: 相关性 R² 随时间变化 ======
+    if has_teacher:
+        fig_corr, ax_corr = plt.subplots(1, 1, figsize=(12, 4))
+        fig_corr.suptitle(f"Policy-Teacher 相关性 R² (多环境, N={num_envs})", fontsize=14, fontweight='bold')
+        
+        corr_labels = ['Thrust', 'Torque 1', 'Torque 2'][:action_dim]
+        colors = ['C0', 'C1', 'C2']
+        for i in range(action_dim):
+            ax_corr.plot(steps, correlation_per_step[:, i], label=f'{corr_labels[i]} R²', 
+                        color=colors[i], linewidth=1.5, alpha=0.8)
+            # 显示平均 R²
+            avg_r2 = correlation_per_step[:, i].mean()
+            ax_corr.axhline(avg_r2, color=colors[i], linestyle=':', alpha=0.3)
+        
+        ax_corr.set_xlabel("步数")
+        ax_corr.set_ylabel("R² (相关性)")
+        ax_corr.set_ylim(-0.1, 1.1)
+        ax_corr.axhline(1.0, color='gray', linestyle='--', alpha=0.3)
+        ax_corr.axhline(0.0, color='gray', linestyle='--', alpha=0.3)
+        ax_corr.grid(True, alpha=0.3)
+        ax_corr.legend(loc='lower right')
+        
+        for release_step, _ in release_history:
+            ax_corr.axvline(release_step, color='r', linestyle=':', alpha=0.4)
+        
+        fig_corr.tight_layout()
+    
+    # ====== 保存图像 ======
+    if save_path:
+        base_path = os.path.splitext(save_path)[0]
+        fig.savefig(f"{base_path}_multi_env_state.png", dpi=150, bbox_inches="tight")
+        fig_act.savefig(f"{base_path}_multi_env_imitation_error.png", dpi=150, bbox_inches="tight")
+        if has_teacher:
+            fig_corr.savefig(f"{base_path}_multi_env_correlation.png", dpi=150, bbox_inches="tight")
+        print(f"[多环境图] 已保存到 {base_path}_multi_env_*.png")
 
 
 def plot_results(
@@ -632,6 +830,16 @@ def main() -> None:
 
     task.reset()
     rnn_states = _to_device(model.get_default_rnn_state(), device)
+    
+    # ====== 多环境数据收集（用于计算平均值和标准差） ======
+    # 每个 list 的元素是一个 step 的所有环境数据 [num_envs, ...]
+    all_z_history: List[np.ndarray] = []        # [num_envs]
+    all_euler_history: List[np.ndarray] = []    # [num_envs, 3]
+    all_pos_history: List[np.ndarray] = []      # [num_envs, 3]
+    all_policy_actions: List[np.ndarray] = []   # [num_envs, action_dim]
+    all_teacher_actions: List[np.ndarray] = []  # [num_envs, action_dim]
+    
+    # 单环境历史（保留向后兼容性）
     z_history: List[float] = []
     euler_history: List[np.ndarray] = []
     pos_history: List[np.ndarray] = []
@@ -640,6 +848,7 @@ def main() -> None:
     policy_actions: List[np.ndarray] = []
     teacher_actions: List[np.ndarray] = []
     obs_history: List[np.ndarray] = []  # Record full observation vector
+    
     early_enabled = bool(args.early_plot)
     episode_len_limit = int(getattr(task.task_config, "episode_len_steps", args.steps)) + 1
     episode_steps = torch.zeros(task.sim_env.num_envs, device=device, dtype=torch.long)
@@ -648,11 +857,14 @@ def main() -> None:
     episode_meta: List[Optional[Dict[str, Any]]] = [None] * task.sim_env.num_envs
     early_records: List[Dict[str, Any]] = []
     total_episodes = 0
+    num_envs = task.sim_env.num_envs
 
     print(
-        f"Running {env_name}: envs={task.sim_env.num_envs}, obs_dim={obs_dim}, "
+        f"Running {env_name}: envs={num_envs}, obs_dim={obs_dim}, "
         f"priv_dim={priv_dim}, action_dim={action_dim}"
     )
+    print(f"[多环境模式] 将收集所有 {num_envs} 个环境的数据并计算平均值±标准差")
+    
     with torch.no_grad():
         for step in range(args.steps):
             if early_enabled:
@@ -707,27 +919,40 @@ def main() -> None:
                         episode_has_meta[env_id] = False
                         episode_meta[env_id] = None
 
+            # ====== 收集所有环境的数据 ======
+            all_pos = task.obs_dict["robot_position"].detach().cpu().numpy()  # [num_envs, 3]
+            all_quat = task.obs_dict["robot_orientation"]  # [num_envs, 4]
+            all_euler = get_euler_xyz_tensor(all_quat).detach().cpu().numpy()  # [num_envs, 3]
+            all_actions = action.detach().cpu().numpy()  # [num_envs, action_dim]
+            
+            all_z_history.append(all_pos[:, 2].copy())
+            all_euler_history.append(all_euler.copy())
+            all_pos_history.append(all_pos.copy())
+            all_policy_actions.append(all_actions.copy())
+            
+            # Teacher actions (所有环境)
+            if isinstance(infos, dict) and "teacher_actions" in infos:
+                teacher_act = torch.as_tensor(infos["teacher_actions"]).detach().cpu().numpy()
+                all_teacher_actions.append(teacher_act.copy())
+            elif hasattr(task, "teacher_residual"):
+                teacher_act = task.teacher_residual.detach().cpu().numpy()
+                all_teacher_actions.append(teacher_act.copy())
+            
+            # ====== 单环境历史（env_id=0，保持兼容） ======
             env_id = 0
-            pos = task.obs_dict["robot_position"][env_id].detach().cpu().numpy()
+            pos = all_pos[env_id]
             tgt = task.target_position[env_id].detach().cpu().numpy()
-            quat = task.obs_dict["robot_orientation"][env_id : env_id + 1]
-            euler = get_euler_xyz_tensor(quat)[0].detach().cpu().numpy()
+            euler = all_euler[env_id]
 
             pos_history.append(pos.copy())
             target_history.append(tgt.copy())
             z_history.append(pos[2])
             euler_history.append(euler)
-            policy_actions.append(action[env_id].detach().cpu().numpy())
+            policy_actions.append(all_actions[env_id])
             obs_history.append(obs[env_id].detach().cpu().numpy())
 
-            if isinstance(infos, dict) and "teacher_actions" in infos:
-                teacher_actions.append(
-                    torch.as_tensor(infos["teacher_actions"][env_id]).detach().cpu().numpy()
-                )
-            elif hasattr(task, "teacher_residual"):
-                teacher_actions.append(
-                    task.teacher_residual[env_id].detach().cpu().numpy()
-                )
+            if len(all_teacher_actions) > 0:
+                teacher_actions.append(all_teacher_actions[-1][env_id])
 
             if task.payload_manager.just_released_flag[env_id]:
                 payload_idx = int(task.payload_manager.last_release_index[env_id].item())
@@ -745,6 +970,19 @@ def main() -> None:
         save_path = args.save_path or os.environ.get("AERIAL_SAVE_PLOT")
         if save_path is None:
             print("Warning: save_plot=True 但未设置 AERIAL_SAVE_PLOT 或 --save_path")
+    
+    # ====== 绘制多环境平均值图 ======
+    if all_z_history:
+        plot_multi_env_results(
+            all_z_history=all_z_history,
+            all_euler_history=all_euler_history,
+            all_policy_actions=all_policy_actions,
+            all_teacher_actions=all_teacher_actions if all_teacher_actions else None,
+            release_history=release_history,
+            save_path=save_path,
+        )
+    
+    # 单环境详细图（保持原有逻辑）
     plot_results(
         z_history,
         euler_history,
