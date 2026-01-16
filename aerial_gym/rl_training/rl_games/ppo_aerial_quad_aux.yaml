@@ -14,6 +14,7 @@ params:
     privileged_dim: 7  # 特权向量长度
     privileged_embed: 8  # 编码后维度
     privileged_hidden: 128  # 编码器隐层宽度
+    aux_loss_coef: 1.0  # 辅助损失系数（重构损失）
 
     use_oracle_mode: False  # True=输入真实特权值(Teacher)，False=输入aux decoder预测值(Student)
     space:

@@ -59,7 +59,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Stage 2 CNN Student Validation with Enhanced Visualization."
     )
-    parser.add_argument("--num_envs", type=int, default=1, help="Number of parallel envs.")
+    parser.add_argument("--num_envs", type=int, default=4, help="Number of parallel envs for statistical validation.")
     parser.add_argument("--steps", type=int, default=1500, help="Number of simulation steps.")
     parser.add_argument(
         "--headless",
@@ -128,6 +128,24 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default=None,
         help="Save path for plots.",
+    )
+    parser.add_argument(
+        "--preflight_steps",
+        type=int,
+        default=0,
+        help="Number of random waypoint preflight steps before release phase (0 to disable).",
+    )
+    parser.add_argument(
+        "--preflight_waypoint_range",
+        type=float,
+        default=0.5,
+        help="Range for random waypoint targets during preflight (meters).",
+    )
+    parser.add_argument(
+        "--preflight_waypoint_interval",
+        type=int,
+        default=100,
+        help="Steps between waypoint changes during preflight.",
     )
     return parser.parse_args()
 
@@ -244,7 +262,7 @@ def load_teacher_encoder(checkpoint_path: str, device: str, priv_dim: int = 7):
 
 
 def load_cnn_encoder(checkpoint_path: str, obs_dim: int, history_len: int, latent_dim: int, device: str):
-    """Load trained CNN student encoder."""
+    """Load trained CNN student encoder (auto-detects standard vs attention version)."""
     base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     cnn_encoder_path = os.path.join(base_path, "rl_training/rl_games/nn/cnn_student_encoder.py")
     
@@ -254,14 +272,23 @@ def load_cnn_encoder(checkpoint_path: str, obs_dim: int, history_len: int, laten
     spec.loader.exec_module(cnn_module)
     
     CNNStudentEncoder = cnn_module.CNNStudentEncoder
+    CNNWithTemporalAttention = cnn_module.CNNWithTemporalAttention
     ObsHistoryBuffer = cnn_module.ObsHistoryBuffer
     
-    encoder = CNNStudentEncoder(obs_dim=obs_dim, history_len=history_len, latent_dim=latent_dim).to(device)
     checkpoint = torch.load(checkpoint_path, map_location=device)
-    if "model_state_dict" in checkpoint:
-        encoder.load_state_dict(checkpoint["model_state_dict"])
+    state_dict = checkpoint.get("model_state_dict", checkpoint)
+    
+    # Auto-detect encoder type from checkpoint keys
+    has_attention = any("temporal_attention" in k for k in state_dict.keys())
+    
+    if has_attention:
+        print("Detected CNN with Temporal Attention")
+        encoder = CNNWithTemporalAttention(obs_dim=obs_dim, history_len=history_len, latent_dim=latent_dim).to(device)
     else:
-        encoder.load_state_dict(checkpoint)
+        print("Detected standard CNN encoder")
+        encoder = CNNStudentEncoder(obs_dim=obs_dim, history_len=history_len, latent_dim=latent_dim).to(device)
+    
+    encoder.load_state_dict(state_dict)
     encoder.eval()
     
     buffer = ObsHistoryBuffer(num_envs=1, obs_dim=obs_dim, history_len=history_len, device=device)
@@ -306,8 +333,25 @@ def plot_comprehensive_results(
     cnn_latents: np.ndarray,
     pos_history: List[np.ndarray],
     save_path: Optional[str] = None,
+    num_envs: int = 1,
 ):
     """Generate comprehensive comparison plots for CNN vs Teacher latents."""
+    # Reshape latents if num_envs > 1: (steps*num_envs, latent_dim) -> (steps, num_envs, latent_dim)
+    if num_envs > 1:
+        steps_count = teacher_latents.shape[0] // num_envs
+        teacher_all = teacher_latents.reshape(steps_count, num_envs, -1)
+        cnn_all = cnn_latents.reshape(steps_count, num_envs, -1)
+        
+        # Use Env 0 for time series plotting
+        teacher_plot = teacher_all[:, 0, :]
+        cnn_plot = cnn_all[:, 0, :]
+        
+        # Compute stats across ALL environments (flattened)
+        # teacher_latents/cnn_latents are already flattened, so we can use them directly for global stats
+    else:
+        teacher_plot = teacher_latents
+        cnn_plot = cnn_latents
+        
     steps = np.arange(len(z_history))
     
     # === Figure 1: Flight State ===
@@ -323,12 +367,15 @@ def plot_comprehensive_results(
     axes1[0].grid(True, alpha=0.3)
     axes1[0].set_title("飞行高度变化")
     
-    # Euler angles
-    eulers = np.rad2deg(np.unwrap(np.array(euler_history), axis=0))
+    # Euler angles - normalize to ±180° for better visualization
+    eulers = np.rad2deg(np.array(euler_history))
+    # Wrap to [-180, 180]
+    eulers = ((eulers + 180) % 360) - 180
     axes1[1].plot(steps, eulers[:, 0], label="Roll", alpha=0.8)
     axes1[1].plot(steps, eulers[:, 1], label="Pitch", alpha=0.8)
     axes1[1].plot(steps, eulers[:, 2], label="Yaw", alpha=0.8)
     axes1[1].axhline(0, color='k', linestyle='-', linewidth=1.0, alpha=0.6, label="基准线 0°")
+    axes1[1].set_ylim(-30, 30)  # Reasonable range for small angle variations
     for rs, _ in release_history:
         axes1[1].axvline(rs, color='r', linestyle='--', alpha=0.4)
     axes1[1].set_ylabel("角度 (°)")
@@ -352,14 +399,14 @@ def plot_comprehensive_results(
     fig1.tight_layout()
     
     # === Figure 2: Latent Comparison (8 dims) ===
-    latent_dim = teacher_latents.shape[1]
+    latent_dim = teacher_plot.shape[1]
     fig2, axes2 = plt.subplots(4, 2, figsize=(16, 12), sharex=True)
     axes2 = axes2.ravel()
     
     for i in range(latent_dim):
         ax = axes2[i]
-        ax.plot(steps, teacher_latents[:, i], 'b-', linewidth=1.2, label="Teacher", alpha=0.9)
-        ax.plot(steps, cnn_latents[:, i], 'r--', linewidth=1.2, label="CNN", alpha=0.9)
+        ax.plot(steps, teacher_plot[:, i], 'b-', linewidth=1.2, label="Teacher", alpha=0.9)
+        ax.plot(steps, cnn_plot[:, i], 'r--', linewidth=1.2, label="CNN", alpha=0.9)
         for rs, _ in release_history:
             ax.axvline(rs, color='g', linestyle=':', alpha=0.5)
         ax.set_ylabel(f"z[{i}]")
@@ -376,27 +423,40 @@ def plot_comprehensive_results(
     fig3, axes3 = plt.subplots(3, 1, figsize=(14, 9), sharex=True)
     
     # Per-step MSE
-    mse = np.mean((teacher_latents - cnn_latents) ** 2, axis=1)
-    axes3[0].plot(steps, mse, 'C2-', linewidth=1.5)
-    axes3[0].fill_between(steps, 0, mse, alpha=0.3, color='C2')
+    # Per-step MSE (using Env 0 for plot visualization)
+    # Note: Global usage MSE is printed, but for plot we show Env 0 time series
+    mse_plot = np.mean((teacher_plot - cnn_plot) ** 2, axis=1)
+    
+    # Global MSE for title (using all envs)
+    global_mse = np.mean((teacher_latents - cnn_latents) ** 2)
+    
+    axes3[0].plot(steps, mse_plot, 'C2-', linewidth=1.5)
+    axes3[0].fill_between(steps, 0, mse_plot, alpha=0.3, color='C2')
     for rs, _ in release_history:
         axes3[0].axvline(rs, color='r', linestyle='--', alpha=0.4)
-    axes3[0].set_ylabel("MSE")
-    axes3[0].set_title(f"逐步 MSE (平均: {np.mean(mse):.6f})")
+    axes3[0].set_ylabel("MSE (Env 0)")
+    axes3[0].set_title(f"逐步 MSE (Env 0) | 全局平均 MSE: {global_mse:.6f}")
     axes3[0].grid(True, alpha=0.3)
     
-    # Cosine similarity
-    t_norm = np.linalg.norm(teacher_latents, axis=1, keepdims=True)
-    c_norm = np.linalg.norm(cnn_latents, axis=1, keepdims=True)
-    cos_sim = np.sum(teacher_latents * cnn_latents, axis=1) / (t_norm.squeeze() * c_norm.squeeze() + 1e-8)
-    axes3[1].plot(steps, cos_sim, 'C3-', linewidth=1.5)
+    # Cosine similarity (Env 0 for plot)
+    t_norm_plot = np.linalg.norm(teacher_plot, axis=1, keepdims=True)
+    c_norm_plot = np.linalg.norm(cnn_plot, axis=1, keepdims=True)
+    cos_sim_plot = np.sum(teacher_plot * cnn_plot, axis=1) / (t_norm_plot.squeeze() * c_norm_plot.squeeze() + 1e-8)
+    
+    # Global Cosine Sim
+    t_norm_all = np.linalg.norm(teacher_latents, axis=1, keepdims=True)
+    c_norm_all = np.linalg.norm(cnn_latents, axis=1, keepdims=True)
+    cos_sim_all = np.sum(teacher_latents * cnn_latents, axis=1) / (t_norm_all.squeeze() * c_norm_all.squeeze() + 1e-8)
+    global_cos_sim = np.mean(cos_sim_all)
+    
+    axes3[1].plot(steps, cos_sim_plot, 'C3-', linewidth=1.5)
     axes3[1].axhline(1.0, color='k', linestyle='--', alpha=0.3)
     axes3[1].axhline(0.9, color='g', linestyle=':', alpha=0.5, label="阈值 0.9")
     for rs, _ in release_history:
         axes3[1].axvline(rs, color='r', linestyle='--', alpha=0.4)
-    axes3[1].set_ylabel("Cosine Sim")
+    axes3[1].set_ylabel("Cosine Sim (Env 0)")
     axes3[1].set_ylim(-0.1, 1.1)
-    axes3[1].set_title(f"余弦相似度 (平均: {np.mean(cos_sim):.4f})")
+    axes3[1].set_title(f"余弦相似度 (Env 0) | 全局平均: {global_cos_sim:.4f}")
     axes3[1].legend()
     axes3[1].grid(True, alpha=0.3)
     
@@ -443,13 +503,17 @@ def plot_comprehensive_results(
         fig4 = None
     
     # Print summary statistics
+    # Calculate per-dimension MSE on global data
+    dim_mse = np.mean((teacher_latents - cnn_latents) ** 2, axis=0)
+    
+    # Print summary statistics
     print("\n" + "=" * 60)
     print("潜变量拟合统计")
     print("=" * 60)
-    print(f"平均 MSE: {np.mean(mse):.6f}")
-    print(f"最大 MSE: {np.max(mse):.6f}")
-    print(f"平均 Cosine Similarity: {np.mean(cos_sim):.4f}")
-    print(f"最小 Cosine Similarity: {np.min(cos_sim):.4f}")
+    print(f"平均 MSE: {global_mse:.6f}")
+    print(f"最大 MSE (Global): {np.max(np.mean((teacher_latents - cnn_latents) ** 2, axis=1)):.6f}")
+    print(f"平均 Cosine Similarity: {global_cos_sim:.4f}")
+    print(f"最小 Cosine Similarity (Global): {np.min(np.sum(teacher_latents * cnn_latents, axis=1) / (np.linalg.norm(teacher_latents, axis=1) * np.linalg.norm(cnn_latents, axis=1) + 1e-8)):.4f}")
     print(f"各维度 MSE: {[f'{v:.4f}' for v in dim_mse]}")
     print("=" * 60)
     
@@ -489,6 +553,13 @@ def main() -> None:
     priv_dim = task.task_config.privileged_observation_space_dim
     latent_dim = 8
     device = torch.device(task.device)
+    
+    # Relax crash thresholds for validation with random waypoints
+    # This prevents crashes during trajectory tracking which has larger angles
+    if args.preflight_steps > 0:
+        task.crash_distance_threshold = 20.0  # meters (relaxed from 1.0)
+        task.crash_tilt_threshold_rad = np.deg2rad(60.0)  # 60° (relaxed from 20°)
+        print(f"Relaxed crash thresholds: distance={task.crash_distance_threshold}m, tilt=60°")
 
     # Load models
     checkpoint, checkpoint_action_dim = load_checkpoint(args.teacher_checkpoint)
@@ -536,6 +607,7 @@ def main() -> None:
             task.step(actions)
 
     print(f"Running validation for {args.steps} steps...")
+    preflight_step = 0
     with torch.no_grad():
         for step in range(args.steps):
             obs = torch.as_tensor(task.task_obs["observations"], device=device, dtype=torch.float32)
@@ -543,13 +615,25 @@ def main() -> None:
             if priv is not None:
                 priv = torch.as_tensor(priv, device=device, dtype=torch.float32)
             
+            # Random waypoint navigation during preflight
+            if args.preflight_steps > 0 and preflight_step < args.preflight_steps:
+                if preflight_step % args.preflight_waypoint_interval == 0:
+                    random_target = (torch.rand(1, 3, device=device) * 2 - 1) * args.preflight_waypoint_range
+                    random_target[:, 2] = random_target[:, 2].abs()
+                    task.target_position[:] = random_target
+                preflight_step += 1
+            elif args.preflight_steps > 0 and preflight_step == args.preflight_steps:
+                # Reset to origin after preflight
+                task.target_position[:] = 0.0
+                preflight_step += 1
+            
             # Get latents
             teacher_z = teacher_encoder(priv) if priv is not None else torch.zeros((args.num_envs, latent_dim), device=device)
             history_buffer.push(obs)
             cnn_z = cnn_encoder(history_buffer.get())
             
-            teacher_latents_list.append(teacher_z[0].cpu().numpy())
-            cnn_latents_list.append(cnn_z[0].cpu().numpy())
+            teacher_latents_list.append(teacher_z.cpu().numpy())  # (num_envs, latent_dim)
+            cnn_latents_list.append(cnn_z.cpu().numpy())  # (num_envs, latent_dim)
             
             # Policy forward
             input_dict = {"is_train": False, "prev_actions": None, "obs": obs,
@@ -557,12 +641,17 @@ def main() -> None:
             result = model(input_dict)
             action = torch.clamp(result["mus"] if args.deterministic else result["actions"], -1.0, 1.0)
             
+            # Zero compensation during preflight
+            if args.preflight_steps > 0 and step < args.preflight_steps:
+                action = torch.zeros_like(action)
+            
             task_obs, rewards, terms, truncs, infos = task.step(action)
             rnn_states = _to_device(result.get("rnn_states"), device)
             done_envs = torch.nonzero(terms | truncs, as_tuple=False).squeeze(-1)
             rnn_states = _reset_rnn_states(rnn_states, done_envs)
             if done_envs.numel() > 0:
                 history_buffer.reset(done_envs)
+                preflight_step = 0  # Reset preflight counter on env reset
             
             # Record for env 0
             env_id = 0
@@ -582,8 +671,9 @@ def main() -> None:
                 payload_idx = int(task.payload_manager.last_release_index[env_id].item())
                 release_history.append((step, payload_idx))
 
-    teacher_latents = np.vstack(teacher_latents_list)
-    cnn_latents = np.vstack(cnn_latents_list)
+    # Stack all envs: (steps, num_envs, latent_dim) -> (steps*num_envs, latent_dim)
+    teacher_latents = np.concatenate(teacher_latents_list, axis=0)
+    cnn_latents = np.concatenate(cnn_latents_list, axis=0)
 
     save_path = args.save_path or (f"validate_cnn_stage2_{args.steps}steps.png" if args.save_plot else None)
     
@@ -591,7 +681,8 @@ def main() -> None:
         z_history, euler_history, release_history,
         policy_actions, teacher_actions,
         teacher_latents, cnn_latents,
-        pos_history, save_path
+        pos_history, save_path,
+        num_envs=args.num_envs
     )
 
     if args.show_plot:

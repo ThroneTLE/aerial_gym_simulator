@@ -241,8 +241,9 @@ def create_task(num_envs: int, device: str, preflight_crash_threshold: float = 1
     task_config.num_envs = num_envs
     task_config.headless = True
     task_config.device = device
-    # Relax crash threshold for preflight random navigation
+    # Relax crash thresholds for preflight random navigation
     task_config.crash_distance_threshold = preflight_crash_threshold
+    task_config.crash_tilt_threshold_deg = 60.0  # Relax from 20° for trajectory tracking
     
     task = PayloadCompensationTask(
         task_config=task_config,

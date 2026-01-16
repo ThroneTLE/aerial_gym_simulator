@@ -177,9 +177,10 @@ python aerial_gym/rl_training/train_cnn_student.py \
 
 python aerial_gym/examples/validate_cnn_stage2.py \
     --teacher_checkpoint runs/teacher_aux_fixed_imitation_14-19-16-50/nn/last_teacher_aux_fixed_imitation_ep_34_rew_13236.196.pth \
-    --cnn_checkpoint runs/cnn_stage2_hist100_14-20-28-37/nn/best_cnn_encoder.pth \
+    --cnn_checkpoint runs/cnn_stage2_waypoint_14-21-06-53/nn/best_cnn_encoder.pth \
     --history_len 100 \
-    --steps 1500 \
+    --steps 2500 \
+    --preflight_steps 1000 \
     --show_plot True
 
 ## 2025-02-21 Teacher 残差原型
