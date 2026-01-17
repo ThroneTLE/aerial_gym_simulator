@@ -147,26 +147,27 @@ class BaseMultirotor(BaseRobot):
         )
 
         # --- 阻尼系数 (Damping Coefficients) ---
+        # --- 阻尼系数 (Damping Coefficients) ---
         self.body_vel_linear_damping_coefficient = torch.tensor(
             self.cfg.damping.linvel_linear_damping_coefficient,
             device=self.device,
             requires_grad=False,
-        )
+        ).expand(self.num_envs, -1).clone()
         self.body_vel_quadratic_damping_coefficient = torch.tensor(
             self.cfg.damping.linvel_quadratic_damping_coefficient,
             device=self.device,
             requires_grad=False,
-        )
+        ).expand(self.num_envs, -1).clone()
         self.angvel_linear_damping_coefficient = torch.tensor(
             self.cfg.damping.angular_linear_damping_coefficient,
             device=self.device,
             requires_grad=False,
-        )
+        ).expand(self.num_envs, -1).clone()
         self.angvel_quadratic_damping_coefficient = torch.tensor(
             self.cfg.damping.angular_quadratic_damping_coefficient,
             device=self.device,
             requires_grad=False,
-        )
+        ).expand(self.num_envs, -1).clone()
 
         # --- 施力掩码 (Application Mask) ---
         if self.force_application_level == "motor_link":

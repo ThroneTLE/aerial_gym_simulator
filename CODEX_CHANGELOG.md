@@ -167,19 +167,13 @@ python -m aerial_gym.rl_training.rl_games.runner \
   --num_envs 4096 \
   --headless True
 
-python aerial_gym/rl_training/train_cnn_student.py \
-    --teacher_checkpoint runs/teacher_aux_fixed_imitation_14-19-16-50/nn/last_teacher_aux_fixed_imitation_ep_34_rew_13236.196.pth \
-    --use_attention \
-    --random_preflight_steps 1000 \
-    --preflight_waypoint_range 0.5 \
-    --history_len 100 \
-    --experiment_name cnn_stage2_waypoint
+python aerial_gym/rl_training/train_cnn_student.py --teacher_checkpoint runs/teacher_aux_fixed_imitation_17-14-16-10/nn/teacher_aux_fixed_imitation.pth --use_attention --history_len 200 --experiment_name cnn_stage2_waypoint
 
 python aerial_gym/examples/validate_cnn_stage2.py \
-    --teacher_checkpoint runs/teacher_aux_fixed_imitation_14-19-16-50/nn/last_teacher_aux_fixed_imitation_ep_34_rew_13236.196.pth \
-    --cnn_checkpoint runs/cnn_stage2_waypoint_14-21-06-53/nn/best_cnn_encoder.pth \
+    --teacher_checkpoint runs/teacher_aux_fixed_imitation_17-14-16-10/nn/teacher_aux_fixed_imitation.pth \
+    --cnn_checkpoint runs/cnn_stage2_waypoint_17-15-33-13/nn/best_cnn_encoder.pth \
     --history_len 100 \
-    --steps 2500 \
+    --steps 1500 \
     --preflight_steps 1000 \
     --show_plot True
 

@@ -11,7 +11,7 @@ params:
   network:
     name: privileged_actor_critic  # 特权编码器 + 策略/价值双头网络
     separate: False  # False=共享主干；True=actor/critic 各自独立主干（更耗显存，梯度解耦）
-    privileged_dim: 7  # 特权向量长度
+    privileged_dim: 18  # 特权向量长度 (updated for extended priv info)
     privileged_embed: 8  # 编码后维度
     privileged_hidden: 128  # 编码器隐层宽度
     aux_loss_coef: 100.0  # 辅助损失系数（可以设大一些，因为梯度被 aux_grad_scale 缩放了）
@@ -28,7 +28,7 @@ params:
           val: -10.0  # 初始 logstd 常数（log 标度；-2 ≈ std 0.135）
         fixed_sigma: True  # 启用可学习 logstd
         min_logstd: -10.0  # clamp 下限（约 std 0.018），防止过度收紧
-        max_logstd: -3.0   # clamp 上限（约 std 2.72），防止噪声无上限飙升
+        max_logstd: -8.0   # clamp 上限（约 std 2.72），防止噪声无上限飙升
     mlp:
       units: [256, 256, 128]  # MLP 隐层宽度（逐层）
       d2rl: False  # 是否使用 D2RL 结构（在输入拼接上一层输出，通常可提升稳定性但加大计算）
@@ -70,11 +70,11 @@ params:
     disturbance_adv_weight: 0.0
     # BC/DAgger 模仿损失系数（从 bc_coef 衰减到 bc_min_coef，乘 bc_alpha）
     bc_coef: 10.0
-    bc_alpha: 0.999
+    bc_alpha: 0.99
     bc_min_coef: 0.5
     # 分离推力和扭矩的BC权重 (如果设置，覆盖 bc_coef)
-    bc_coef_thrust: 1000.0   # 推力补偿BC权重
-    bc_coef_torque: 500.0  # 扭矩补偿BC权重
+    bc_coef_thrust: 30.0   # 推力补偿BC权重
+    bc_coef_torque: 20.0  # 扭矩补偿BC权重
     
 
     critic_coef: 0.5  # 价值损失权重（相对策略损失；大则稳定优势但可能拖慢策略更新）

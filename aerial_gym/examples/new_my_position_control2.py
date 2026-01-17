@@ -16,10 +16,15 @@ from aerial_gym.utils.math import get_euler_xyz_tensor
 from aerial_gym.rl_training.rl_games.nn import privileged_actor_critic  # noqa: F401
 from rl_games.algos_torch import model_builder
 import torch
-
+'''
+默认行为：运行 new_my_position_control2.py 时，默认仅展示多环境聚合统计图（状态稳定性、策略行为分析等），不再弹出大量的单环境波形图。
+详细模式：若需要查看单环境细节（XY轨迹、力矩角度关系等），请使用参数 --show_details。
+bash
+python aerial_gym/examples/new_my_position_control2.py --show_details
+'''
 DEFAULT_ENV_NAME = "payload_compensation_task_teacher"
 DEFAULT_CONFIG = "aerial_gym/rl_training/rl_games/ppo_aerial_quad_aux.yaml"
-DEFAULT_CKPT = "runs/teacher_aux_fixed_imitation_16-20-33-12/nn/last_teacher_aux_fixed_imitation_ep_70_rew_15007.915.pth"
+DEFAULT_CKPT = "runs/teacher_aux_fixed_imitation_17-14-16-10/nn/teacher_aux_fixed_imitation.pth"
 plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "Arial Unicode MS", "Noto Sans CJK SC"]
 plt.rcParams["axes.unicode_minus"] = False
 
@@ -104,6 +109,15 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default=None,
         help="保存图像到指定路径（优先于 AERIAL_SAVE_PLOT）",
+    )
+
+    parser.add_argument(
+        "--show_details",
+        type=_str2bool,
+        nargs="?",
+        const=True,
+        default=False,
+        help="是否显示单环境详细分析图（默认多环境时不显示）",
     )
     return parser.parse_args()
 
@@ -272,27 +286,26 @@ def plot_multi_env_results(
     
     num_envs = z_arr.shape[1]
     
-    # ====== 图1: Z轴高度 + 姿态角 ======
-    fig, (ax_z, ax_euler) = plt.subplots(2, 1, figsize=(12, 8))
-    fig.suptitle(f"多环境平均值 (N={num_envs})", fontsize=14, fontweight='bold')
+    # ====== Combined Figure 1: State & Stability (Z, Euler Delta, Angular MAE) ======
+    fig_state, axes_state = plt.subplots(3, 1, figsize=(12, 12), sharex=True)
+    ax_z, ax_euler, ax_mae = axes_state
+    fig_state.suptitle(f"飞行状态与稳定性分析 (N={num_envs})", fontsize=16, fontweight='bold')
     
-    # Z轴高度：平均值 + 标准差阴影
+    # --- Subplot 1: Z-Height ---
     ax_z.plot(steps, z_mean, label=f"Z 高度 (平均)", color='C0', linewidth=2)
     ax_z.fill_between(steps, z_mean - z_std, z_mean + z_std, alpha=0.3, color='C0', label="±1σ")
-    ax_z.set_xlabel("步数")
-    ax_z.set_ylabel("Z 轴高度 (米)")
-    ax_z.set_title("无人机 Z 轴位置 (多环境平均)")
+    ax_z.set_ylabel("Z 轴高度 (m)")
+    ax_z.set_title("1. 无人机 Z 轴高度")
     ax_z.grid(True, alpha=0.3)
-    ax_z.legend()
+    ax_z.legend(loc='upper right')
     
-    # 标注释放点（来自 env_id=0）
-    for release_step, payload_idx in release_history:
+    for release_step, _ in release_history:
         ax_z.axvline(release_step, color='r', linestyle='--', alpha=0.6)
-    
-    # 姿态角变化：Roll, Pitch, Yaw (相对于初始值的变化量)
-    colors = ['C1', 'C2', 'C3']
-    labels = ['ΔRoll', 'ΔPitch', 'ΔYaw']
-    for i, (color, label) in enumerate(zip(colors, labels)):
+
+    # --- Subplot 2: Relative Attitude Change ---
+    colors_euler = ['C1', 'C2', 'C3']
+    labels_euler = ['ΔRoll', 'ΔPitch', 'ΔYaw']
+    for i, (color, label) in enumerate(zip(colors_euler, labels_euler)):
         ax_euler.plot(steps, euler_delta_mean_deg[:, i], label=f"{label} (°)", color=color, linewidth=1.5)
         ax_euler.fill_between(
             steps, 
@@ -300,114 +313,129 @@ def plot_multi_env_results(
             euler_delta_mean_deg[:, i] + euler_delta_std_deg[:, i],
             alpha=0.2, color=color
         )
-    ax_euler.set_xlabel("步数")
     ax_euler.set_ylabel("角度变化 (°)")
-    ax_euler.set_title("无人机姿态角变化量 (多环境平均, 相对初始值)")
+    ax_euler.set_title("2. 姿态角变化 (相对于初始时刻)")
     ax_euler.grid(True, alpha=0.3)
-    ax_euler.legend()
+    ax_euler.legend(loc='upper right')
     ax_euler.axhline(0, color='gray', linestyle=':', alpha=0.5)
     
     for release_step, _ in release_history:
         ax_euler.axvline(release_step, color='r', linestyle='--', alpha=0.6)
+
+    # --- Subplot 3: Absolute Angular MAE ---
+    # 计算相对于初始角度的绝对偏差平均值: Mean(|Angle - Initial|)
+    euler_abs_delta_mean_deg = np.rad2deg(np.abs(euler_delta_unwrapped).mean(axis=1)) # [steps, 3]
+    euler_abs_delta_std_deg = np.rad2deg(np.abs(euler_delta_unwrapped).std(axis=1))
     
-    fig.tight_layout()
+    mae_colors = ['C1', 'C2', 'C3'] # Delta Roll, Pitch, Yaw
+    mae_labels = ['|ΔRoll|', '|ΔPitch|', '|ΔYaw|']
     
-    # ====== 图2: 动作对比 (策略 vs 教师) ======
+    for i in range(3):
+        ax_mae.plot(steps, euler_abs_delta_mean_deg[:, i], label=f'{mae_labels[i]} (Avg)', color=mae_colors[i], linewidth=1.5)
+        ax_mae.fill_between(steps, 
+                           euler_abs_delta_mean_deg[:, i] - euler_abs_delta_std_deg[:, i],
+                           euler_abs_delta_mean_deg[:, i] + euler_abs_delta_std_deg[:, i],
+                           color=mae_colors[i], alpha=0.1)
+
+    ax_mae.set_ylabel("绝对偏差 (°)")
+    ax_mae.set_xlabel("步数")
+    ax_mae.set_title("3. 平均绝对角度漂移 (稳定性指标)")
+    ax_mae.grid(True, alpha=0.3)
+    ax_mae.legend(loc='upper right')
+    
+    for release_step, _ in release_history:
+        ax_mae.axvline(release_step, color='r', linestyle='--', alpha=0.5)
+
+    fig_state.tight_layout()
+
+
+    # ====== Combined Figure 2: Policy Analysis (Imitation Error, Correlation) ======
     action_dim = action_mean.shape[1]
     has_teacher = all_teacher_actions is not None and len(all_teacher_actions) == num_steps
     
     if has_teacher:
-        teacher_arr = np.stack(all_teacher_actions, axis=0)  # [steps, num_envs, action_dim]
-        teacher_mean = teacher_arr.mean(axis=1)
-        teacher_std = teacher_arr.std(axis=1)
+        # 布局：上部分为 Imitation Error (N行), 下部分为 Correlation (1行)
+        # 使用 GridSpec 或直接 subplots 调整
+        total_rows = action_dim + 1
+        fig_analysis, axes_analysis = plt.subplots(total_rows, 1, figsize=(12, 3.5 * total_rows), sharex=True)
+        fig_analysis.suptitle(f"策略行为分析 (Policy Analysis)", fontsize=16, fontweight='bold')
         
-        # 计算模仿误差：|policy - teacher|
-        imitation_error = np.abs(action_arr - teacher_arr)  # [steps, num_envs, action_dim]
-        imitation_error_mean = imitation_error.mean(axis=1)  # [steps, action_dim]
+        # --- Part A: Imitation Error ---
+        teacher_arr = np.stack(all_teacher_actions, axis=0)
+        imitation_error = np.abs(action_arr - teacher_arr)
+        imitation_error_mean = imitation_error.mean(axis=1)
         imitation_error_std = imitation_error.std(axis=1)
         
-        # 计算每个 step 的相关性 R² (衡量 policy 跟随 teacher 的程度)
+        action_labels = ['Thrust 误差 (%)'] + [f'Torque {i} 误差 (%)' for i in range(1, action_dim)]
+        
+        for i in range(action_dim):
+            ax = axes_analysis[i]
+            # Convert to percentage
+            mean_pct = imitation_error_mean[:, i] * 100.0
+            std_pct = imitation_error_std[:, i] * 100.0
+            
+            ax.plot(steps, mean_pct, label='平均误差', color='C3', linewidth=1.5)
+            ax.fill_between(
+                steps,
+                mean_pct - std_pct,
+                mean_pct + std_pct,
+                alpha=0.3, color='C3'
+            )
+            overall_mae = mean_pct.mean()
+            ax.axhline(overall_mae, color='C3', linestyle='--', alpha=0.5)
+            ax.text(num_steps * 0.02, overall_mae * 1.1, f'MAE={overall_mae:.2f}%', fontsize=9, color='C3')
+            
+            ax.set_ylabel(action_labels[i])
+            ax.grid(True, alpha=0.3)
+            ax.legend(loc='upper right')
+            for release_step, _ in release_history:
+                ax.axvline(release_step, color='r', linestyle=':', alpha=0.4)
+                
+        # --- Part B: Correlation ---
+        ax_corr = axes_analysis[-1]
+        
+        # Calculate Correlation
         correlation_per_step = np.zeros((num_steps, action_dim))
         for t in range(num_steps):
             for d in range(action_dim):
                 p = action_arr[t, :, d]
                 te = teacher_arr[t, :, d]
-                if np.std(te) > 1e-6:  # 避免除零
+                if np.std(te) > 1e-6:
                     corr = np.corrcoef(p, te)[0, 1]
-                    correlation_per_step[t, d] = corr ** 2  # R²
+                    correlation_per_step[t, d] = corr ** 2
                 else:
-                    correlation_per_step[t, d] = 1.0  # teacher 无变化时认为完美跟随
-    
-    # ====== 图2a: 模仿误差分布 ======
-    fig_act, axes = plt.subplots(action_dim, 1, figsize=(12, max(6, 2.5 * action_dim)), sharex=True)
-    if action_dim == 1:
-        axes = [axes]
-    
-    fig_act.suptitle(f"模仿误差 |Policy - Teacher| (多环境, N={num_envs})", fontsize=14, fontweight='bold')
-    
-    action_labels = ['Thrust 误差'] + [f'Torque {i} 误差' for i in range(1, action_dim)]
-    
-    for i, ax in enumerate(axes):
-        if has_teacher:
-            ax.plot(steps, imitation_error_mean[:, i], label='平均误差', color='C3', linewidth=1.5)
-            ax.fill_between(
-                steps,
-                imitation_error_mean[:, i] - imitation_error_std[:, i],
-                imitation_error_mean[:, i] + imitation_error_std[:, i],
-                alpha=0.3, color='C3'
-            )
-            # 添加整体平均误差文本
-            overall_mae = imitation_error_mean[:, i].mean()
-            ax.axhline(overall_mae, color='C3', linestyle='--', alpha=0.5)
-            ax.text(num_steps * 0.02, overall_mae * 1.1, f'MAE={overall_mae:.4f}', fontsize=9, color='C3')
-        else:
-            ax.text(0.5, 0.5, 'No Teacher Data', transform=ax.transAxes, ha='center', va='center')
-        
-        ax.set_ylabel(action_labels[i])
-        ax.grid(True, alpha=0.3)
-        ax.legend(loc='upper right')
-        
-        for release_step, _ in release_history:
-            ax.axvline(release_step, color='r', linestyle=':', alpha=0.4)
-    
-    axes[-1].set_xlabel("步数")
-    fig_act.tight_layout()
-    
-    # ====== 图2b: 相关性 R² 随时间变化 ======
-    if has_teacher:
-        fig_corr, ax_corr = plt.subplots(1, 1, figsize=(12, 4))
-        fig_corr.suptitle(f"Policy-Teacher 相关性 R² (多环境, N={num_envs})", fontsize=14, fontweight='bold')
-        
+                    correlation_per_step[t, d] = 1.0
+                    
         corr_labels = ['Thrust', 'Torque 1', 'Torque 2'][:action_dim]
-        colors = ['C0', 'C1', 'C2']
+        # Correlation colors
+        c_colors = ['C0', 'C1', 'C2']
         for i in range(action_dim):
             ax_corr.plot(steps, correlation_per_step[:, i], label=f'{corr_labels[i]} R²', 
-                        color=colors[i], linewidth=1.5, alpha=0.8)
-            # 显示平均 R²
+                        color=c_colors[i], linewidth=1.5, alpha=0.8)
             avg_r2 = correlation_per_step[:, i].mean()
-            ax_corr.axhline(avg_r2, color=colors[i], linestyle=':', alpha=0.3)
+            ax_corr.axhline(avg_r2, color=c_colors[i], linestyle=':', alpha=0.3)
         
-        ax_corr.set_xlabel("步数")
         ax_corr.set_ylabel("R² (相关性)")
+        ax_corr.set_xlabel("步数")
         ax_corr.set_ylim(-0.1, 1.1)
         ax_corr.axhline(1.0, color='gray', linestyle='--', alpha=0.3)
-        ax_corr.axhline(0.0, color='gray', linestyle='--', alpha=0.3)
         ax_corr.grid(True, alpha=0.3)
         ax_corr.legend(loc='lower right')
         
         for release_step, _ in release_history:
             ax_corr.axvline(release_step, color='r', linestyle=':', alpha=0.4)
-        
-        fig_corr.tight_layout()
-    
+            
+        fig_analysis.tight_layout()
+    else:
+        print("[Warning] No teacher actions, skipping Policy Analysis plot.")
+
     # ====== 保存图像 ======
     if save_path:
         base_path = os.path.splitext(save_path)[0]
-        fig.savefig(f"{base_path}_multi_env_state.png", dpi=150, bbox_inches="tight")
-        fig_act.savefig(f"{base_path}_multi_env_imitation_error.png", dpi=150, bbox_inches="tight")
+        fig_state.savefig(f"{base_path}_state_stability.png", dpi=150, bbox_inches="tight")
         if has_teacher:
-            fig_corr.savefig(f"{base_path}_multi_env_correlation.png", dpi=150, bbox_inches="tight")
-        print(f"[多环境图] 已保存到 {base_path}_multi_env_*.png")
+            fig_analysis.savefig(f"{base_path}_policy_analysis.png", dpi=150, bbox_inches="tight")
+        print(f"[合并图表] 已保存到 {base_path}_*.png")
 
 
 def plot_results(
@@ -983,18 +1011,23 @@ def main() -> None:
         )
     
     # 单环境详细图（保持原有逻辑）
-    plot_results(
-        z_history,
-        euler_history,
-        release_history,
-        policy_actions,
-        teacher_actions=teacher_actions,
-        pos_history=pos_history,
-        target_history=target_history,
-        ideal_circle=ideal_circle,
-        save_path=save_path,
-        obs_history=obs_history,
-    )
+    # 单环境详细图
+    # 逻辑调整：只有在 num_envs=1 或者用户强制 --show_details 时才显示
+    if num_envs == 1 or args.show_details:
+        plot_results(
+            z_history,
+            euler_history,
+            release_history,
+            policy_actions,
+            teacher_actions=teacher_actions,
+            pos_history=pos_history,
+            target_history=target_history,
+            ideal_circle=ideal_circle,
+            save_path=save_path,
+            obs_history=obs_history,
+        )
+    else:
+        print("[Info] 多环境模式下默认隐藏单环境详细波形图 (使用 --show_details 开启)")
 
     if early_enabled:
         plot_early_episode_stats(

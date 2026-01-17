@@ -59,7 +59,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Stage 2 CNN Student Validation with Enhanced Visualization."
     )
-    parser.add_argument("--num_envs", type=int, default=4, help="Number of parallel envs for statistical validation.")
+    parser.add_argument("--num_envs", type=int, default=1, help="Number of parallel envs for statistical validation.")
     parser.add_argument("--steps", type=int, default=1500, help="Number of simulation steps.")
     parser.add_argument(
         "--headless",
@@ -84,7 +84,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--history_len",
         type=int,
-        default=50,
+        default=100,
         help="Observation history length for CNN.",
     )
     parser.add_argument(

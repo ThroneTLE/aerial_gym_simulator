@@ -60,7 +60,7 @@ def evaluate_reconstruction():
     agent = runner.algo_factory.create('a2c_continuous_aux', base_name='run', params=config['params'])
     
     # 4. Load Checkpoint
-    latest_ckpt = "runs/teacher_aux_fixed_imitation_16-19-28-52/nn/last_teacher_aux_fixed_imitation_ep_86_rew_5256.954.pth"
+    latest_ckpt = "runs/teacher_aux_fixed_imitation_17-14-16-10/nn/teacher_aux_fixed_imitation.pth"
     if not os.path.exists(latest_ckpt):
         latest_ckpt = os.path.abspath(latest_ckpt)
         
@@ -88,7 +88,7 @@ def evaluate_reconstruction():
         return
 
     # Data collection
-    num_steps = 2500
+    num_steps = 1500
     privileged_dim = network.priv_dim
     
     # Storage
@@ -143,10 +143,24 @@ def evaluate_reconstruction():
     # Select first environment for plotting
     env_idx = 0 
     
-    feature_names = [
-        "Payload Mass", "COM X", "COM Y", "COM Z", 
-        "Release Mass", "Warning Flag", "Just Released"
-    ]
+    # Define feature names based on dimension
+    if privileged_dim == 18:
+        feature_names = [
+            "Payload Mass", 
+            "COM X", "COM Y", "COM Z", 
+            "Inertia Ixx", "Inertia Iyy", "Inertia Izz",
+            "Motor Thrust K", "Motor Time Const",
+            "Drag Lin X", "Drag Lin Y", "Drag Lin Z",
+            "Drag Ang X", "Drag Ang Y", "Drag Ang Z",
+            "Wind Force X", "Wind Force Y", "Wind Force Z"
+        ]
+    elif privileged_dim == 7:
+        feature_names = [
+            "Payload Mass", "COM X", "COM Y", "COM Z", 
+            "Inertia Ixx", "Inertia Iyy", "Inertia Izz"
+        ]
+    else:
+        feature_names = [f"Dim {i}" for i in range(privileged_dim)]
     
     fig, axes = plt.subplots(privileged_dim, 1, figsize=(10, 2 * privileged_dim))
     steps_axis = np.arange(num_steps)

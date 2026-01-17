@@ -118,6 +118,7 @@ def load_teacher_encoder(checkpoint_path: str, device: str, priv_dim: int = 7):
     
     Returns:
         priv_encoder: Frozen privileged encoder (priv_dim -> 8) WITH normalization
+        embed_dim: Detected embedding dimension
     """
     print(f"Loading teacher checkpoint: {checkpoint_path}")
     checkpoint = torch.load(checkpoint_path, map_location=device)
@@ -164,7 +165,16 @@ def load_teacher_encoder(checkpoint_path: str, device: str, priv_dim: int = 7):
             priv_dim = detected_priv_dim
     
     hidden = 128
+    # embed_dim = 8  # No longer hardcoded
+    
+    # Auto-detect embed_dim from last layer weights if possible, else 8
     embed_dim = 8
+    last_layer_key = "4.weight" # Linear(priv) -> Linear(hidden) -> Linear(hidden) -> Linear(embed)
+    if last_layer_key in priv_encoder_state:
+        embed_dim = priv_encoder_state[last_layer_key].shape[0]
+        print(f"  [Auto-detect] embed_dim from checkpoint: {embed_dim}")
+    else:
+        print(f"  [Warning] Could not detect embed_dim, using default: {embed_dim}")
     
     # Determine normalization type from checkpoint
     use_running_norm = priv_norm_running_mean is not None
@@ -228,25 +238,35 @@ def load_teacher_encoder(checkpoint_path: str, device: str, priv_dim: int = 7):
     print(f"  running_mean[:5]: {priv_encoder.running_mean[:min(5, priv_dim)].tolist()}")
     print(f"  running_var[:5]: {priv_encoder.running_var[:min(5, priv_dim)].tolist()}")
     
-    return priv_encoder
+    return priv_encoder, embed_dim
 
 
-def create_task(num_envs: int, device: str, preflight_crash_threshold: float = 10.0):
-    """Create the payload compensation task for data collection."""
+def create_task(num_envs: int, device: str):
+    """Create the payload compensation task for data collection.
+    
+    Overrides release_start to ensure immediate payload release at training start.
+    """
     from aerial_gym.config.task_config.payload_compensation_task_teacher_config import (
         task_config,
     )
     
-    # Override some settings for data collection
-    task_config.num_envs = num_envs
-    task_config.headless = True
-    task_config.device = device
-    # Relax crash thresholds for preflight random navigation
-    task_config.crash_distance_threshold = preflight_crash_threshold
-    task_config.crash_tilt_threshold_deg = 60.0  # Relax from 20° for trajectory tracking
+    # Override some settings for data collection without polluting global config
+    import copy
+    cfg_copy = copy.deepcopy(task_config)
+    cfg_copy.num_envs = num_envs
+    cfg_copy.headless = True
+    cfg_copy.device = device
+    # Relax crash thresholds for training stability
+    cfg_copy.crash_distance_threshold = 10.0
+    cfg_copy.crash_tilt_threshold_deg = 60.0
+    
+    # Force release to start after warm-up so all 4 releases are captured in training
+    # With history_len=200 (typical), release_start=250 ensures first release is visible
+    cfg_copy.payload_parameters["release_start"] = 250
+    cfg_copy.payload_parameters["release_start_range"] = [200, 300]
     
     task = PayloadCompensationTask(
-        task_config=task_config,
+        task_config=cfg_copy,
         seed=42,
         num_envs=num_envs,
         headless=True,
@@ -256,10 +276,9 @@ def create_task(num_envs: int, device: str, preflight_crash_threshold: float = 1
 
 
 def collect_training_sample(
-    task,
+    task_obs: dict,
     history_buffer: ObsHistoryBuffer,
     teacher_encoder: nn.Module,
-    device: str,
 ):
     """
     Collect one training sample: (obs_history, teacher_z).
@@ -269,9 +288,8 @@ def collect_training_sample(
         teacher_z: (num_envs, latent_dim)
     """
     # Get current observation
-    obs_dict = task.obs_dict
-    base_obs = task.task_obs["observations"]  # (num_envs, 29)
-    priv_obs = task.task_obs.get("privileged_obs", None)  # (num_envs, 41)
+    base_obs = task_obs["observations"]
+    priv_obs = task_obs.get("privileged_obs", None)
     
     if priv_obs is None:
         raise RuntimeError("Task must provide privileged observations for teacher supervision")
@@ -286,7 +304,7 @@ def collect_training_sample(
     with torch.no_grad():
         teacher_z = teacher_encoder(priv_obs)
     
-    return obs_history, teacher_z, base_obs
+    return obs_history, teacher_z
 
 
 def train_step(
@@ -365,29 +383,13 @@ def main():
         default="aerial_gym/rl_training/rl_games/ppo_aerial_quad_aux.yaml",
         help="Training YAML config path for building Teacher policy",
     )
-    parser.add_argument(
-        "--random_preflight_steps",
-        type=int,
-        default=1000,
-        help="Number of steps with random actions before release phase (per episode)",
-    )
+
     parser.add_argument(
         "--use_attention",
         action="store_true",
         help="Use CNN with Temporal Attention instead of standard CNN",
     )
-    parser.add_argument(
-        "--preflight_waypoint_range",
-        type=float,
-        default=0.5,
-        help="Range for random waypoint targets during preflight (meters)",
-    )
-    parser.add_argument(
-        "--preflight_waypoint_interval",
-        type=int,
-        default=100,
-        help="Steps between waypoint changes during preflight",
-    )
+
     
     args = parser.parse_args()
     
@@ -395,8 +397,7 @@ def main():
     
     # Create task first to get dimensions from config
     print("Creating simulation environment to detect dimensions...")
-    # Use relaxed crash threshold for preflight random navigation
-    task = create_task(args.num_envs, device, preflight_crash_threshold=10.0)
+    task = create_task(args.num_envs, device)
     obs_dim = task.task_config.observation_space_dim
     priv_dim = task.task_config.privileged_observation_space_dim
     action_dim = task.task_config.action_space_dim
@@ -418,14 +419,20 @@ def main():
     print(f"Num envs: {args.num_envs}")
     print(f"Obs dim: {obs_dim}, Priv dim: {priv_dim}, Action dim: {action_dim}")
     print(f"History length: {args.history_len}")
-    print(f"Latent dim: {args.latent_dim}")
+    print(f"Requested Latent dim: {args.latent_dim}")
     print(f"Epochs: {args.epochs}")
     print(f"Learning rate: {args.lr}")
     print(f"Output dir: {run_dir}")
     print("=" * 60)
     
-    # Load teacher encoder (auto-detects priv_dim from checkpoint)
-    teacher_encoder = load_teacher_encoder(args.teacher_checkpoint, device, priv_dim)
+    # Load teacher encoder (auto-detects priv_dim and embed_dim from checkpoint)
+    teacher_encoder, detected_embed_dim = load_teacher_encoder(args.teacher_checkpoint, device, priv_dim)
+
+    # Consistency check
+    if detected_embed_dim != args.latent_dim:
+        print(f"[WARNING] Config latent_dim ({args.latent_dim}) != Teacher embed_dim ({detected_embed_dim}).")
+        print(f"  -> Overriding latent_dim to {detected_embed_dim} to match Teacher.")
+        args.latent_dim = detected_embed_dim
     
     # Create CNN student encoder (with or without attention)
     if args.use_attention:
@@ -473,21 +480,48 @@ def main():
     print("Resetting environment...")
     task.reset()
     
+    target_zero = torch.zeros((args.num_envs, 3), device=device)
+
     # Warm up history buffer
     print(f"Warming up history buffer ({args.history_len} steps)...")
     for _ in range(args.history_len):
-        # Zero actions for warm-up (stable hover)
-        actions = torch.zeros((args.num_envs, action_dim), device=device)
+        # Use Teacher actions so early release doesn't destabilize warm-up
+        task.update_target_position(target_zero)
+        task_obs = task.get_task_observations()
+        obs = torch.as_tensor(
+            task_obs["observations"], device=device, dtype=torch.float32
+        )
+        priv = task_obs.get("privileged_obs", None)
+        if priv is not None:
+            priv = torch.as_tensor(priv, device=device, dtype=torch.float32)
+        with torch.no_grad():
+            input_dict = {
+                "is_train": False,
+                "prev_actions": None,
+                "obs": obs,
+                "privileged_obs": priv,
+                "rnn_states": None,
+                "seq_length": 1,
+            }
+            result = teacher_policy(input_dict)
+            actions = torch.clamp(result["mus"], -1.0, 1.0)
         task.step(actions)
-        base_obs = task.task_obs["observations"]
+        task_obs = task.get_task_observations()
+        terminations = task_obs.get("terminations")
+        truncations = task_obs.get("truncations")
+        if terminations is not None and truncations is not None:
+            reset_ids = (terminations > 0) | (truncations > 0)
+            reset_ids = torch.where(reset_ids)[0]
+            if reset_ids.numel() > 0:
+                history_buffer.reset(reset_ids)
+        base_obs = task_obs["observations"]
         history_buffer.push(base_obs)
     
     print("Starting training...")
     global_step = 0
     best_loss = float("inf")
     
-    # Per-env step counters for random preflight phase
-    env_step_counters = torch.zeros(args.num_envs, dtype=torch.long, device=device)
+
     
     for epoch in range(args.epochs):
         epoch_loss = 0.0
@@ -496,72 +530,45 @@ def main():
         cnn_encoder.train()
         
         for step in range(args.steps_per_epoch):
-            # Get observations
+            # Always Release Phase: use Teacher policy for compensation
+            task.update_target_position(target_zero)  # Target is origin during release
+            task_obs = task.get_task_observations()
             obs = torch.as_tensor(
-                task.task_obs["observations"], device=device, dtype=torch.float32
+                task_obs["observations"], device=device, dtype=torch.float32
             )
-            priv = task.task_obs.get("privileged_obs", None)
+            priv = task_obs.get("privileged_obs", None)
             if priv is not None:
                 priv = torch.as_tensor(priv, device=device, dtype=torch.float32)
-            
-            # Decide action: random waypoint flight for preflight, Teacher for release phase
-            use_preflight = env_step_counters < args.random_preflight_steps
-            
-            # Update random waypoints periodically during preflight
-            if use_preflight.any():
-                # Change waypoints every preflight_waypoint_interval steps
-                should_update_waypoint = (env_step_counters % args.preflight_waypoint_interval == 0) & use_preflight
-                if should_update_waypoint.any():
-                    update_envs = should_update_waypoint.nonzero(as_tuple=True)[0]
-                    # Generate random target positions within range
-                    random_targets = (torch.rand(update_envs.shape[0], 3, device=device) * 2 - 1) * args.preflight_waypoint_range
-                    random_targets[:, 2] = random_targets[:, 2].abs()  # Keep Z positive (above ground)
-                    task.target_position[update_envs] = random_targets
-            
-            # Preflight: zero compensation action (let controller track random waypoints)
-            # Release phase: use Teacher policy for compensation
-            if use_preflight.all():
-                # All envs in preflight: no compensation, just position tracking
-                actions = torch.zeros((args.num_envs, action_dim), device=device)
-            elif use_preflight.any():
-                # Mixed: zero for preflight, teacher for release
-                actions = torch.zeros((args.num_envs, action_dim), device=device)
-                teacher_envs = (~use_preflight).nonzero(as_tuple=True)[0]
-                # Reset target to origin for release phase envs
-                task.target_position[teacher_envs] = 0.0
-                with torch.no_grad():
-                    input_dict = {
-                        "is_train": False,
-                        "prev_actions": None,
-                        "obs": obs[teacher_envs],
-                        "privileged_obs": priv[teacher_envs] if priv is not None else None,
-                        "rnn_states": None,
-                        "seq_length": 1,
-                    }
-                    result = teacher_policy(input_dict)
-                    actions[teacher_envs] = torch.clamp(result["mus"], -1.0, 1.0)
-            else:
-                # All envs in release phase: use Teacher policy
-                task.target_position[:] = 0.0  # Target is origin during release
-                with torch.no_grad():
-                    input_dict = {
-                        "is_train": False,
-                        "prev_actions": None,
-                        "obs": obs,
-                        "privileged_obs": priv,
-                        "rnn_states": None,
-                        "seq_length": 1,
-                    }
-                    result = teacher_policy(input_dict)
-                    actions = torch.clamp(result["mus"], -1.0, 1.0)
-            
-            env_step_counters += 1
+            with torch.no_grad():
+                input_dict = {
+                    "is_train": False,
+                    "prev_actions": None,
+                    "obs": obs,
+                    "privileged_obs": priv,
+                    "rnn_states": None,
+                    "seq_length": 1,
+                }
+                result = teacher_policy(input_dict)
+                actions = torch.clamp(result["mus"], -1.0, 1.0)
             
             task.step(actions)
-            
-            # Collect training sample
-            obs_history, teacher_z, base_obs = collect_training_sample(
-                task, history_buffer, teacher_encoder, device
+
+            # --- FIX: Handle Resets BEFORE Sampling ---
+            # If an env reset happened this step, its obs is now the specific initial state,
+            # and its history should be cleared. Sampling from it mixed with old history is wrong.
+            # We must identify reset envs and clear their history buffer FIRST.
+            task_obs = task.get_task_observations()
+            terminations = task_obs.get("terminations")
+            truncations = task_obs.get("truncations")
+            if terminations is not None and truncations is not None:
+                reset_ids = (terminations > 0) | (truncations > 0)
+                reset_ids = torch.where(reset_ids)[0]
+                if reset_ids.numel() > 0:
+                    history_buffer.reset(reset_ids)
+
+            # Collect training sample (now safe: history is clean for new episodes, valid for ongoing ones)
+            obs_history, teacher_z = collect_training_sample(
+                task_obs, history_buffer, teacher_encoder
             )
             
             # Train step
@@ -574,13 +581,6 @@ def main():
                 metrics = compute_metrics(student_z, teacher_z)
             epoch_cos_sim += metrics["cosine_similarity"]
             
-            # Handle environment resets
-            if task.terminations.any() or task.truncations.any():
-                reset_ids = (task.terminations > 0) | (task.truncations > 0)
-                reset_ids = torch.where(reset_ids)[0]
-                if reset_ids.numel() > 0:
-                    history_buffer.reset(reset_ids)
-                    env_step_counters[reset_ids] = 0  # Reset step counters for new episodes
             
             global_step += 1
             

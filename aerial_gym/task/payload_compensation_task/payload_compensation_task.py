@@ -708,6 +708,24 @@ class PayloadCompensationTask(BaseTask):
         )
         self.obs_noise_std = rand_cfg.get("obs_noise_std", {})
 
+        # --- Extended Physical Parameter Randomization ---
+        self.randomize_motor_tc = rand_cfg.get("randomize_motor_time_constant", False)
+        self.motor_tc_range = rand_cfg.get("motor_time_constant_range", [0.05, 0.05])
+        
+        self.randomize_motor_thrust_k = rand_cfg.get("randomize_motor_thrust_constant", False)
+        self.motor_thrust_k_scale = rand_cfg.get("motor_thrust_constant_range_scale", [1.0, 1.0])
+        
+        self.randomize_drag = rand_cfg.get("randomize_drag_coefficients", False)
+        self.lin_drag_range = rand_cfg.get("lin_drag_coeff_range", [0.0, 0.0])
+        self.ang_drag_range = rand_cfg.get("ang_drag_coeff_range", [0.0, 0.0])
+        
+        self.randomize_ext_dist = rand_cfg.get("randomize_external_disturbance", False)
+        self.ext_force_range = rand_cfg.get("external_force_range", [0.0, 0.0])
+        self.ext_torque_range = rand_cfg.get("external_torque_range", [0.0, 0.0])
+        
+        self.ext_forces = torch.zeros((self.sim_env.num_envs, 3), device=self.device)
+        self.ext_torques = torch.zeros((self.sim_env.num_envs, 3), device=self.device)
+
         curriculum_cfg = getattr(self.task_config, "curriculum_parameters", None)
         self.curriculum_target_ranges = None
         self.curriculum_stage_steps = None
@@ -753,6 +771,13 @@ class PayloadCompensationTask(BaseTask):
 
         def patched_pre_physics_step(actions, _orig=orig_pre_physics_step):
             _orig(actions)
+            # Apply External Disturbance (Wind) - Add to root link (index 0)
+            # Use 'payload_manager.env_manager' to access robot tensors directly or use the captured scope if valid
+            # SimEnv -> RobotManager -> Robot
+            robot = sim_env.robot_manager.robot
+            robot.robot_force_tensors[:, 0, :] += self.ext_forces
+            robot.robot_torque_tensors[:, 0, :] += self.ext_torques
+
             orientations = sim_env.IGE_env.global_tensor_dict["robot_orientation"]
             body_torque = payload_manager.compute_body_torque(orientations)
             if payload_manager.force_offset_torque_scale != 0.0:
@@ -760,7 +785,7 @@ class PayloadCompensationTask(BaseTask):
                 body_torque = body_torque + payload_manager.compute_force_offset_torque(
                     total_force_body
                 )
-            sim_env.robot_manager.robot.robot_torque_tensors[:, 0, :] += body_torque
+            robot.robot_torque_tensors[:, 0, :] += body_torque
 
         robot_manager.pre_physics_step = patched_pre_physics_step
 
@@ -773,6 +798,7 @@ class PayloadCompensationTask(BaseTask):
         self.infos = {}
         self.payload_manager.reset()
         self.sim_env.reset()
+        self._randomize_ext_params(None)  # Randomize custom physics params AFTER sim reset
         self.prev_pos_dist[:] = 0.0
         self._refresh_env_state(env_ids=None, reset_payload_manager=False)
         return self.get_return_tuple()
@@ -781,6 +807,7 @@ class PayloadCompensationTask(BaseTask):
         env_tensor = self._get_env_tensor(env_ids)
         self.payload_manager.reset(env_ids=env_tensor)
         self.sim_env.reset_idx(env_ids)
+        self._randomize_ext_params(env_tensor)  # Randomize custom physics params AFTER sim reset
         self._refresh_env_state(env_ids=env_tensor, reset_payload_manager=False)
 
     def _refresh_env_state(self, env_ids=None, reset_payload_manager=False):
@@ -1313,38 +1340,118 @@ class PayloadCompensationTask(BaseTask):
         if not self.teacher_mode:
             return {}
         else:
-            # 使用配置中定义的特权观测维度 (7维简化版本)
-            # 手动归一化到 [0, 1] 或 [-1, 1] 范围，避免 RunningObsNorm 数值问题
+            # 18-dimensional extended privileged observation
+            # Manually normalize to [0, 1] or [-1, 1] to avoid RunningObsNorm issues
             priv_dim = self.task_config.privileged_observation_space_dim
             priv_vec = torch.zeros((self.sim_env.num_envs, priv_dim), device=self.device)
-            # 0: payload mass (0~0.04 kg → 0~1)
-            max_mass = 0.04
-            priv_vec[:, 0] = payload_obs["payload_mass"] / max_mass
-            # 1-3: COM offset (-0.4~0.4 m → -1~1)
-            max_offset = 0.4
-            priv_vec[:, 1:4] = payload_obs["com_offset"] / max_offset
-            # 4-6: true inertia diag (包含载荷贡献，与教师 torque 计算一致)
-            # 使用 _compute_true_inertia() 获取真实惯量，而非 base_inertia（名义值）
-            true_inertia = self._compute_true_inertia()  # [N, 3, 3]
-            true_inertia_diag = torch.diagonal(true_inertia, dim1=1, dim2=2)  # [N, 3]
-            # 归一化：除以典型惯量值
-            typical_inertia = 0.001  # kg·m²
-            priv_vec[:, 4:7] = true_inertia_diag / typical_inertia
+            
+            # --- Basic Privileged Info (0-7) ---
+            if priv_dim > 0:
+                # 0: payload mass (0~0.04 kg → 0~1)
+                max_mass = 0.04
+                priv_vec[:, 0] = payload_obs["payload_mass"] / max_mass
+            if priv_dim > 3:
+                # 1-3: COM offset (-0.4~0.4 m → -1~1)
+                max_offset = 0.4
+                priv_vec[:, 1:4] = payload_obs["com_offset"] / max_offset
+            if priv_dim > 6:
+                # 4-6: true inertia diag
+                # Use _compute_true_inertia() instead of nominal base_inertia
+                true_inertia = self._compute_true_inertia()  # [N, 3, 3]
+                true_inertia_diag = torch.diagonal(true_inertia, dim1=1, dim2=2)  # [N, 3]
+                typical_inertia = 0.001  # kg·m²
+                priv_vec[:, 4:7] = true_inertia_diag / typical_inertia
+
+            # --- Extended Privileged Info (7-17) ---
+            if priv_dim > 7:
+                robot = self.sim_env.robot_manager.robot
+                model = robot.control_allocator.motor_model
+                
+                # 7: Motor Thrust Constant Scale (Assuming isotropic)
+                base_k = (model.cfg.motor_thrust_constant_min + model.cfg.motor_thrust_constant_max) / 2.0
+                if hasattr(model, 'motor_thrust_constant'):
+                    current_k = model.motor_thrust_constant.mean(dim=1)
+                    priv_vec[:, 7] = current_k / base_k
+                else:
+                    priv_vec[:, 7] = 1.0
+
+            if priv_dim > 8:
+                # 8: Motor Time Constant
+                # Normalize by 0.1 (max reasonable value)
+                priv_vec[:, 8] = model.motor_time_constants_increasing.mean(dim=1) / 0.1
+
+            if priv_dim > 11:
+                # 9-11: Linear Drag Coefficients
+                # Normalize by 0.2 (max range)
+                priv_vec[:, 9:12] = robot.body_vel_linear_damping_coefficient / 0.2
+
+            if priv_dim > 14:
+                # 12-14: Angular Drag Coefficients
+                # Normalize by 0.05 (max range)
+                priv_vec[:, 12:15] = robot.angvel_linear_damping_coefficient / 0.05
+
+            if priv_dim > 17:
+                # 15-17: External Force (Wind)
+                # Normalize by 0.2 (max range)
+                priv_vec[:, 15:18] = self.ext_forces / 0.2
 
             # [Masking] Zero out components based on config
             obs_params = self.task_config.observation_parameters
-            if not obs_params.get("include_priv_mass", True):
+            if priv_dim > 0 and not obs_params.get("include_priv_mass", True):
                 priv_vec[:, 0] = 0.0
-            if not obs_params.get("include_priv_com", True):
+            if priv_dim > 3 and not obs_params.get("include_priv_com", True):
                 priv_vec[:, 1:4] = 0.0
-            if not obs_params.get("include_priv_inertia", True):
+            if priv_dim > 6 and not obs_params.get("include_priv_inertia", True):
                 priv_vec[:, 4:7] = 0.0
+            
+            if priv_dim > 7 and not obs_params.get("include_priv_motor_thrust", True):
+                priv_vec[:, 7] = 0.0
+            if priv_dim > 8 and not obs_params.get("include_priv_motor_tc", True):
+                priv_vec[:, 8] = 0.0
+            if priv_dim > 11 and not obs_params.get("include_priv_drag_lin", True):
+                priv_vec[:, 9:12] = 0.0
+            if priv_dim > 14 and not obs_params.get("include_priv_drag_ang", True):
+                priv_vec[:, 12:15] = 0.0
+            if priv_dim > 17 and not obs_params.get("include_priv_disturbance", True):
+                priv_vec[:, 15:18] = 0.0
 
             self.task_obs["privileged_obs"] = priv_vec
 
         self.task_obs["rewards"] = self.rewards
         self.task_obs["terminations"] = self.terminations
         self.task_obs["truncations"] = self.truncations
+
+    def update_target_position(self, target_pos: torch.Tensor, env_ids: Optional[torch.Tensor] = None):
+        """
+        External setter for target position to decouple training scripts from internal state.
+        Args:
+            target_pos: (N, 3) or (1, 3) target tensor
+            env_ids: Optional subset of envs to update. If None, updates all.
+        """
+        if not torch.is_tensor(target_pos):
+            target_pos = torch.as_tensor(target_pos, device=self.device, dtype=torch.float32)
+        else:
+            if target_pos.device != self.device:
+                target_pos = target_pos.to(self.device)
+            if target_pos.dtype != torch.float32:
+                target_pos = target_pos.float()
+        if target_pos.ndim == 1:
+            target_pos = target_pos.unsqueeze(0)
+        if target_pos.shape[-1] != 3:
+            raise ValueError(f"target_pos must have last dim=3, got shape {tuple(target_pos.shape)}")
+        if env_ids is None:
+            self.target_position[:] = target_pos
+        else:
+            env_ids = self._get_env_tensor(env_ids)
+            if target_pos.shape[0] == 1 and env_ids.numel() > 1:
+                target_pos = target_pos.expand(env_ids.numel(), -1)
+            self.target_position[env_ids] = target_pos
+
+    def get_task_observations(self):
+        """
+        Getter for task observations to decouple training scripts from direct dict access.
+        """
+        return self.task_obs
 
     def _get_env_tensor(self, env_ids=None):
         if env_ids is None:
@@ -1465,7 +1572,6 @@ class PayloadCompensationTask(BaseTask):
         env_tensor = self._get_env_tensor(env_ids)
         if env_tensor.numel() == 0:
             return
-
         if has_pos_noise:
             noise = (torch.rand((env_tensor.shape[0], 3), device=self.device) * 2 - 1.0)
             noise = noise * self.initial_position_noise
@@ -1483,6 +1589,58 @@ class PayloadCompensationTask(BaseTask):
         gym.set_actor_root_state_tensor(
             sim, gymtorch.unwrap_tensor(self.sim_env.IGE_env.unfolded_vec_root_tensor)
         )
+    def _randomize_ext_params(self, env_ids):
+        if env_ids is None:
+            env_ids = torch.arange(self.sim_env.num_envs, device=self.device, dtype=torch.long)
+        num_envs = len(env_ids)
+        
+        # 1. External Disturbance (Wind)
+        if self.randomize_ext_dist:
+            # Force
+            f_low, f_high = self.ext_force_range
+            f_mag = torch.rand(num_envs, device=self.device) * (f_high - f_low) + f_low
+            f_dir = torch.randn((num_envs, 3), device=self.device)
+            f_dir = f_dir / (torch.norm(f_dir, dim=1, keepdim=True) + 1e-6)
+            self.ext_forces[env_ids] = f_dir * f_mag.unsqueeze(1)
+            # Torque
+            t_low, t_high = self.ext_torque_range
+            t_mag = torch.rand(num_envs, device=self.device) * (t_high - t_low) + t_low
+            t_dir = torch.randn((num_envs, 3), device=self.device)
+            t_dir = t_dir / (torch.norm(t_dir, dim=1, keepdim=True) + 1e-6)
+            self.ext_torques[env_ids] = t_dir * t_mag.unsqueeze(1)
+        else:
+            self.ext_forces[env_ids] = 0.0
+            self.ext_torques[env_ids] = 0.0
+
+        robot = self.sim_env.robot_manager.robot
+
+        # 2. Drag Coefficients
+        if self.randomize_drag:
+            # Linear Drag
+            ld_low, ld_high = self.lin_drag_range
+            lin_drag = torch.rand(num_envs, device=self.device) * (ld_high - ld_low) + ld_low
+            robot.body_vel_linear_damping_coefficient[env_ids] = lin_drag.unsqueeze(1)
+            # Angular Drag
+            ad_low, ad_high = self.ang_drag_range
+            ang_drag = torch.rand(num_envs, device=self.device) * (ad_high - ad_low) + ad_low
+            robot.angvel_linear_damping_coefficient[env_ids] = ang_drag.unsqueeze(1)
+
+        # 3. Motor Parameters
+        model = robot.control_allocator.motor_model
+        # Motor Time Constant
+        if self.randomize_motor_tc:
+            tc_low, tc_high = self.motor_tc_range
+            tc = torch.rand(num_envs, device=self.device) * (tc_high - tc_low) + tc_low
+            model.motor_time_constants_increasing[env_ids] = tc.unsqueeze(1)
+            model.motor_time_constants_decreasing[env_ids] = tc.unsqueeze(1)
+            
+        # Motor Thrust Constant (Scale nominal)
+        if self.randomize_motor_thrust_k and hasattr(model, 'motor_thrust_constant'):
+            k_scale_low, k_scale_high = self.motor_thrust_k_scale
+            scale = torch.rand(num_envs, device=self.device) * (k_scale_high - k_scale_low) + k_scale_low
+            # Use average of min/max as nominal base
+            base_k = (model.cfg.motor_thrust_constant_min + model.cfg.motor_thrust_constant_max) / 2.0
+            model.motor_thrust_constant[env_ids] = base_k * scale.unsqueeze(1)
 
     def _apply_observation_noise(self):
         if not self.obs_noise_std:
@@ -1623,8 +1781,8 @@ class PayloadCompensationTask(BaseTask):
         if vec_root is None:
             return
         single_state = torch.zeros(13, device=self.device)
-        # 设置初始位置为 (3, 3, 3)
-        single_state[0:3] = torch.tensor([3.0, 3.0, 3.0], device=self.device)
+        # 设置初始位置为目标位置 (0, 0, 0)
+        single_state[0:3] = torch.tensor([0.0, 0.0, 0.0], device=self.device)
         single_state[6] = 1.0
         if env_ids is None:
             vec_root[:, 0, :] = single_state

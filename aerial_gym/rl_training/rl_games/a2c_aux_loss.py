@@ -99,8 +99,27 @@ class A2CAgentWithAuxLoss(a2c_continuous.A2CAgent):
         print(f"[A2CAgentWithAuxLoss] Registered teacher_actions in experience_buffer (shape: [horizon={self.horizon_length}, actors={self.num_actors}, action_dim={action_dim}])")
         
         # Register privileged_obs in experience_buffer for aux loss computation
-        # Get privileged_obs dim from config or infer from first obs
-        priv_dim = self.network.priv_dim if hasattr(self.network, 'priv_dim') else 7
+        # Get privileged_obs dim: priority: model network > env info > fallback
+        priv_dim = None
+        
+        # 1. Try getting from the network model (Source of Truth)
+        if hasattr(self, 'model'):
+            # rl_games ModelA2CContinuousLogStd usually stores the net in 'a2c_network' or 'network'
+            net = getattr(self.model, 'a2c_network', getattr(self.model, 'network', None))
+            if net is not None and hasattr(net, 'priv_dim'):
+                priv_dim = net.priv_dim
+                
+        # 2. Try getting from environment info
+        if priv_dim is None and hasattr(self, 'vec_env'):
+            env_info = self.vec_env.get_env_info() if hasattr(self.vec_env, 'get_env_info') else {}
+            # Check for various keys
+            priv_dim = env_info.get('privileged_obs_dim') or env_info.get('privileged_observation_space_dim')
+
+        # 3. Fallback (Warn)
+        if priv_dim is None:
+            print("[A2CAgentWithAuxLoss] WARNING: Could not determine priv_dim from network or env. Defaulting to 18.")
+            priv_dim = 18
+
         self.experience_buffer.tensor_dict['privileged_obs'] = torch.zeros(
             (self.horizon_length, self.num_actors, priv_dim),
             dtype=torch.float32,
