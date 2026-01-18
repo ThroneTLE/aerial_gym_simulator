@@ -1,0 +1,2 @@
+Experiment,Difficulty,Success Rate,Position RMSE,Avg Episode Length,Avg Reward,Num Episodes,Num Crashes
+Pure PD (Baseline),Hard,0.9200,0.360010,1442.02,12991.61,50,4

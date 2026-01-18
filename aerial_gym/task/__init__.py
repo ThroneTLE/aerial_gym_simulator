@@ -35,6 +35,9 @@ from aerial_gym.config.task_config.payload_compensation_task_config import (
 from aerial_gym.config.task_config.payload_compensation_task_teacher_config import (
     task_config as payload_compensation_task_teacher_config,
 )
+from aerial_gym.config.task_config.payload_compensation_task_no_phys_rand_config import (
+    task_config as payload_compensation_task_no_phys_rand_config,
+)
 from aerial_gym.config.task_config.payload_compensation_task_full_rl_config import (
     task_config as payload_compensation_task_full_rl_config,
 )
@@ -71,6 +74,11 @@ task_registry.register_task(
     "payload_compensation_task_teacher",
     PayloadCompensationTask,
     payload_compensation_task_teacher_config,
+)
+task_registry.register_task(
+    "payload_compensation_task_no_phys_rand",
+    PayloadCompensationTask,
+    payload_compensation_task_no_phys_rand_config,
 )
 task_registry.register_task(
     "payload_compensation_task_full_rl",

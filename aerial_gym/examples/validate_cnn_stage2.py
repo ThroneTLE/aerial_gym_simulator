@@ -597,13 +597,28 @@ def main() -> None:
     policy_actions, teacher_actions = [], []
     teacher_latents_list, cnn_latents_list = [], []
 
-    # Warm up history buffer
+    # Warm up history buffer (use Teacher actions to match training behavior)
     print(f"Warming up history buffer ({args.history_len} steps)...")
     with torch.no_grad():
         for _ in range(args.history_len):
             obs = torch.as_tensor(task.task_obs["observations"], device=device, dtype=torch.float32)
+            priv = task.task_obs.get("privileged_obs", None)
+            if priv is not None:
+                priv = torch.as_tensor(priv, device=device, dtype=torch.float32)
+            
+            # Use Teacher policy for warm-up actions (consistent with training)
+            input_dict = {
+                "is_train": False,
+                "prev_actions": None,
+                "obs": obs,
+                "privileged_obs": priv,
+                "rnn_states": rnn_states,
+            }
+            result = model(input_dict)
+            actions = result["mus"] if args.deterministic else result["actions"]
+            actions = torch.clamp(actions, -1.0, 1.0)
+            
             history_buffer.push(obs)
-            actions = torch.zeros((args.num_envs, action_dim), device=device)
             task.step(actions)
 
     print(f"Running validation for {args.steps} steps...")

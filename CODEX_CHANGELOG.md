@@ -167,14 +167,15 @@ python -m aerial_gym.rl_training.rl_games.runner \
   --num_envs 4096 \
   --headless True
 
-python aerial_gym/rl_training/train_cnn_student.py --teacher_checkpoint runs/teacher_aux_fixed_imitation_17-14-16-10/nn/teacher_aux_fixed_imitation.pth --use_attention --history_len 200 --experiment_name cnn_stage2_waypoint
+python aerial_gym/rl_training/train_cnn_student.py --teacher_checkpoint runs/teacher_aux_fixed_imitation_17-14-16-10/nn/teacher_aux_fixed_imitation.pth --use_attention --history_len 500 --experiment_name cnn_stage2_waypoint
+
+
 
 python aerial_gym/examples/validate_cnn_stage2.py \
     --teacher_checkpoint runs/teacher_aux_fixed_imitation_17-14-16-10/nn/teacher_aux_fixed_imitation.pth \
-    --cnn_checkpoint runs/cnn_stage2_waypoint_17-15-33-13/nn/best_cnn_encoder.pth \
-    --history_len 100 \
+    --cnn_checkpoint runs/cnn_student_18-02-01-12/nn/best_cnn_encoder.pth \
+    --history_len 500 \
     --steps 1500 \
-    --preflight_steps 1000 \
     --show_plot True
 
 ## 2025-02-21 Teacher 残差原型

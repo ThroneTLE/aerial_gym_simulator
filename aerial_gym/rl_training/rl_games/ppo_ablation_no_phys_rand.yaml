@@ -1,0 +1,101 @@
+params:
+  seed: 8
+  algo:
+    name: a2c_continuous_aux
+
+  model:
+    name: continuous_a2c_logstd
+
+  load_checkpoint: False
+
+  network:
+    name: privileged_actor_critic
+    separate: False
+    privileged_dim: 18
+    privileged_embed: 8
+    privileged_hidden: 128
+    aux_loss_coef: 100.0
+    aux_grad_scale: 0.05
+
+    space:
+      continuous:
+        mu_activation: None
+        sigma_activation: None
+        mu_init:
+          name: default
+        sigma_init:
+          name: const_initializer
+          val: -10.0
+        fixed_sigma: True
+        min_logstd: -10.0
+        max_logstd: -8.0
+    mlp:
+      units: [256, 256, 128]
+      d2rl: False
+      activation: elu
+      initializer:
+        name: default
+        scale: 2
+
+  config:
+    # ============================================================
+    # ABLATION: NO PHYSICS RANDOMIZATION
+    # ============================================================
+    env_name: payload_compensation_task_no_phys_rand
+    env_config:
+      num_envs: 2048
+      headless: True
+
+    name: ablation_no_phys_rand  # Experiment name
+    reward_shaper:
+      scale_value: 1.0
+
+    normalize_advantage: True
+    gamma: 0.99
+    tau: 0.95
+    ppo: True
+    learning_rate: 3e-4
+    lr_schedule: adaptive
+    kl_threshold: 0.01
+    save_best_after: 1
+    save_frequency: 1
+    score_to_win: 100000000
+    grad_norm: 1.0
+    entropy_coef: 0.00
+    truncate_grads: True
+    e_clip: 0.200
+    clip_value: True
+    num_actors: 2048
+    horizon_length: 256
+    minibatch_size: 131072
+    mini_epochs: 3
+    disturbance_adv_weight: 0.0
+    bc_coef: 10.0
+    bc_alpha: 0.99
+    bc_min_coef: 0.5
+    bc_coef_thrust: 30.0
+    bc_coef_torque: 20.0
+
+    critic_coef: 0.5
+    normalize_input: True
+    bounds_loss_coef: 0.000
+    max_epochs: 2000  # Shorter training for ablation
+    normalize_value: True
+    use_diagnostics: True
+    value_bootstrap: True
+    use_smooth_clamp: False
+
+    reward_clip_min: -1000000.0
+    reward_clip_max: 1000000.0
+    obs_clip_range: 10.0
+    nan_detection_interval: 100
+    physical_velocity_limit: 1000000.0
+    physical_angvel_limit: 1000000.0
+    skip_nan_gradients: True
+    reset_optimizer_on_persistent_nan: True
+    nan_tolerance: 5
+
+    player:
+      render: False
+      deterministic: True
+      games_num: 100000
