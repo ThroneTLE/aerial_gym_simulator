@@ -85,27 +85,27 @@ class task_config:
     crash_tilt_threshold_deg = 20.0
 
     # 补偿限制（物理量级）
-    # 最大总载荷 = 4 × max_mass = 4 × 0.04 = 0.16 kg
-    # thrust = 0.16 × 9.81 = 1.57 N → 留余量设为 2.0
-    # torque = 0.16 × 9.81 × 0.4 = 0.628 N·m → 设为 1.0
-    compensation_thrust_limit = 1.0  # N，匹配 controller config (覆盖4个载荷总重)
-    compensation_torque_limits = [1.0, 1.0, 0.2]  # [roll, pitch, yaw] N·m，匹配 controller config
+    # 最大总载荷 = 4 × max_mass = 4 × 0.4 = 1.6 kg
+    # thrust = 1.6 × 9.81 × 1.25 = 19.6 N → 设为 20.0
+    # torque = 1.6 × 9.81 × 0.4 = 6.3 N·m → 设为 12.0 (Supported by 40N motors -> 12.7Nm max)
+    compensation_thrust_limit = 20.0  # N，覆盖4个载荷总重
+    compensation_torque_limits = [12.0, 12.0, 1.0]  # [roll, pitch, yaw] N·m (Upgraded)
 
     payload_parameters = {
-        "payload_mass": 0.02,
-        "payload_mass_range": [0.00, 0.03],
+        "payload_mass": 0.2,  # 默认单载荷质量 (kg)
+        "payload_mass_range": [0.0, 0.4],  # 随机化范围 0-0.4kg
         "randomize_payload_mass": True,
         "randomize_offsets_on_plane": False,
-        "offset_plane_radial_jitter": 0.4,  #沿机臂方向的“半径扰动”，均匀分布 [-jitter, +jitter]
-        "offset_plane_z_jitter": 0.8,  #垂直方向的“高度扰动”，均匀分布 [-jitter, +jitter]
-        "offset_plane_r_max": 0.4,   #机臂方向最大偏移距离
+        "offset_plane_radial_jitter": 0.2,  # 沿机臂方向的半径扰动 (450mm轴距)
+        "offset_plane_z_jitter": 0.4,  #垂直方向的“高度扰动”，均匀分布 [-jitter, +jitter]
+        "offset_plane_r_max": 0.2,   # 机臂方向最大偏移距离 (450mm轴距)
         "offset_plane_z_max": 0.4,      #垂直方向最大偏移距离
         "force_offset_torque_scale": 0.00,  # 等效力矩系数：tau_eq = - r_com x F_total，1.0=全量补偿，0=关闭
         "offsets": [
-            [0.4, 0.0, -0.4],
-            [0.0, -0.4, -0.4],
-            [-0.4, 0.0, -0.4],
-            [0.0, 0.4, -0.4],
+            [0.2, 0.0, -0.4],
+            [0.0, -0.2, -0.4],
+            [-0.2, 0.0, -0.4],
+            [0.0, 0.2, -0.4],
         ],
         "release_start": 400,  # 第一阶段：尽早开始释放任务 
         "release_interval": 300,

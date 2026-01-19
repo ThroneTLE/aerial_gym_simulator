@@ -143,8 +143,8 @@ class BaseQuadCfg:
             [0.0, 0.0, 0.0, 0.0], # fx
             [0.0, 0.0, 0.0, 0.0], # fy
             [1.0, 1.0, 1.0, 1.0], # fz (总推力)
-            [-0.13, -0.13, 0.13, 0.13], # tx (俯仰力矩)
-            [-0.13, 0.13, 0.13, -0.13], # ty (滚转力矩)
+            [-0.159, -0.159, 0.159, 0.159], # tx (俯仰力矩) - 450mm轴距
+            [-0.159, 0.159, 0.159, -0.159], # ty (滚转力矩) - 450mm轴距
             [-0.01, 0.01, -0.01, 0.01], # tz (偏航力矩)
         ]
 
@@ -152,16 +152,16 @@ class BaseQuadCfg:
             """电机模型配置。"""
             use_rps = True # 是否使用 RPS（每秒转数）作为电机输出单位
 
-            motor_thrust_constant_min = 0.00000926312 # 最小推力常数
-            motor_thrust_constant_max = 0.00001826312 # 最大推力常数
+            motor_thrust_constant_min = 0.00008 # Scaled up for stronger motors
+            motor_thrust_constant_max = 0.00012 
 
-            motor_time_constant_increasing_min = 0.04 # 推力增加时的时间常数（最小）
-            motor_time_constant_increasing_max = 0.04 # 推力增加时的时间常数（最大）
+            motor_time_constant_increasing_min = 0.04 
+            motor_time_constant_increasing_max = 0.04 
 
-            motor_time_constant_decreasing_min = 0.04 # 推力减小时的时间常数（最小）
-            motor_time_constant_decreasing_max = 0.04 # 推力减小时的时间常数（最大）
+            motor_time_constant_decreasing_min = 0.04 
+            motor_time_constant_decreasing_max = 0.04 
 
-            max_thrust = 2 # 最大推力
+            max_thrust = 40 # Upgraded from 15N to 40N (Supports ~4kg total thrust per motor)
             min_thrust = 0 # 最小推力
 
             max_thrust_rate = 100000.0 # 最大推力变化率

@@ -214,6 +214,19 @@ def run_demo(steps=2000, headless=False, device="cuda:0"):
     cfg = teacher_cfg.task_config
     cfg.headless = headless
     cfg.device = device
+    
+    # Override for heavy payload testing
+    cfg.payload_parameters["payload_mass"] = 0.4  # Max mass per slot
+    cfg.payload_parameters["randomize_payload_mass"] = False
+    
+    # Ensure limits are sufficient
+    cfg.compensation_thrust_limit = 20.0
+    cfg.compensation_torque_limits = [12.0, 12.0, 1.0]
+    
+    # Relax crash thresholds
+    cfg.crash_distance_threshold = 10.0
+    cfg.crash_tilt_threshold_deg = 80.0
+    
     env = PayloadCompensationTask(cfg)
     obs, *_ = env.reset()
     positions = []
@@ -260,7 +273,10 @@ def run_demo(steps=2000, headless=False, device="cuda:0"):
     comp_torque_limits = env.comp_torque_limits.detach().cpu().numpy()
     max_residual_np = max_residual.detach().cpu().numpy()
     max_thrust_comp = max_residual_np[0] * comp_thrust_limit
-    max_torque_comp = max_residual_np[1:] * comp_torque_limits
+    # max_residual contains [thrust, roll, pitch]
+    # comp_torque_limits contains [roll, pitch, yaw]
+    # We only have residuals for roll and pitch
+    max_torque_comp = max_residual_np[1:] * comp_torque_limits[:2]
     print(
         "Max teacher residual (|.|, normalized): "
         f"thrust={max_residual_np[0]:.3f}, torque={max_residual_np[1:]}",

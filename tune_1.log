@@ -1,0 +1,8 @@
+/usr/lib/python3/dist-packages/requests/__init__.py:89: RequestsDependencyWarning: urllib3 (2.2.3) or chardet (3.0.4) doesn't match a supported version!
+  warnings.warn("urllib3 ({}) or chardet ({}) doesn't match a supported "
+Traceback (most recent call last):
+  File "auto_tune_pid.py", line 24, in <module>
+    from aerial_gym.registry.task_registry import task_registry
+  File "/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/__init__.py", line 2, in <module>
+    import isaacgym
+ModuleNotFoundError: No module named 'isaacgym'

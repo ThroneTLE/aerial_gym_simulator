@@ -53,17 +53,17 @@ class task_config:
     crash_distance_threshold = 1.0
     crash_tilt_threshold_deg = 20.0
 
-    compensation_thrust_limit = 1.0
-    compensation_torque_limits = [1.0, 1.0, 0.2]
+    compensation_thrust_limit = 20.0
+    compensation_torque_limits = [8.0, 8.0, 1.0]
 
     # Payload randomization (kept for task requirement)
     payload_parameters = {
-        "payload_mass": 0.02,
-        "payload_mass_range": [0.00, 0.03],
+        "payload_mass": 0.2,
+        "payload_mass_range": [0.0, 0.4],
         "randomize_payload_mass": True,
         "randomize_offsets_on_plane": False,
         "offset_plane_radial_jitter": 0.4,
-        "offset_plane_z_jitter": 0.8,
+        "offset_plane_z_jitter": 0.4,
         "offset_plane_r_max": 0.4,
         "offset_plane_z_max": 0.4,
         "force_offset_torque_scale": 0.00,

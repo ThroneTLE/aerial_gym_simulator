@@ -12,7 +12,10 @@ from torch.utils.tensorboard import SummaryWriter
 from aerial_gym.task.base_task import BaseTask
 from aerial_gym.sim.sim_builder import SimBuilder
 from aerial_gym.config.controller_config import lee_controller_with_comp_config
+from aerial_gym.config.controller_config import lee_controller_config
 from aerial_gym.config.robot_config.base_quad_config import BaseQuadCfg
+from aerial_gym.control.controllers.position_control import LeePositionController
+from aerial_gym.registry.controller_registry import controller_registry
 from aerial_gym.utils.logging import CustomLogger
 from aerial_gym.utils.math import (
     quat_apply_inverse,
@@ -520,6 +523,7 @@ class PayloadCompensationTask(BaseTask):
         super().__init__(task_config)
         self.device = self.task_config.device
         self.teacher_mode = getattr(self.task_config, "teacher_mode", False)
+        self.use_omniscient_gains = bool(getattr(self.task_config, "use_omniscient_gains", True))
         self.dagger_frac = float(getattr(self.task_config, "dagger_frac", 0.0))
         self._dagger_init_frac = self.dagger_frac
         self._dagger_updates = 0
@@ -577,6 +581,23 @@ class PayloadCompensationTask(BaseTask):
             use_warp=self.task_config.use_warp,
             headless=self.task_config.headless,
         )
+        
+        # --- Omniscient Teacher Setup ---
+        # Initialize Shadow Controller (LeePositionController) using same logic as robot
+        # We use a separate instance to run "What-If" scenarios with Optimal Gains
+        self.shadow_controller, _ = controller_registry.make_controller(
+            "lee_position_control",
+            self.task_config.num_envs,
+            self.device
+        )
+        # Access the Real Controller (Fixed Gains)
+        self.real_controller = self.sim_env.robot_manager.robot.controller
+        
+        # Initialize Shadow Controller Tensors (Needs global dictionary)
+        # Assuming sim_env.IGE_env exposes global_tensor_dict
+        self.shadow_controller.init_tensors(self.sim_env.IGE_env.global_tensor_dict)
+        
+        # Config for Gain Schedule will be accessed in _update_teacher_residual
 
         self.actions = torch.zeros(
             (self.sim_env.num_envs, self.task_config.action_space_dim),
@@ -1347,8 +1368,8 @@ class PayloadCompensationTask(BaseTask):
             
             # --- Basic Privileged Info (0-7) ---
             if priv_dim > 0:
-                # 0: payload mass (0~0.04 kg → 0~1)
-                max_mass = 0.04
+                # 0: payload mass (0~1.6 kg → 0~1, 4×0.4kg max)
+                max_mass = 1.6  # 4 payloads × 0.4 kg each
                 priv_vec[:, 0] = payload_obs["payload_mass"] / max_mass
             if priv_dim > 3:
                 # 1-3: COM offset (-0.4~0.4 m → -1~1)
@@ -1359,7 +1380,7 @@ class PayloadCompensationTask(BaseTask):
                 # Use _compute_true_inertia() instead of nominal base_inertia
                 true_inertia = self._compute_true_inertia()  # [N, 3, 3]
                 true_inertia_diag = torch.diagonal(true_inertia, dim1=1, dim2=2)  # [N, 3]
-                typical_inertia = 0.001  # kg·m²
+                typical_inertia = 0.008  # kg·m² (matches new base_link inertia)
                 priv_vec[:, 4:7] = true_inertia_diag / typical_inertia
 
             # --- Extended Privileged Info (7-17) ---
@@ -1490,23 +1511,17 @@ class PayloadCompensationTask(BaseTask):
         return self._imitation_weight_current
 
     def _update_teacher_residual(self):
-        """Compute teacher residual (normalized) using privileged mass/COM.
+        """Compute teacher residual: Physical Compensation + Omniscient PID Correction."""
         
-        新动作结构 (3维):
-          [0] thrust 补偿
-          [1] roll 力矩补偿
-          [2] pitch 力矩补偿
-        """
+        # 1. Physical Torque Compensation (Feedforward Gravity/Inertia)
         orientations = self.obs_dict["robot_orientation"]
         tau_payload = self.payload_manager.compute_body_torque(orientations)
         tau_force = torch.zeros_like(tau_payload)
         if self.payload_manager.force_offset_torque_scale != 0.0:
             total_force_body = self.payload_manager.compute_total_force_body()
             tau_force = self.payload_manager.compute_force_offset_torque(total_force_body)
-        self._last_tau_payload = (tau_payload + tau_force).detach()
-        residual = torch.zeros_like(self.teacher_residual)  # [N, 3]
         
-        # 惯量差补偿：使用 gyroscopic 项近似 tau_true - tau_base
+        # Gyroscopic Inertia Compensation
         angvel = self.obs_dict["robot_body_angvel"]
         I_true = self._compute_true_inertia()
         I_nom = self.payload_manager.base_inertia_nominal
@@ -1516,18 +1531,119 @@ class PayloadCompensationTask(BaseTask):
         gyro_nom = torch.cross(angvel, Iw_nom, dim=1)
         tau_inertia = gyro_true - gyro_nom
 
-        # 只取 roll (index 0) 和 pitch (index 1)，忽略 yaw (index 2)
-        torque_limits = self.comp_torque_limits[0:2].view(1, 2).clamp(min=1e-6)
-        total_tau = -(tau_payload[:, 0:2] + tau_force[:, 0:2]) + tau_inertia[:, 0:2]
-        residual[:, 1:3] = torch.clamp(total_tau / torque_limits, -1.0, 1.0)
+        total_tau_phys = -(tau_payload + tau_force) + tau_inertia
         
-        # thrust 补偿：名义控制未包含载荷质量，补齐 payload 重力
-        mass_delta = self.payload_manager.current_payload_mass  # 真实-名义
-        if self.comp_thrust_limit > 1e-6:
-            thrust_extra = torch.abs(self.payload_manager.gravity[2]) * mass_delta
-            residual[:, 0] = torch.clamp(thrust_extra / self.comp_thrust_limit, -1.0, 1.0)
+        # 2. Omniscient PID Correction (Feedback Stiffness)
+        # Difference between Optimal PID (Shadow) and Fixed PID (Real)
+        
+        # Identify current payload count for scheduling
+        num_attached = self.payload_manager.attached_mask.sum(dim=1).long()
+        
+        # Retrieve Schedule
+        schedule = getattr(lee_controller_config, "K_gain_schedule", None)
+        
+        if hasattr(self, "shadow_controller") and schedule is not None and self.use_omniscient_gains:
+            # Prepare Tensors for Optimal Gains
+            # Vectorized assignment based on num_attached
+            
+            # Create large tensors to hold scheduled values
+            # shape (5, 3) -> (N, 3)
+            # We assume schedule has 5 entries [0..4]
+            # Since tensor creation is slow, we should cache this if possible.
+            # For now, create on fly or use simple CPU lookup if N is small?
+            # 1024 envs... we need torch method.
+            
+            # Extract schedule into tensors
+            # We do this once or cache it? Creating 5 tensors is fast.
+            Kp_sched = torch.tensor([s["K_pos"] for s in schedule], device=self.device)
+            Kv_sched = torch.tensor([s["K_vel"] for s in schedule], device=self.device)
+            Kr_sched = torch.tensor([s["K_rot"] for s in schedule], device=self.device)
+            Kw_sched = torch.tensor([s["K_angvel"] for s in schedule], device=self.device)
+            
+            # Lookup
+            Kp_opt = Kp_sched[num_attached]
+            Kv_opt = Kv_sched[num_attached]
+            Kr_opt = Kr_sched[num_attached]
+            Kw_opt = Kw_sched[num_attached]
+            
+            # Update Shadow Controller Gains
+            self.shadow_controller.K_pos_tensor_current[:] = Kp_opt
+            self.shadow_controller.K_linvel_tensor_current[:] = Kv_opt
+            self.shadow_controller.K_rot_tensor_current[:] = Kr_opt
+            self.shadow_controller.K_angvel_tensor_current[:] = Kw_opt
+            
+            # Prepare Input Command (Subset of full action)
+            # Expect [x, y, z, yaw]
+            shadow_input = self.controller_actions[:, 0:4]
+            
+            # Run Shadow Controller (Optimal) -> Wrench_Opt
+            wrench_opt = self.shadow_controller.update(shadow_input)
+            
+            # Run Real Controller (Fixed) -> Wrench_Fix
+            # We assume SimEnv's controller is the Real one and its state is synced?
+            # Actually Real Controller's `update` might have side effects on `desired_quat`.
+            # If we call it here, we might double-step the filter if it had one.
+            # But LeePositionController is mostly stateless (except desired_quat).
+            # The REAL update happens in `sim_env.step()`.
+            # If we call it here, we get the value.
+            # BUT we risk modifying `self.real_controller` state before the physics step?
+            # Yes. `desired_quat` will be updated based on CURRENT state.
+            # When `sim_env.step()` happens, it calls `update` again with SAME state (mostly).
+            # So it's idempotent-ish.
+            wrench_fix = self.real_controller.update(shadow_input)
+            
+            # PID Residual = Opt - Fix
+            residual_wrench = wrench_opt - wrench_fix
+            
+            # wrench: [fx, fy, fz, tx, ty, tz]
+            # Map to Residual Action: [thrust_cmd, roll_torque_cmd, pitch_torque_cmd]
+            # Thrust Diff (N)
+            d_thrust_N = residual_wrench[:, 2] 
+            # Torque Diff (Nm) [Only Roll/Pitch]
+            d_torque_Nm = residual_wrench[:, 3:5] # tx, ty
+            
+            # Normalize
+            # Thrust Action = d_thrust / Limit
+            pid_thrust_action = d_thrust_N / self.comp_thrust_limit
+            # Torque Action = d_torque / Limit
+            pid_torque_action = d_torque_Nm / self.comp_torque_limits[0:2]
+            
+        else:
+            pid_thrust_action = 0.0
+            pid_torque_action = 0.0
+            
+        # 3. Combine and Norm
+        # Phys Torque (Nm). Normalize by Limit.
+        phys_torque_action = total_tau_phys[:, 0:2] / self.comp_torque_limits[0:2]
+        
+        # Phys Thrust? `_update_teacher_residual` previously handled Thrust Comp logic separate?
+        # See previous code:
+        # mass_delta = self.payload_manager.current_payload_mass
+        # thrust_extra = torch.abs(self.payload_manager.gravity) * mass_delta
+        
+        # We REUSE that logic or subsume it?
+        # User said "Comp 1 comes from CURRENT [Phys] ...".
+        # So we keep the Phys Comp.
+        mass_delta = self.payload_manager.current_payload_mass
+        thrust_extra_N = torch.abs(self.payload_manager.gravity[2]) * mass_delta # Only z-component of gravity
+        phys_thrust_action = thrust_extra_N / self.comp_thrust_limit
+        
+        # Total
+        total_thrust_action = phys_thrust_action + pid_thrust_action
+        total_torque_action = phys_torque_action + pid_torque_action
+        
+        residual = torch.zeros_like(self.teacher_residual)
+        residual[:, 0] = total_thrust_action
+        residual[:, 1:3] = total_torque_action # Roll/Pitch
+        
+        # Clamp final residual to [-1, 1] to stay within validity? 
+        # Or allow saturation? Default clamp [-1, 1].
+        self.teacher_residual[:] = torch.clamp(residual, -1.0, 1.0)
+        
+        # Cache for debug/log
+        self._last_tau_payload = total_tau_phys.detach() # Keep tracking phys part separately? or total?
+        # Let's keep existing debug logic happy
 
-        self.teacher_residual = residual
 
     def _compute_true_inertia(self):
         """Recompute true inertia tensor from base + attached payloads."""
@@ -1763,13 +1879,13 @@ class PayloadCompensationTask(BaseTask):
             for env_id in env_ids
         }
         target_samples = self.target_position[env_ids].detach().cpu().numpy().tolist()
-        logger.info(
-            "[DebugReset %d] env_ids=%s targets=%s release_info=%s",
-            self._debug_reset_count,
-            env_ids,
-            target_samples,
-            release_info,
-        )
+        # logger.info(
+        #     "[DebugReset %d] env_ids=%s targets=%s release_info=%s",
+        #     self._debug_reset_count,
+        #     env_ids,
+        #     target_samples,
+        #     release_info,
+        # )
         self._debug_reset_count += 1
 
     def _initialize_vehicle_state(self, env_ids=None):

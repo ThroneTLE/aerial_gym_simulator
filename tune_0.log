@@ -1,0 +1,399 @@
+Importing module 'gym_38' (/home/throne/下载/isaacgym/python/isaacgym/_bindings/linux-x86_64/gym_38.so)
+Setting GYM_USD_PLUG_INFO_PATH to /home/throne/下载/isaacgym/python/isaacgym/_bindings/linux-x86_64/usd/plugInfo.json
+PyTorch version 1.13.1
+Device count 1
+/home/throne/下载/isaacgym/python/isaacgym/_bindings/src/gymtorch
+Using /home/throne/.cache/torch_extensions/py38_cu117 as PyTorch extensions root...
+Emitting ninja build file /home/throne/.cache/torch_extensions/py38_cu117/gymtorch/build.ninja...
+Building extension module gymtorch...
+Allowing ninja to set a default number of workers... (overridable by setting the environment variable MAX_JOBS=N)
+ninja: no work to do.
+Loading extension module gymtorch...
+Gym has been unmaintained since 2022 and does not support NumPy 2.0 amongst other critical functionality.
+Please upgrade to Gymnasium, the maintained drop-in replacement of Gym, or contact the authors of your software and request that they upgrade.
+See the migration guide at https://gymnasium.farama.org/introduction/migration_guide/ for additional information.
+/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/gymnasium/envs/registration.py:596: UserWarning: [33mWARN: plugin: shimmy.registration:register_gymnasium_envs raised Traceback (most recent call last):
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/gymnasium/envs/registration.py", line 594, in load_plugin_envs
+    fn()
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/shimmy/registration.py", line 304, in register_gymnasium_envs
+    _register_atari_envs()
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/shimmy/registration.py", line 205, in _register_atari_envs
+    import ale_py
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/ale_py/__init__.py", line 68, in <module>
+    register_v0_v4_envs()
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/ale_py/registration.py", line 178, in register_v0_v4_envs
+    _register_rom_configs(legacy_games, obs_types, versions)
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/ale_py/registration.py", line 63, in _register_rom_configs
+    gymnasium.register(
+AttributeError: partially initialized module 'gymnasium' has no attribute 'register' (most likely due to a circular import)
+[0m
+  logger.warn(f"plugin: {plugin.value} raised {traceback.format_exc()}")
+/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/torch/utils/tensorboard/__init__.py:4: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
+  if not hasattr(tensorboard, "__version__") or LooseVersion(
+[37m[1858 ms][base_task] - INFO : Setting seed: 1 (base_task.py:38)[0m
+[37m[1858 ms][payload_compensation_task] - INFO : Building environment for payload compensation task. (payload_compensation_task.py:569)[0m
+[37m[1858 ms][env_manager] - INFO : Populating environments. (env_manager.py:76)[0m
+[37m[1858 ms][env_manager] - INFO : Creating simulation instance. (env_manager.py:92)[0m
+[37m[1858 ms][env_manager] - INFO : Instantiating IGE object. (env_manager.py:93)[0m
+[37m[1858 ms][IsaacGymEnvManager] - INFO : Creating Isaac Gym Environment (IGE_env_manager.py:46)[0m
+[37m[1858 ms][IsaacGymEnvManager] - INFO : Acquiring gym object (IGE_env_manager.py:81)[0m
+[37m[1858 ms][IsaacGymEnvManager] - INFO : Acquired gym object (IGE_env_manager.py:83)[0m
+[37m[1859 ms][IsaacGymEnvManager] - INFO : Fixing devices (IGE_env_manager.py:95)[0m
+[37m[1859 ms][IsaacGymEnvManager] - INFO : Using GPU pipeline for simulation. (IGE_env_manager.py:112)[0m
+[37m[1859 ms][IsaacGymEnvManager] - INFO : Sim Device type: cuda, Sim Device ID: 0 (IGE_env_manager.py:115)[0m
+[31;1m[1859 ms][IsaacGymEnvManager] - CRITICAL : 
+ Setting graphics device to -1.
+ This is done because the simulation is run in headless mode and no Isaac Gym cameras are used.
+ No need to worry. The simulation and warp rendering will work as expected. (IGE_env_manager.py:125)[0m
+[37m[1859 ms][IsaacGymEnvManager] - INFO : Graphics Device ID: -1 (IGE_env_manager.py:133)[0m
+[37m[1859 ms][IsaacGymEnvManager] - INFO : Creating Isaac Gym Simulation Object (IGE_env_manager.py:135)[0m
+[33;20m[1859 ms][IsaacGymEnvManager] - WARNING : If you have set the CUDA_VISIBLE_DEVICES environment variable, please ensure that you set it
+to a particular one that works for your system to use the viewer or Isaac Gym cameras.
+If you want to run parallel simulations on multiple GPUs with camera sensors,
+please disable Isaac Gym and use warp (by setting use_warp=True), set the viewer to headless. (IGE_env_manager.py:143)[0m
+[33;20m[1859 ms][IsaacGymEnvManager] - WARNING : If you see a segfault in the next lines, it is because of the discrepancy between the CUDA device and the graphics device.
+Please ensure that the CUDA device and the graphics device are the same. (IGE_env_manager.py:148)[0m
+Not connected to PVD
++++ Using GPU PhysX
+Physics Engine: PhysX
+Physics Device: cuda:0
+GPU Pipeline: enabled
+[37m[2592 ms][IsaacGymEnvManager] - INFO : Created Isaac Gym Simulation Object (IGE_env_manager.py:154)[0m
+[37m[2592 ms][IsaacGymEnvManager] - INFO : Created Isaac Gym Environment (IGE_env_manager.py:49)[0m
+[37m[2832 ms][env_manager] - INFO : IGE object instantiated. (env_manager.py:115)[0m
+[37m[2832 ms][env_manager] - INFO : Creating robot manager. (env_manager.py:126)[0m
+[37m[2832 ms][BaseRobot] - INFO : [DONE] Initializing controller (base_robot.py:26)[0m
+[37m[2832 ms][BaseRobot] - INFO : Initializing controller lee_position_control_with_compensation (base_robot.py:29)[0m
+[33;20m[2832 ms][base_multirotor] - WARNING : Creating 1024 multirotors. (base_multirotor.py:37)[0m
+[37m[2832 ms][env_manager] - INFO : [DONE] Creating robot manager. (env_manager.py:132)[0m
+[37m[2832 ms][env_manager] - INFO : [DONE] Creating simulation instance. (env_manager.py:134)[0m
+[37m[2832 ms][asset_loader] - INFO : Loading asset: quad.urdf for the first time. Next use of this asset will be via the asset buffer. (asset_loader.py:71)[0m
+[37m[2834 ms][env_manager] - INFO : Populating environment 0 (env_manager.py:194)[0m
+[33;20m[3197 ms][robot_manager] - WARNING : 
+Robot mass: 1.5000004242143916,
+Inertia: tensor([[ 2.5632e-02,  0.0000e+00, -1.1581e-23],
+        [ 0.0000e+00,  2.5632e-02, -9.9262e-24],
+        [-1.1581e-23, -9.9262e-24,  5.1264e-02]], device='cuda:0'),
+Robot COM: tensor([[0.0000e+00, 0.0000e+00, 4.2220e-15, 1.0000e+00]], device='cuda:0') (robot_manager.py:427)[0m
+[33;20m[3197 ms][robot_manager] - WARNING : Calculated robot mass and inertia for this robot. This code assumes that your robot is the same across environments. (robot_manager.py:430)[0m
+[31;1m[3197 ms][robot_manager] - CRITICAL : If your robot differs across environments you need to perform this computation for each different robot here. (robot_manager.py:433)[0m
+[37m[3254 ms][env_manager] - INFO : Populating environment 1000 (env_manager.py:194)[0m
+[37m[3255 ms][env_manager] - INFO : [DONE] Populating environments. (env_manager.py:79)[0m
+[33;20m[3270 ms][IsaacGymEnvManager] - WARNING : Headless: True (IGE_env_manager.py:494)[0m
+[37m[3270 ms][IsaacGymEnvManager] - INFO : Headless mode. Viewer not created. (IGE_env_manager.py:505)[0m
+[33;20m[3318 ms][asset_manager] - WARNING : Number of obstacles to be kept in the environment: 0 (asset_manager.py:32)[0m
+/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/control/motor_model.py:53: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  torch.tensor(self.min_thrust, device=self.device, dtype=torch.float32).expand(
+/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/control/motor_model.py:56: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  torch.tensor(self.max_thrust, device=self.device, dtype=torch.float32).expand(
+[33;20m[3531 ms][control_allocation] - WARNING : Control allocation does not account for actuator limits. This leads to suboptimal allocation (control_allocation.py:67)[0m
+[31;20m[3532 ms][robot_manager] - ERROR : Not using warp. Initializing sensors (robot_manager.py:131)[0m
+Warp 1.0.0 initialized:
+   CUDA Toolkit 11.5, Driver 12.6
+   Devices:
+     "cpu"      : "x86_64"
+     "cuda:0"   : "NVIDIA GeForce RTX 4060 Laptop GPU" (8 GiB, sm_89, mempool enabled)
+   Kernel cache:
+     /home/throne/.cache/warp/1.0.0
+============================================================
+PARALLEL PID AUTO-TUNING (Evolution Strategy)
+Population Size: 1024
+Generations:     15
+============================================================
+DEBUG: Configuring Task for 0 payloads (Configured to spawn 4, but will mask to 0)
+[isaacgym:gymutil.py] Unknown args:  ['--generations', '15', '--duration', '1.5', '--payloads', '0']
+WARNING: allocation matrix is not full rank. Rank: 4
+DEBUG: task type: <class 'aerial_gym.task.payload_compensation_task.payload_compensation_task.PayloadCompensationTask'>
+DEBUG: task attrs: ['__abstractmethods__', '__class__', '__delattr__', '__dict__', '__dir__', '__doc__', '__eq__', '__format__', '__ge__', '__getattribute__', '__gt__', '__hash__', '__init__', '__init_subclass__', '__le__', '__lt__', '__module__', '__ne__', '__new__', '__reduce__', '__reduce_ex__', '__repr__', '__setattr__', '__sizeof__', '__slots__', '__str__', '__subclasshook__', '__weakref__', '_abc_impl', '_advance_curriculum_if_needed', '_apply_initial_state_noise', '_apply_observation_noise', '_compute_payload_penalties', '_compute_true_inertia', '_dagger_init_frac', '_dagger_updates', '_debug_reset_count', '_flush_rollout_logger', '_get_env_tensor', '_get_tb_log_dir', '_imitation_reward_ema', '_imitation_reward_ema_alpha', '_imitation_schedule_enabled', '_imitation_weight_current', '_imitation_weight_decay_reward', '_imitation_weight_decay_span', '_imitation_weight_end', '_imitation_weight_start', '_init_rollout_logger', '_initialize_vehicle_state', '_last_decay_imitation_err', '_last_policy_imitation_err', '_last_reward_components', '_last_tau_payload', '_log_debug_reset', '_log_rollout', '_make_timestamped_log_dir', '_patch_pre_physics_step', '_randomize_ext_params', '_randomize_target_positions', '_refresh_env_state', '_rollout_logger', '_update_imitation_weight', '_update_teacher_residual', 'action_space', 'action_space_dim', 'actions', 'ang_drag_range', 'close', 'comp_thrust_limit', 'comp_torque_limits', 'controller_actions', 'counter', 'crash_distance_threshold', 'crash_tilt_threshold_rad', 'current_target_range_tensor', 'curriculum_stage', 'curriculum_stage_progress', 'curriculum_stage_steps', 'curriculum_target_ranges', 'dagger_decay_rate', 'dagger_decay_reward', 'dagger_frac', 'dagger_min_frac', 'dagger_use_postmix_err', 'device', 'ext_force_range', 'ext_forces', 'ext_torque_range', 'ext_torques', 'get_return_tuple', 'get_task_observations', 'imitation_err_threshold', 'initial_orientation_noise', 'initial_position_noise', 'lin_drag_range', 'metadata', 'motor_tc_range', 'motor_thrust_k_scale', 'nan_count', 'nan_detection_interval', 'obs_clip_limits', 'obs_dict', 'obs_include_last_release_mass', 'obs_include_payload_com', 'obs_include_payload_mass', 'obs_noise_std', 'observation_space', 'observation_space_dim', 'payload_manager', 'physical_angvel_limit', 'physical_velocity_limit', 'physical_violation_count', 'prev_actions', 'prev_linvel', 'prev_pos_dist', 'process_obs_for_task', 'randomize_drag', 'randomize_ext_dist', 'randomize_motor_tc', 'randomize_motor_thrust_k', 'render', 'reset', 'reset_idx', 'reward_clip_max', 'reward_clip_min', 'reward_range', 'rewards', 'seed', 'sim_builder', 'sim_env', 'spec', 'step', 'target_position', 'target_position_range', 'task_config', 'task_obs', 'tb_log_interval', 'tb_writer', 'teacher_mode', 'teacher_residual', 'terminations', 'truncations', 'update_target_position']
+DEBUG: Enforced attached_mask for 0 payloads. Total Mass (Env 0): 0.0
+Generating initial population...
+Starting optimization loop...
+DEBUG: Starting Gen 1 evaluation...
+  Step 0/150
+DEBUG Step 50:
+  tau_payload (raw): tensor([ 0.0115, -0.0053,  0.0000], device='cuda:0')
+  PID K_pos: 16.508644104003906
+  PID K_rot: 165.41171264648438
+DEBUG Step 100:
+  tau_payload (raw): tensor([0.0010, 0.0015, 0.0000], device='cuda:0')
+  PID K_pos: 16.508644104003906
+  PID K_rot: 165.41171264648438
+  Step 100/150
+DEBUG Step 150:
+  tau_payload (raw): tensor([0., 0., 0.], device='cuda:0')
+  PID K_pos: 16.508644104003906
+  PID K_rot: 165.41171264648438
+DEBUG: Evaluation complete.
+Gen 1/15 | Best Cost: 10000.7012 | Avg Cost: 10001.00 | Time: 14.6s ** NEW BEST **
+   Best Params: K_p=26.02, K_v=2.56, K_r=37.15, K_w=19.19
+DEBUG: Starting Gen 2 evaluation...
+  Step 0/150
+DEBUG Step 200:
+  tau_payload (raw): tensor([-0.0097,  0.0043,  0.0000], device='cuda:0')
+  PID K_pos: 26.023494720458984
+  PID K_rot: 37.150821685791016
+DEBUG Step 250:
+  tau_payload (raw): tensor([-0.1511,  0.0504,  0.0000], device='cuda:0')
+  PID K_pos: 26.023494720458984
+  PID K_rot: 37.150821685791016
+  Step 100/150
+DEBUG Step 300:
+  tau_payload (raw): tensor([0., 0., 0.], device='cuda:0')
+  PID K_pos: 26.023494720458984
+  PID K_rot: 37.150821685791016
+DEBUG: Evaluation complete.
+Gen 2/15 | Best Cost: 0.4623 | Avg Cost: 9971.69 | Time: 11.9s ** NEW BEST **
+   Best Params: K_p=31.30, K_v=4.50, K_r=7.66, K_w=7.16
+DEBUG: Starting Gen 3 evaluation...
+  Step 0/150
+DEBUG Step 350:
+  tau_payload (raw): tensor([0.0018, 0.0022, 0.0000], device='cuda:0')
+  PID K_pos: 31.304655075073242
+  PID K_rot: 7.658228874206543
+DEBUG Step 400:
+  tau_payload (raw): tensor([0.0980, 0.2168, 0.0000], device='cuda:0')
+  PID K_pos: 31.304655075073242
+  PID K_rot: 7.658228874206543
+  Step 100/150
+DEBUG Step 450:
+  tau_payload (raw): tensor([0., 0., 0.], device='cuda:0')
+  PID K_pos: 31.304655075073242
+  PID K_rot: 7.658228874206543
+DEBUG: Evaluation complete.
+Gen 3/15 | Best Cost: 0.4558 | Avg Cost: 9981.41 | Time: 11.1s ** NEW BEST **
+   Best Params: K_p=28.22, K_v=3.25, K_r=7.55, K_w=6.34
+DEBUG: Starting Gen 4 evaluation...
+  Step 0/150
+DEBUG Step 500:
+  tau_payload (raw): tensor([-0.0007,  0.0022,  0.0000], device='cuda:0')
+  PID K_pos: 28.221778869628906
+  PID K_rot: 7.548056125640869
+DEBUG Step 550:
+  tau_payload (raw): tensor([ 0.0791, -0.2803,  0.0000], device='cuda:0')
+  PID K_pos: 28.221778869628906
+  PID K_rot: 7.548056125640869
+  Step 100/150
+DEBUG Step 600:
+  tau_payload (raw): tensor([0., 0., 0.], device='cuda:0')
+  PID K_pos: 28.221778869628906
+  PID K_rot: 7.548056125640869
+DEBUG: Evaluation complete.
+Gen 4/15 | Best Cost: 0.4654 | Avg Cost: 9981.38 | Time: 10.8s 
+   Best Params: K_p=27.79, K_v=3.25, K_r=7.66, K_w=8.46
+DEBUG: Starting Gen 5 evaluation...
+  Step 0/150
+DEBUG Step 650:
+  tau_payload (raw): tensor([-0.0096,  0.0236,  0.0000], device='cuda:0')
+  PID K_pos: 27.78729820251465
+  PID K_rot: 7.658228874206543
+DEBUG Step 700:
+  tau_payload (raw): tensor([ 0.1246, -0.3203,  0.0000], device='cuda:0')
+  PID K_pos: 27.78729820251465
+  PID K_rot: 7.658228874206543
+  Step 100/150
+DEBUG Step 750:
+  tau_payload (raw): tensor([0., 0., 0.], device='cuda:0')
+  PID K_pos: 27.78729820251465
+  PID K_rot: 7.658228874206543
+DEBUG: Evaluation complete.
+Gen 5/15 | Best Cost: 0.4569 | Avg Cost: 9912.99 | Time: 10.1s 
+   Best Params: K_p=30.12, K_v=4.43, K_r=6.68, K_w=7.74
+DEBUG: Starting Gen 6 evaluation...
+  Step 0/150
+DEBUG Step 800:
+  tau_payload (raw): tensor([-0.0023,  0.0014,  0.0000], device='cuda:0')
+  PID K_pos: 30.118022918701172
+  PID K_rot: 6.675338268280029
+DEBUG Step 850:
+  tau_payload (raw): tensor([ 0.1425, -0.1006,  0.0000], device='cuda:0')
+  PID K_pos: 30.118022918701172
+  PID K_rot: 6.675338268280029
+  Step 100/150
+DEBUG Step 900:
+  tau_payload (raw): tensor([0., 0., 0.], device='cuda:0')
+  PID K_pos: 30.118022918701172
+  PID K_rot: 6.675338268280029
+DEBUG: Evaluation complete.
+Gen 6/15 | Best Cost: 0.4378 | Avg Cost: 9903.22 | Time: 11.0s ** NEW BEST **
+   Best Params: K_p=30.82, K_v=4.59, K_r=7.31, K_w=7.69
+DEBUG: Starting Gen 7 evaluation...
+  Step 0/150
+DEBUG Step 950:
+  tau_payload (raw): tensor([0.0015, 0.0029, 0.0000], device='cuda:0')
+  PID K_pos: 30.823686599731445
+  PID K_rot: 7.307756423950195
+DEBUG Step 1000:
+  tau_payload (raw): tensor([-0.1361, -0.2375, -0.0000], device='cuda:0')
+  PID K_pos: 30.823686599731445
+  PID K_rot: 7.307756423950195
+  Step 100/150
+DEBUG Step 1050:
+  tau_payload (raw): tensor([0., 0., 0.], device='cuda:0')
+  PID K_pos: 30.823686599731445
+  PID K_rot: 7.307756423950195
+DEBUG: Evaluation complete.
+Gen 7/15 | Best Cost: 0.4477 | Avg Cost: 9825.09 | Time: 11.1s 
+   Best Params: K_p=24.72, K_v=3.33, K_r=7.66, K_w=8.50
+DEBUG: Starting Gen 8 evaluation...
+  Step 0/150
+DEBUG Step 1100:
+  tau_payload (raw): tensor([ 0.0257, -0.0061,  0.0000], device='cuda:0')
+  PID K_pos: 24.718507766723633
+  PID K_rot: 7.658228874206543
+DEBUG Step 1150:
+  tau_payload (raw): tensor([-0.2031,  0.0482,  0.0000], device='cuda:0')
+  PID K_pos: 24.718507766723633
+  PID K_rot: 7.658228874206543
+  Step 100/150
+DEBUG Step 1200:
+  tau_payload (raw): tensor([0., 0., 0.], device='cuda:0')
+  PID K_pos: 24.718507766723633
+  PID K_rot: 7.658228874206543
+DEBUG: Evaluation complete.
+Gen 8/15 | Best Cost: 0.4207 | Avg Cost: 9610.23 | Time: 10.2s ** NEW BEST **
+   Best Params: K_p=27.13, K_v=3.25, K_r=7.38, K_w=6.34
+DEBUG: Starting Gen 9 evaluation...
+  Step 0/150
+DEBUG Step 1250:
+  tau_payload (raw): tensor([0.0199, 0.0039, 0.0000], device='cuda:0')
+  PID K_pos: 27.133142471313477
+  PID K_rot: 7.380334377288818
+DEBUG Step 1300:
+  tau_payload (raw): tensor([-0.6038, -0.0583, -0.0000], device='cuda:0')
+  PID K_pos: 27.133142471313477
+  PID K_rot: 7.380334377288818
+  Step 100/150
+DEBUG Step 1350:
+  tau_payload (raw): tensor([0., 0., 0.], device='cuda:0')
+  PID K_pos: 27.133142471313477
+  PID K_rot: 7.380334377288818
+DEBUG: Evaluation complete.
+Gen 9/15 | Best Cost: 0.4097 | Avg Cost: 8897.34 | Time: 8.9s ** NEW BEST **
+   Best Params: K_p=24.72, K_v=3.22, K_r=7.66, K_w=8.57
+DEBUG: Starting Gen 10 evaluation...
+  Step 0/150
+DEBUG Step 1400:
+  tau_payload (raw): tensor([ 0.0061, -0.0047,  0.0000], device='cuda:0')
+  PID K_pos: 24.718507766723633
+  PID K_rot: 7.658228874206543
+DEBUG Step 1450:
+  tau_payload (raw): tensor([-0.0729,  0.0591,  0.0000], device='cuda:0')
+  PID K_pos: 24.718507766723633
+  PID K_rot: 7.658228874206543
+  Step 100/150
+DEBUG Step 1500:
+  tau_payload (raw): tensor([0., 0., 0.], device='cuda:0')
+  PID K_pos: 24.718507766723633
+  PID K_rot: 7.658228874206543
+DEBUG: Evaluation complete.
+Gen 10/15 | Best Cost: 0.4123 | Avg Cost: 8575.09 | Time: 9.4s 
+   Best Params: K_p=30.12, K_v=4.50, K_r=7.05, K_w=8.16
+DEBUG: Starting Gen 11 evaluation...
+  Step 0/150
+DEBUG Step 1550:
+  tau_payload (raw): tensor([ 0.0058, -0.0031,  0.0000], device='cuda:0')
+  PID K_pos: 30.118022918701172
+  PID K_rot: 7.052374362945557
+DEBUG Step 1600:
+  tau_payload (raw): tensor([-0.1687,  0.0409,  0.0000], device='cuda:0')
+  PID K_pos: 30.118022918701172
+  PID K_rot: 7.052374362945557
+  Step 100/150
+DEBUG Step 1650:
+  tau_payload (raw): tensor([0., 0., 0.], device='cuda:0')
+  PID K_pos: 30.118022918701172
+  PID K_rot: 7.052374362945557
+DEBUG: Evaluation complete.
+Gen 11/15 | Best Cost: 0.3943 | Avg Cost: 8457.89 | Time: 9.2s ** NEW BEST **
+   Best Params: K_p=24.19, K_v=3.15, K_r=6.83, K_w=8.57
+DEBUG: Starting Gen 12 evaluation...
+  Step 0/150
+DEBUG Step 1700:
+  tau_payload (raw): tensor([-0.0109,  0.0063,  0.0000], device='cuda:0')
+  PID K_pos: 24.190956115722656
+  PID K_rot: 6.82864236831665
+DEBUG Step 1750:
+  tau_payload (raw): tensor([ 0.0729, -0.0414,  0.0000], device='cuda:0')
+  PID K_pos: 24.190956115722656
+  PID K_rot: 6.82864236831665
+  Step 100/150
+DEBUG Step 1800:
+  tau_payload (raw): tensor([0., 0., 0.], device='cuda:0')
+  PID K_pos: 24.190956115722656
+  PID K_rot: 6.82864236831665
+DEBUG: Evaluation complete.
+Gen 12/15 | Best Cost: 0.3957 | Avg Cost: 8418.83 | Time: 9.3s 
+   Best Params: K_p=22.91, K_v=3.25, K_r=7.66, K_w=8.82
+DEBUG: Starting Gen 13 evaluation...
+  Step 0/150
+DEBUG Step 1850:
+  tau_payload (raw): tensor([-0.0168, -0.0426, -0.0000], device='cuda:0')
+  PID K_pos: 22.91004180908203
+  PID K_rot: 7.658228874206543
+DEBUG Step 1900:
+  tau_payload (raw): tensor([0.0803, 0.2213, 0.0000], device='cuda:0')
+  PID K_pos: 22.91004180908203
+  PID K_rot: 7.658228874206543
+  Step 100/150
+DEBUG Step 1950:
+  tau_payload (raw): tensor([ 0.0947, -1.2267,  0.0000], device='cuda:0')
+  PID K_pos: 22.91004180908203
+  PID K_rot: 7.658228874206543
+DEBUG: Evaluation complete.
+Gen 13/15 | Best Cost: 0.4157 | Avg Cost: 8330.94 | Time: 9.2s 
+   Best Params: K_p=24.19, K_v=3.01, K_r=7.57, K_w=8.57
+DEBUG: Starting Gen 14 evaluation...
+  Step 0/150
+DEBUG Step 2000:
+  tau_payload (raw): tensor([0.0197, 0.0301, 0.0000], device='cuda:0')
+  PID K_pos: 24.190956115722656
+  PID K_rot: 7.569393157958984
+DEBUG Step 2050:
+  tau_payload (raw): tensor([-0.1654,  0.0931,  0.0000], device='cuda:0')
+  PID K_pos: 24.190956115722656
+  PID K_rot: 7.569393157958984
+  Step 100/150
+DEBUG Step 2100:
+  tau_payload (raw): tensor([0., 0., 0.], device='cuda:0')
+  PID K_pos: 24.190956115722656
+  PID K_rot: 7.569393157958984
+DEBUG: Evaluation complete.
+Gen 14/15 | Best Cost: 0.4047 | Avg Cost: 8438.36 | Time: 9.1s 
+   Best Params: K_p=25.79, K_v=3.36, K_r=7.32, K_w=8.00
+DEBUG: Starting Gen 15 evaluation...
+  Step 0/150
+DEBUG Step 2150:
+  tau_payload (raw): tensor([9.5979e-05, 7.8576e-03, 0.0000e+00], device='cuda:0')
+  PID K_pos: 25.789995193481445
+  PID K_rot: 7.322807788848877
+DEBUG Step 2200:
+  tau_payload (raw): tensor([ 0.0036, -0.1078,  0.0000], device='cuda:0')
+  PID K_pos: 25.789995193481445
+  PID K_rot: 7.322807788848877
+  Step 100/150
+DEBUG Step 2250:
+  tau_payload (raw): tensor([0., 0., 0.], device='cuda:0')
+  PID K_pos: 25.789995193481445
+  PID K_rot: 7.322807788848877
+DEBUG: Evaluation complete.
+Gen 15/15 | Best Cost: 0.4135 | Avg Cost: 8370.00 | Time: 9.2s 
+   Best Params: K_p=25.93, K_v=3.34, K_r=7.55, K_w=9.27
+
+============================================================
+OPTIMIZATION COMPLETE
+============================================================
+Total Time: 154.99s
+Global Min Cost: 0.3943
+
+Global Best Parameters:
+  K_pos    : 24.1910
+  K_vel    : 3.1464
+  K_rot    : 6.8286
+  K_angvel : 8.5731
+
+Recommended for lee_controller_config.py:
+  K_pos_tensor_min = [24.2, 24.2, 48.4]
+  K_vel_tensor_min = [3.1, 3.1, ...]
+  K_rot_tensor_min = [6.8, 6.8, ...]
+  K_angvel_tensor_min = [8.6, 8.6, ...]
+*** Can't create empty tensor

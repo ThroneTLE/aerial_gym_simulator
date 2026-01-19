@@ -88,7 +88,7 @@ class task_config:
     crash_tilt_threshold_deg = 20.0 #大于等于20是 PD不会被复位
 
     payload_parameters = {
-        "payload_mass": 0.02,
+        "payload_mass": 0.2,
         "offsets": [
             [0.4, 0.4, -0.4],
             [0.4, -0.4, -0.4],

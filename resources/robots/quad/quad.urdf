@@ -1,10 +1,18 @@
 <?xml version="1.0"?>
+<!-- 
+  Quadrotor URDF - Updated for 1.5kg total mass, 450mm wheelbase
+  Base mass: 1.475kg (excluding motors)
+  Motor mass: 0.00625kg × 4 = 0.025kg
+  Total: ~1.5kg
+  Wheelbase: 450mm (motor position: 0.159m from center at 45°)
+  Arm length: 0.225m (0.159 × √2)
+-->
 <robot name="quadrotor">
   <link name="base_link">
     <visual>
       <origin xyz="0 0 0.0"/>
       <geometry>
-        <sphere radius="0.05"/>
+        <sphere radius="0.08"/>
       </geometry>
       <material name="White">
         <color rgba="1 1 1 1.0"/>
@@ -13,19 +21,25 @@
     <collision>
       <origin xyz="0 0 0"/>
       <geometry>
-        <sphere radius="0.18384776310850237"/>
+        <!-- Collision sphere covers 450mm wheelbase: sqrt(0.159² + 0.159²) + margin ≈ 0.25m -->
+        <sphere radius="0.25"/>
       </geometry>
     </collision>
     <inertial>
-      <mass value="0.225"/>
-      <inertia ixx="0.00042249999999999997" ixy="0.0" ixz="0.0" iyx="0.0" iyy="0.00042249999999999997" iyz="0.0" izx="0.0" izy="0.0" izz="0.0008449999999999999"/>
+      <!-- Mass: 1.475kg (body only, motors are separate links) -->
+      <mass value="1.475"/>
+      <!-- Inertia for body only (motors separate): Ixx=Iyy≈0.025, Izz≈0.05 kg·m² -->
+      <inertia ixx="0.025" ixy="0.0" ixz="0.0" iyx="0.0" iyy="0.025" iyz="0.0" izx="0.0" izy="0.0" izz="0.05"/>
     </inertial>
   </link>
+
+  <!-- Arm 0: +X -Y direction -->
   <link name="arm_motor_0">
     <visual>
     <origin xyz="0 0 0" rpy="0 0 0"/> 
       <geometry>
-        <cylinder radius="0.01" length="0.18384776310850237"/>
+        <!-- Arm length: 0.225m (450mm wheelbase / √2) -->
+        <cylinder radius="0.01" length="0.225"/>
       </geometry>
       <material name="Orange">
         <color rgba="1 0.423 0.03921568627 1.0"/>
@@ -39,13 +53,14 @@
   <joint name="base_link_to_arm_motor_0" type="fixed" dont_collapse="false">
     <parent link="base_link"/>
     <child link="arm_motor_0"/>
-      <origin xyz="0.065 -0.065 0.0" rpy="-1.5707963267948968 2.220446049250313e-16 -2.3561944901923453"/> 
+      <!-- Arm center at half motor distance: 0.159/2 = 0.0795 -->
+      <origin xyz="0.0795 -0.0795 0.0" rpy="-1.5707963267948968 2.220446049250313e-16 -2.3561944901923453"/> 
   </joint>
   <link name="motor_0">
     <visual>
     <origin xyz=" 0 0 0 " rpy="0 0 0"/> 
       <geometry>
-        <cylinder radius="0.01" length="0.05"/>
+        <cylinder radius="0.015" length="0.05"/>
       </geometry>
       <material name="Blue">
         <color rgba="0.6 0.0 0.4 1.0"/>
@@ -59,13 +74,16 @@
   <joint name="base_link_to_motor_0" type="fixed" dont_collapse="false">
     <parent link="base_link"/>
     <child link="motor_0"/>
-    <origin xyz="0.13 -0.13 0.0" rpy="0.0 0.0 0.0"/> 
+    <!-- Motor position: 450mm/2/√2 ≈ 0.159m -->
+    <origin xyz="0.159 -0.159 0.0" rpy="0.0 0.0 0.0"/> 
   </joint>
+
+  <!-- Arm 1: -X -Y direction -->
   <link name="arm_motor_1">
     <visual>
     <origin xyz="0 0 0" rpy="0 0 0"/> 
       <geometry>
-        <cylinder radius="0.01" length="0.18384776310850237"/>
+        <cylinder radius="0.01" length="0.225"/>
       </geometry>
       <material name="Orange">
         <color rgba="1 0.423 0.03921568627 1.0"/>
@@ -79,13 +97,13 @@
   <joint name="base_link_to_arm_motor_1" type="fixed" dont_collapse="false">
     <parent link="base_link"/>
     <child link="arm_motor_1"/>
-      <origin xyz="-0.065 -0.065 0.0" rpy="1.5707963267948968 2.220446049250313e-16 -0.7853981633974482"/> 
+      <origin xyz="-0.0795 -0.0795 0.0" rpy="1.5707963267948968 2.220446049250313e-16 -0.7853981633974482"/> 
   </joint>
   <link name="motor_1">
     <visual>
     <origin xyz=" 0 0 0 " rpy="0 0 0"/> 
       <geometry>
-        <cylinder radius="0.01" length="0.05"/>
+        <cylinder radius="0.015" length="0.05"/>
       </geometry>
       <material name="Blue">
         <color rgba="0.4 0.0 0.6 1.0"/>
@@ -99,13 +117,15 @@
   <joint name="base_link_to_motor_1" type="fixed" dont_collapse="false">
     <parent link="base_link"/>
     <child link="motor_1"/>
-    <origin xyz="-0.13 -0.13 0.0" rpy="0.0 0.0 0.0"/> 
+    <origin xyz="-0.159 -0.159 0.0" rpy="0.0 0.0 0.0"/> 
   </joint>
+
+  <!-- Arm 2: -X +Y direction -->
   <link name="arm_motor_2">
     <visual>
     <origin xyz="0 0 0" rpy="0 0 0"/> 
       <geometry>
-        <cylinder radius="0.01" length="0.18384776310850237"/>
+        <cylinder radius="0.01" length="0.225"/>
       </geometry>
       <material name="Orange">
         <color rgba="1 0.423 0.03921568627 1.0"/>
@@ -119,13 +139,13 @@
   <joint name="base_link_to_arm_motor_2" type="fixed" dont_collapse="false">
     <parent link="base_link"/>
     <child link="arm_motor_2"/>
-      <origin xyz="-0.065 0.065 0.0" rpy="1.5707963267948968 0.0 -2.3561944901923453"/> 
+      <origin xyz="-0.0795 0.0795 0.0" rpy="1.5707963267948968 0.0 -2.3561944901923453"/> 
   </joint>
   <link name="motor_2">
     <visual>
     <origin xyz=" 0 0 0 " rpy="0 0 0"/> 
       <geometry>
-        <cylinder radius="0.01" length="0.05"/>
+        <cylinder radius="0.015" length="0.05"/>
       </geometry>
       <material name="Blue">
         <color rgba="0.6 0.0 0.4 1.0"/>
@@ -139,13 +159,15 @@
   <joint name="base_link_to_motor_2" type="fixed" dont_collapse="false">
     <parent link="base_link"/>
     <child link="motor_2"/>
-    <origin xyz="-0.13 0.13 0.0" rpy="0.0 0.0 0.0"/> 
+    <origin xyz="-0.159 0.159 0.0" rpy="0.0 0.0 0.0"/> 
   </joint>
+
+  <!-- Arm 3: +X +Y direction -->
   <link name="arm_motor_3">
     <visual>
     <origin xyz="0 0 0" rpy="0 0 0"/> 
       <geometry>
-        <cylinder radius="0.01" length="0.18384776310850237"/>
+        <cylinder radius="0.01" length="0.225"/>
       </geometry>
       <material name="Orange">
         <color rgba="1 0.423 0.03921568627 1.0"/>
@@ -159,13 +181,13 @@
   <joint name="base_link_to_arm_motor_3" type="fixed" dont_collapse="false">
     <parent link="base_link"/>
     <child link="arm_motor_3"/>
-      <origin xyz="0.065 0.065 0.0" rpy="-1.5707963267948968 0.0 -0.7853981633974482"/> 
+      <origin xyz="0.0795 0.0795 0.0" rpy="-1.5707963267948968 0.0 -0.7853981633974482"/> 
   </joint>
   <link name="motor_3">
     <visual>
     <origin xyz=" 0 0 0 " rpy="0 0 0"/> 
       <geometry>
-        <cylinder radius="0.01" length="0.05"/>
+        <cylinder radius="0.015" length="0.05"/>
       </geometry>
       <material name="Blue">
         <color rgba="0.4 0.0 0.6 1.0"/>
@@ -179,6 +201,7 @@
   <joint name="base_link_to_motor_3" type="fixed" dont_collapse="false">
     <parent link="base_link"/>
     <child link="motor_3"/>
-    <origin xyz="0.13 0.13 0.0" rpy="0.0 0.0 0.0"/> 
+    <origin xyz="0.159 0.159 0.0" rpy="0.0 0.0 0.0"/> 
   </joint>
+
 </robot>

@@ -19,7 +19,7 @@ class control(BaseLeeControllerConfig):
     compensation_dims = 4
 
     # Maximum absolute thrust (N) contributed by the compensation channel.
-    compensation_thrust_limit = 1.0
+    compensation_thrust_limit = 20.0  # Updated for 1.5kg + 1.6kg payload
 
     # Maximum absolute torque (Nm) applied per compensation input axis (roll, pitch, yaw).
-    compensation_torque_limits = [1.0, 1.0, 0.2]
+    compensation_torque_limits = [8.0, 8.0, 1.0]  # Updated for 450mm wheelbase
