@@ -279,16 +279,17 @@ def collect_training_sample(
     task_obs: dict,
     history_buffer: ObsHistoryBuffer,
     teacher_encoder: nn.Module,
+    obs_override: torch.Tensor = None,
 ):
     """
     Collect one training sample: (obs_history, teacher_z).
-    
-    Returns:
-        obs_history: (num_envs, obs_dim, history_len)
-        teacher_z: (num_envs, latent_dim)
     """
     # Get current observation
-    base_obs = task_obs["observations"]
+    if obs_override is not None:
+        base_obs = obs_override
+    else:
+        base_obs = task_obs["observations"]
+        
     priv_obs = task_obs.get("privileged_obs", None)
     
     if priv_obs is None:
@@ -313,6 +314,7 @@ def train_step(
     obs_history: torch.Tensor,
     teacher_z: torch.Tensor,
     criterion: nn.Module,
+    weighting: torch.Tensor = None,
 ):
     """
     One training step.
@@ -325,8 +327,14 @@ def train_step(
     # Forward pass
     student_z = cnn_encoder(obs_history)
     
-    # Compute MSE loss
-    loss = criterion(student_z, teacher_z)
+    # Compute Weighted MSE loss
+    # teacher_z and student_z: (num_envs, latent_dim)
+    # weighting: (num_envs,)
+    if weighting is not None:
+        raw_mse = torch.mean((student_z - teacher_z) ** 2, dim=1)  # (num_envs,)
+        loss = torch.mean(raw_mse * weighting)
+    else:
+        loss = criterion(student_z, teacher_z)
     
     # Backward pass
     loss.backward()
@@ -369,11 +377,11 @@ def main():
         help="Path to teacher checkpoint",
     )
     parser.add_argument("--num_envs", type=int, default=1024, help="Number of parallel envs")
-    parser.add_argument("--history_len", type=int, default=50, help="Observation history length")
+    parser.add_argument("--history_len", type=int, default=100, help="Observation history length (Shortened for faster reaction)")
     parser.add_argument("--latent_dim", type=int, default=8, help="Latent dimension")
-    parser.add_argument("--epochs", type=int, default=500, help="Number of training epochs")
-    parser.add_argument("--steps_per_epoch", type=int, default=256, help="Steps per epoch")
-    parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
+    parser.add_argument("--epochs", type=int, default=1000, help="Number of training epochs")
+    parser.add_argument("--steps_per_epoch", type=int, default=1500, help="Steps per epoch (match or exceed release timeline)")
+    parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
     parser.add_argument("--device", type=str, default="cuda:0", help="Device")
     parser.add_argument("--experiment_name", type=str, default="cnn_student", help="Experiment name")
     parser.add_argument("--save_interval", type=int, default=50, help="Checkpoint save interval")
@@ -389,7 +397,13 @@ def main():
         action="store_true",
         help="Use CNN with Temporal Attention instead of standard CNN",
     )
-
+    
+    parser.add_argument(
+        "--cnn_checkpoint",
+        type=str,
+        default=None,
+        help="Path to existing CNN student checkpoint to resume/inherit from",
+    )
     
     args = parser.parse_args()
     
@@ -434,22 +448,40 @@ def main():
         print(f"  -> Overriding latent_dim to {detected_embed_dim} to match Teacher.")
         args.latent_dim = detected_embed_dim
     
+    # Define Student Observation Dimension (Manual Assembly)
+    # Rot(9) + LinVel(3) + AngVel(3) + Action(3) = 18
+    # Excluding Mask(4) and Warning(1)
+    student_obs_dim = 18
+    
     # Create CNN student encoder (with or without attention)
     if args.use_attention:
         cnn_encoder = CNNWithTemporalAttention(
-            obs_dim=obs_dim,
+            obs_dim=student_obs_dim,
             history_len=args.history_len,
             latent_dim=args.latent_dim,
         ).to(device)
         print(f"CNN Encoder (with Temporal Attention): {cnn_encoder}")
     else:
         cnn_encoder = create_cnn_encoder(
-            obs_dim=obs_dim,
+            obs_dim=student_obs_dim,
             history_len=args.history_len,
             latent_dim=args.latent_dim,
             device=device,
         )
         print(f"CNN Encoder: {cnn_encoder}")
+    
+    # Optional: Load CNN student checkpoint
+    if args.cnn_checkpoint is not None:
+        print(f"Loading CNN student checkpoint: {args.cnn_checkpoint}")
+        student_ckpt = torch.load(args.cnn_checkpoint, map_location=device)
+        
+        # Determine if it's a full checkpoint or just model state dict
+        if "model_state_dict" in student_ckpt:
+            cnn_encoder.load_state_dict(student_ckpt["model_state_dict"])
+            print(f"  [Loaded] Model weights (Epoch: {student_ckpt.get('epoch', 'N/A')})")
+        else:
+            cnn_encoder.load_state_dict(student_ckpt)
+            print(f"  [Loaded] Model weights (standalone state dict)")
     
     # Load Teacher policy for generating realistic flight data
     print("Loading Teacher policy for data generation...")
@@ -466,7 +498,7 @@ def main():
     # Create history buffer
     history_buffer = ObsHistoryBuffer(
         num_envs=args.num_envs,
-        obs_dim=obs_dim,
+        obs_dim=student_obs_dim,
         history_len=args.history_len,
         device=device,
     )
@@ -514,8 +546,15 @@ def main():
             reset_ids = torch.where(reset_ids)[0]
             if reset_ids.numel() > 0:
                 history_buffer.reset(reset_ids)
-        base_obs = task_obs["observations"]
-        history_buffer.push(base_obs)
+        teacher_obs_warm = torch.as_tensor(task_obs["observations"], device=device, dtype=torch.float32)
+        linvel_obs_warm = task.obs_dict["robot_linvel"].to(device)
+        student_obs_warm = torch.cat([
+            teacher_obs_warm[:, 0:9],   # Rot
+            linvel_obs_warm,           # LinVel
+            teacher_obs_warm[:, 9:12],  # AngVel
+            teacher_obs_warm[:, 17:20]  # Action
+        ], dim=1)
+        history_buffer.push(student_obs_warm)
     
     print("Starting training...")
     global_step = 0
@@ -529,13 +568,46 @@ def main():
         
         cnn_encoder.train()
         
+        # Track previous mass to detect release
+        prev_mass = None
+        transition_counter = torch.zeros(args.num_envs, device=device)
+        
         for step in range(args.steps_per_epoch):
             # Always Release Phase: use Teacher policy for compensation
             task.update_target_position(target_zero)  # Target is origin during release
             task_obs = task.get_task_observations()
-            obs = torch.as_tensor(
+            
+            # --- Detect Release for Weighting ---
+            current_mass = task.payload_manager.current_payload_mass
+            if prev_mass is not None:
+                # If mass decreases, reset counter to high weighting
+                release_event = (current_mass < prev_mass - 0.01)
+                transition_counter[release_event] = 50 # Weight for 50 steps
+            prev_mass = current_mass.clone()
+            
+            # Compute weighting: 20.0 for transitions, 1.0 for steady state
+            weighting = torch.ones(args.num_envs, device=device)
+            weighting[transition_counter > 0] = 20.0
+            transition_counter = torch.max(torch.zeros_like(transition_counter), transition_counter - 1)
+
+            # --- Construct Teacher Obs (20 dims) for Policy ---
+            teacher_obs = torch.as_tensor(
                 task_obs["observations"], device=device, dtype=torch.float32
             )
+            
+            # --- Construct Student Obs (18 dims) for Encoder ---
+            # Rot(9) | LinVel(3) | AngVel(3) | Action(3)
+            # Access LinVel from task internals (not in teacher_obs)
+            linvel_obs = task.obs_dict["robot_linvel"].to(device) # (N, 3)
+            
+            # Extract components from teacher_obs (original index based on 20-dim config)
+            # Ref: [0-8] Rot | [9-11] AngVel | [12-15] Mask | [16] Warn | [17-19] Act
+            rot_obs = teacher_obs[:, 0:9]
+            angvel_obs = teacher_obs[:, 9:12]
+            action_obs = teacher_obs[:, 17:20]
+            
+            # Concatenate for student
+            student_obs = torch.cat([rot_obs, linvel_obs, angvel_obs, action_obs], dim=1) # (N, 18)
             priv = task_obs.get("privileged_obs", None)
             if priv is not None:
                 priv = torch.as_tensor(priv, device=device, dtype=torch.float32)
@@ -543,7 +615,7 @@ def main():
                 input_dict = {
                     "is_train": False,
                     "prev_actions": None,
-                    "obs": obs,
+                    "obs": teacher_obs,
                     "privileged_obs": priv,
                     "rnn_states": None,
                     "seq_length": 1,
@@ -568,11 +640,11 @@ def main():
 
             # Collect training sample (now safe: history is clean for new episodes, valid for ongoing ones)
             obs_history, teacher_z = collect_training_sample(
-                task_obs, history_buffer, teacher_encoder
+                task_obs, history_buffer, teacher_encoder, obs_override=student_obs
             )
             
-            # Train step
-            loss = train_step(cnn_encoder, optimizer, obs_history, teacher_z, criterion)
+            # Train step with weighting
+            loss = train_step(cnn_encoder, optimizer, obs_history, teacher_z, criterion, weighting=weighting)
             epoch_loss += loss
             
             # Compute metrics

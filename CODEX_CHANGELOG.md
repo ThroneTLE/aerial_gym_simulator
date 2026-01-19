@@ -166,17 +166,37 @@ python -m aerial_gym.rl_training.rl_games.runner \
   --experiment_name teacher_aux_fixed_imitation \
   --num_envs 4096 \
   --headless True
-
+/*1111
 python aerial_gym/rl_training/train_cnn_student.py --teacher_checkpoint runs/teacher_aux_fixed_imitation_17-14-16-10/nn/teacher_aux_fixed_imitation.pth --use_attention --history_len 500 --experiment_name cnn_stage2_waypoint
 
+/*2222
+python aerial_gym/rl_training/train_cnn_student.py --teacher_checkpoint runs/teacher_aux_fixed_imitation_19-21-52-29/nn/last_teacher_aux_fixed_imitation_ep_135_rew_15005.909.pth --use_attention --history_len 500 --experiment_name cnn_stage2_waypoint
 
 
+
+/**3333
+/home/throne/miniconda3/envs/aerialgym/bin/python aerial_gym/rl_training/train_cnn_student.py --teacher_checkpoint runs/teacher_aux_fixed_imitation_19-21-52-29/nn/last_teacher_aux_fixed_imitation_ep_135_rew_15005.909.pth --use_attention --history_len 500 --experiment_name cnn_stage2_waypoint_resumed --cnn_checkpoint runs/cnn_stage2_waypoint_19-22-16-52/nn/best_cnn_encoder.pth
+
+
+
+
+
+/*1111
 python aerial_gym/examples/validate_cnn_stage2.py \
     --teacher_checkpoint runs/teacher_aux_fixed_imitation_17-14-16-10/nn/teacher_aux_fixed_imitation.pth \
     --cnn_checkpoint runs/cnn_student_18-02-01-12/nn/best_cnn_encoder.pth \
     --history_len 500 \
     --steps 1500 \
     --show_plot True
+
+/*2222
+python aerial_gym/examples/validate_cnn_stage2.py \
+    --teacher_checkpoint runs/teacher_aux_fixed_imitation_19-21-52-29/nn/last_teacher_aux_fixed_imitation_ep_135_rew_15005.909.pth \
+    --cnn_checkpoint runs/cnn_stage2_weighted_v3_20-00-27-56/nn/best_cnn_encoder.pth \
+    --history_len 500 \
+    --steps 1500 \
+    --show_plot True
+
 
 ## 2025-02-21 Teacher 残差原型
 - `aerial_gym/config/task_config/payload_compensation_task_config.py` 增加 `imitation_weight`（默认为 0）供模仿项权重使用。

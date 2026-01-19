@@ -73,7 +73,7 @@ params:
     bc_alpha: 0.99
     bc_min_coef: 0.5
     # 分离推力和扭矩的BC权重 (如果设置，覆盖 bc_coef)
-    bc_coef_thrust: 30.0   # 推力补偿BC权重
+    bc_coef_thrust: 80.0   # 推力补偿BC权重
     bc_coef_torque: 20.0  # 扭矩补偿BC权重
     
 

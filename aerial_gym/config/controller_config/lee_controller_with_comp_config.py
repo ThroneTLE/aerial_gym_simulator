@@ -22,4 +22,4 @@ class control(BaseLeeControllerConfig):
     compensation_thrust_limit = 20.0  # Updated for 1.5kg + 1.6kg payload
 
     # Maximum absolute torque (Nm) applied per compensation input axis (roll, pitch, yaw).
-    compensation_torque_limits = [8.0, 8.0, 1.0]  # Updated for 450mm wheelbase
+    compensation_torque_limits = [12.0, 12.0, 1.0]  # Updated for 450mm wheelbase

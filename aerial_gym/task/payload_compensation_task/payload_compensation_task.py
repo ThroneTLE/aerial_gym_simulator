@@ -1314,7 +1314,6 @@ class PayloadCompensationTask(BaseTask):
         )
 
     def process_obs_for_task(self):
-        # 新观测结构 (20维):
         # [0-8] 旋转矩阵 (9)
         # [9-11] 机体角速度 (3)  
         # [12-15] 4位附着掩码 (4)
@@ -1533,116 +1532,199 @@ class PayloadCompensationTask(BaseTask):
 
         total_tau_phys = -(tau_payload + tau_force) + tau_inertia
         
-        # 2. Omniscient PID Correction (Feedback Stiffness)
-        # Difference between Optimal PID (Shadow) and Fixed PID (Real)
-        
-        # Identify current payload count for scheduling
-        num_attached = self.payload_manager.attached_mask.sum(dim=1).long()
-        
-        # Retrieve Schedule
-        schedule = getattr(lee_controller_config, "K_gain_schedule", None)
-        
-        if hasattr(self, "shadow_controller") and schedule is not None and self.use_omniscient_gains:
-            # Prepare Tensors for Optimal Gains
-            # Vectorized assignment based on num_attached
+        if self.use_omniscient_gains:
+            # --- Part 2: Bias-Free Inverse Dynamics Compensation ---
             
-            # Create large tensors to hold scheduled values
-            # shape (5, 3) -> (N, 3)
-            # We assume schedule has 5 entries [0..4]
-            # Since tensor creation is slow, we should cache this if possible.
-            # For now, create on fly or use simple CPU lookup if N is small?
-            # 1024 envs... we need torch method.
+            # A. Access Real Controller Output (Fixed Gains)
+            # We need to run the controller to get the baseline torque
+            # Note: The controller update has likely already run or we run it now explicitly
+            # to be safe, let's run it on the current state.
             
-            # Extract schedule into tensors
-            # We do this once or cache it? Creating 5 tensors is fast.
-            Kp_sched = torch.tensor([s["K_pos"] for s in schedule], device=self.device)
-            Kv_sched = torch.tensor([s["K_vel"] for s in schedule], device=self.device)
-            Kr_sched = torch.tensor([s["K_rot"] for s in schedule], device=self.device)
-            Kw_sched = torch.tensor([s["K_angvel"] for s in schedule], device=self.device)
+            # Prepare Input Command
+            # Expect [x, y, z, yaw, vx, vy, vz, yaw_rate] for LeePositionController
+            # controller_actions has [x, y, z, yaw] (subset for PPO?) or does it generally have 4?
+            # If PPO outputs 4, we assume velocities are 0.
             
-            # Lookup
-            Kp_opt = Kp_sched[num_attached]
-            Kv_opt = Kv_sched[num_attached]
-            Kr_opt = Kr_sched[num_attached]
-            Kw_opt = Kw_sched[num_attached]
+            real_input = torch.zeros((self.sim_env.num_envs, 8), device=self.device)
+            real_input[:, 0:4] = self.controller_actions[:, 0:4]
+            # Velocities (cols 4-7) remain 0.0
             
-            # Update Shadow Controller Gains
-            self.shadow_controller.K_pos_tensor_current[:] = Kp_opt
-            self.shadow_controller.K_linvel_tensor_current[:] = Kv_opt
-            self.shadow_controller.K_rot_tensor_current[:] = Kr_opt
-            self.shadow_controller.K_angvel_tensor_current[:] = Kw_opt
+            # Get Baseline Wrench (Force + Torque)
+            # Note: We must ensure this doesn't update internal state if it's stateful (Lee is stateless per step)
+            wrench_fix = self.real_controller.update(real_input)
             
-            # Prepare Input Command (Subset of full action)
-            # Expect [x, y, z, yaw]
-            shadow_input = self.controller_actions[:, 0:4]
+            torque_fix = wrench_fix[:, 3:6] # [N, 3] in Body Frame
+            thrust_fix = wrench_fix[:, 2]   # [N] along Z
             
-            # Run Shadow Controller (Optimal) -> Wrench_Opt
-            wrench_opt = self.shadow_controller.update(shadow_input)
+            # B. Deconstruct Baseline Torque to get Feedback Component
+            # tau_total = tau_fb + tau_gyro_nom
+            # We want to scale tau_fb.
+            # tau_fb = tau_total - tau_gyro_nom
+            # (Note: We calculated gyro_nom in Part 1)
+            tau_fb_nom = torque_fix - gyro_nom
             
-            # Run Real Controller (Fixed) -> Wrench_Fix
-            # We assume SimEnv's controller is the Real one and its state is synced?
-            # Actually Real Controller's `update` might have side effects on `desired_quat`.
-            # If we call it here, we might double-step the filter if it had one.
-            # But LeePositionController is mostly stateless (except desired_quat).
-            # The REAL update happens in `sim_env.step()`.
-            # If we call it here, we get the value.
-            # BUT we risk modifying `self.real_controller` state before the physics step?
-            # Yes. `desired_quat` will be updated based on CURRENT state.
-            # When `sim_env.step()` happens, it calls `update` again with SAME state (mostly).
-            # So it's idempotent-ish.
-            wrench_fix = self.real_controller.update(shadow_input)
+            # C. Inertia Scaling (The "Analytic Gain Schedule")
+            # tau_fb_req = J_true * J_nom^-1 * tau_fb_nom
+            # J_nom is diagonal, so J_nom^-1 is 1/diag
+            angle_vel = self.obs_dict["robot_body_angvel"]
             
-            # PID Residual = Opt - Fix
-            residual_wrench = wrench_opt - wrench_fix
+            # J_nom_inv: [N, 3] or [3] if constant. 
+            # I_nom is [N, 3, 3]. It's diagonal.
+            I_nom_diag = torch.diagonal(I_nom, dim1=1, dim2=2)
+            I_nom_inv = 1.0 / (I_nom_diag + 1e-6) # Avoid div by zero, shape [N, 3]
             
-            # wrench: [fx, fy, fz, tx, ty, tz]
-            # Map to Residual Action: [thrust_cmd, roll_torque_cmd, pitch_torque_cmd]
-            # Thrust Diff (N)
-            d_thrust_N = residual_wrench[:, 2] 
-            # Torque Diff (Nm) [Only Roll/Pitch]
-            d_torque_Nm = residual_wrench[:, 3:5] # tx, ty
+            # Calculate J_true * J_nom^-1
+            # Since J_true is full matrix and J_nom is diagonal:
+            # (J_true * J_nom^-1)_ij = J_true_ik * (1/J_nom_kj) -> J_true * diag(1/J_nom)
+            # We can do this via broadcasting or bmm with diagonal matrix
+            # BMM approach:
+            I_nom_inv_mat = torch.diag_embed(I_nom_inv) # [N, 3, 3]
+            Inertia_Scale = torch.bmm(I_true, I_nom_inv_mat) # [N, 3, 3]
             
-            # Normalize
-            # Thrust Action = d_thrust / Limit
-            pid_thrust_action = d_thrust_N / self.comp_thrust_limit
-            # Torque Action = d_torque / Limit
-            pid_torque_action = d_torque_Nm / self.comp_torque_limits[0:2]
+            # Apply Scaling to Feedback Torque
+            tau_fb_req = torch.bmm(Inertia_Scale, tau_fb_nom.unsqueeze(-1)).squeeze(-1) # [N, 3]
+            
+            # D. Drag Compensation (Damping)
+            # F_drag = -D_v * v (Linear) -> compensated by adding +D_v * v
+            # Tau_drag = -D_w * w (Angular) -> compensated by adding +D_w * w
+            
+            robot = self.sim_env.robot_manager.robot
+            lin_vel = self.obs_dict["robot_body_linvel"]
+            
+            # Linear Drag Force (Body Frame)
+            # coeffs are usually positive, force is -coeff * vel
+            # To cancel, we need +coeff * vel
+            lin_drag_coeffs = robot.body_vel_linear_damping_coefficient # [N, 3]
+            force_drag_body = lin_drag_coeffs * lin_vel
+            # We only can compensate thrust (Z-axis force)
+            thrust_drag_comp = force_drag_body[:, 2] 
+            
+            # Angular Drag Torque (Body Frame)
+            ang_drag_coeffs = robot.angvel_linear_damping_coefficient # [N, 3]
+            torque_drag_comp = ang_drag_coeffs * angle_vel
+            
+            # E. External Disturbance Cancellation
+            # To cancel F_ext, add -F_ext
+            # ext_forces are in World Frame? Typically yes.
+            # Need to rotate to Body Frame for thrust comp.
+            
+            # Rotate F_ext (World) to Body
+            # R^T * F_ext
+            from aerial_gym.utils.math import quat_rotate_inverse
+            f_ext_body = quat_rotate_inverse(orientations, self.ext_forces)
+            # Cancel Z component
+            thrust_ext_comp = -f_ext_body[:, 2]
+            
+            # External Torque (Body Frame)
+            # To cancel, add -tau_ext
+            torque_ext_comp = -self.ext_torques
+            
+            # F. Total Required Wrench
+            # Torque = Scaled_FB + Gyro_True + Drag + Ext_Cancel + Offset_Cancel
+            # (Note: Offset_Cancel is handled in Part 1 as tau_payload/force)
+            # Wait, Part 1 calculated `total_tau_phys = -(tau_payload + tau_force) + tau_inertia`
+            # where `tau_inertia = gyro_true - gyro_nom`
+            # And `residual = ... + total_tau_phys`
+            # Let's align carefully.
+            
+            # Target Torque for Teacher:
+            # tau_target = tau_fb_req + gyro_true + torque_drag_comp + torque_ext_comp - (tau_payload + tau_force)
+            
+            # The Residual we want to add to `torque_fix` is:
+            # Res = tau_target - torque_fix
+            # Res = (tau_fb_req - tau_fb_nom) + (gyro_true - gyro_nom) + drag + ext - payload
+            #      |_______________________|   |____________________|  
+            #             Scaling Diff               Gyro Diff
+            
+            # We already have `total_tau_phys` which includes (Gyro Diff - Payload - ForceOffset)
+            # So we just need to add: Scaling Diff + Drag + Ext
+            
+            tau_scaling_diff = tau_fb_req - tau_fb_nom
+            
+            # Combine all torque residuals
+            total_torque_residual = (
+                total_tau_phys         # (Gyro_True - Gyro_Nom) - Payload - ForceOffset
+                + tau_scaling_diff     # (J_true/J_nom * FB - FB)
+                + torque_drag_comp     # + D_w * w
+                + torque_ext_comp      # - tau_ext
+            )
+            
+            # Combine thrust residuals
+            # We have mass diff from Phys Comp (gravity) which is added later?
+            # Let's check downstream...
+            # The function returns `self.teacher_residual`
+            # Currently it expects [thrust_res_norm, torque_res_norm]
+            
+            # Calculate Thrust Residual (Force)
+            # Base logic handles (M_true - M_nom) * g via `phys_thrust_action` later?
+            # Let's look at lines 1583+ in original code.
+            # Usually `phys_thrust_action` compensates for mass difference.
+            # We need to add Drag and Ext Force to that.
+            
+            # Convert Forces to Normalized Actions
+            thrust_limit = self.task_config.compensation_thrust_limit
+            torque_limits = torch.tensor(self.task_config.compensation_torque_limits, device=self.device)
+            
+            # Extract Force Residuals
+            
+            # --- Thrust Inertia Scaling ---
+            # Compensate for sluggish acceleration: F_req = (M_true / M_nom) * F_nom
+            # Residual = (M_true/M_nom - 1) * F_nom
+            # F_nom is `thrust_fix` (approx)
+            
+            # Use base_mass [N] as nominal mass
+            m_nom = self.payload_manager.base_mass
+            m_true = m_nom + self.payload_manager.current_payload_mass
+            # Ensure safe division (though base_mass should be > 0)
+            mass_ratio = m_true / (m_nom + 1e-6)
+            
+            # Isolate Dynamic Thrust (remove hover part) to avoid double-counting gravity
+            # thrust_fix is Total Thrust (Acceleration + Gravity)
+            # We already compensate Gravity Diff in Part 3.
+            # We only want to scale the Acceleration part: F_acc = F_total - F_hover
+            
+            g = 9.81
+            thrust_hover_nom = m_nom * g
+            thrust_dynamic = thrust_fix.squeeze(-1) - thrust_hover_nom
+            
+            # Scale only the dynamic part
+            thrust_scaling_comp = (mass_ratio - 1.0) * thrust_dynamic
+            
+            d_thrust_N = thrust_drag_comp + thrust_ext_comp + thrust_scaling_comp
+            
+            d_thrust_N = thrust_drag_comp + thrust_ext_comp + thrust_scaling_comp
+            
+            # (Note: Mass diff for Gravity is handled by logic downstream, but mass ratio helps acceleration)
+            
+            pid_thrust_action = d_thrust_N / thrust_limit
+            pid_torque_action = total_torque_residual / torque_limits
             
         else:
-            pid_thrust_action = 0.0
-            pid_torque_action = 0.0
+            # Fallback (Should not happen if use_omniscient_gains is True)
+            pid_thrust_action = torch.zeros_like(self.controller_actions[:, 0])
+            pid_torque_action = torch.zeros_like(self.controller_actions[:, 1:4])
             
-        # 3. Combine and Norm
-        # Phys Torque (Nm). Normalize by Limit.
-        phys_torque_action = total_tau_phys[:, 0:2] / self.comp_torque_limits[0:2]
+        # 3. Combine with Mass Compensation (Standard)
+        # Calculate gravity compensation for mass difference (Payloads only)
+        # We need the extra force required to hold the payload.
+        force_z = self.payload_manager.current_payload_mass * 9.81
+        phys_thrust_action = force_z / self.task_config.compensation_thrust_limit
         
-        # Phys Thrust? `_update_teacher_residual` previously handled Thrust Comp logic separate?
-        # See previous code:
-        # mass_delta = self.payload_manager.current_payload_mass
-        # thrust_extra = torch.abs(self.payload_manager.gravity) * mass_delta
+        # Final Residual
+        # Note: phys_thrust_action accounts for Gravity Diff
+        # pid_thrust_action accounts for Drag + Ext Force
+        # pid_torque_action accounts for All Torque Diffs (Scaling + Gyro + Drag + Ext + Offset)
         
-        # We REUSE that logic or subsume it?
-        # User said "Comp 1 comes from CURRENT [Phys] ...".
-        # So we keep the Phys Comp.
-        mass_delta = self.payload_manager.current_payload_mass
-        thrust_extra_N = torch.abs(self.payload_manager.gravity[2]) * mass_delta # Only z-component of gravity
-        phys_thrust_action = thrust_extra_N / self.comp_thrust_limit
+        self.teacher_residual[:, 0] = phys_thrust_action + pid_thrust_action
+        # Only assign Roll and Pitch torques (indices 1, 2)
+        # pid_torque_action is 3D [Roll, Pitch, Yaw]
+        # teacher_residual is 3D [Thrust, Roll, Pitch] (Action Space = 3)
+        self.teacher_residual[:, 1:3] = pid_torque_action[:, 0:2]
         
-        # Total
-        total_thrust_action = phys_thrust_action + pid_thrust_action
-        total_torque_action = phys_torque_action + pid_torque_action
-        
-        residual = torch.zeros_like(self.teacher_residual)
-        residual[:, 0] = total_thrust_action
-        residual[:, 1:3] = total_torque_action # Roll/Pitch
-        
-        # Clamp final residual to [-1, 1] to stay within validity? 
-        # Or allow saturation? Default clamp [-1, 1].
-        self.teacher_residual[:] = torch.clamp(residual, -1.0, 1.0)
-        
-        # Cache for debug/log
-        self._last_tau_payload = total_tau_phys.detach() # Keep tracking phys part separately? or total?
-        # Let's keep existing debug logic happy
+        # Clamp
+        self.teacher_residual = torch.clamp(self.teacher_residual, -1.0, 1.0)
+            
+        self._last_tau_payload = total_tau_phys.detach()
 
 
     def _compute_true_inertia(self):

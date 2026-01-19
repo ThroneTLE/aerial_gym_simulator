@@ -50,14 +50,14 @@ class task_config:
 
         # 姿态惩罚系数: 代码逻辑 `reward -= coef * roll_pitch_error`
         # 【正数 (+)】: 惩罚倾斜 (推荐 0.0 或较小值，避免限制机动性)
-        "attitude_penalty_coef": 1.00,
+        "attitude_penalty_coef": 0.900,
         "release_attitude_boost": 1.0, # 释放阶段的姿态惩罚倍率
 
         # --- 动作与稳定性惩罚 ---
         # 速度/角速度惩罚: 代码逻辑 `reward -= coef * norm(vel)`
         # 【正数 (+)】: 限制速度/角速度，减少过冲和震荡
         "velocity_penalty_coef": 0.0,   # 线速度惩罚 (通常关)
-        "angvel_penalty_coef": 1.00,    # 角速度惩罚 (抑制高频震荡, 推荐 0.1~1.0)
+        "angvel_penalty_coef": 0.200,    # 角速度惩罚 (抑制高频震荡, 推荐 0.1~1.0)
         "action_smoothness_coef": 2.0,  # 动作平滑惩罚 (抑制动作突变, 推荐 0.05~2.0)
 
         # 显式误差惩罚 (可选)
@@ -81,8 +81,8 @@ class task_config:
         "physics_imitation_weight": 0.0, 
     }
 
-    crash_distance_threshold = 1.0
-    crash_tilt_threshold_deg = 20.0
+    crash_distance_threshold = 2.0
+    crash_tilt_threshold_deg = 25.0
 
     # 补偿限制（物理量级）
     # 最大总载荷 = 4 × max_mass = 4 × 0.4 = 1.6 kg
@@ -93,7 +93,7 @@ class task_config:
 
     payload_parameters = {
         "payload_mass": 0.2,  # 默认单载荷质量 (kg)
-        "payload_mass_range": [0.0, 0.4],  # 随机化范围 0-0.4kg
+        "payload_mass_range": [0.0, 0.35],  # 随机化范围 0-0.4kg
         "randomize_payload_mass": True,
         "randomize_offsets_on_plane": False,
         "offset_plane_radial_jitter": 0.2,  # 沿机臂方向的半径扰动 (450mm轴距)
@@ -102,10 +102,10 @@ class task_config:
         "offset_plane_z_max": 0.4,      #垂直方向最大偏移距离
         "force_offset_torque_scale": 0.00,  # 等效力矩系数：tau_eq = - r_com x F_total，1.0=全量补偿，0=关闭
         "offsets": [
-            [0.2, 0.0, -0.4],
-            [0.0, -0.2, -0.4],
-            [-0.2, 0.0, -0.4],
-            [0.0, 0.2, -0.4],
+            [0.2, 0.0, -0.1],
+            [0.0, -0.2, -0.1],
+            [-0.2, 0.0, -0.1],
+            [0.0, 0.2, -0.1],
         ],
         "release_start": 400,  # 第一阶段：尽早开始释放任务 
         "release_interval": 300,
@@ -123,19 +123,19 @@ class task_config:
         
         # 扩展物理参数随机化 (Extended Physical Params Randomization)
         # 电机参数 (Motor Params)
-        "randomize_motor_thrust_constant": True,  # 随机化电机推力系数
+        "randomize_motor_thrust_constant": False,  # 随机化电机推力系数
         "motor_thrust_constant_range_scale": [0.7, 1.0], # 推力系数缩放比例 (相对于标称值)
         
-        "randomize_motor_time_constant": True,  # 随机化电机时间常数
+        "randomize_motor_time_constant": False,  # 随机化电机时间常数
         "motor_time_constant_range": [0.02, 0.08], # 时间常数范围 (秒)
         
         # 阻力系数 (Drag Coeffs)
-        "randomize_drag_coefficients": True,  # 随机化阻力系数
+        "randomize_drag_coefficients": False,  # 随机化阻力系数
         "lin_drag_coeff_range": [0.0, 0.2],  # 线性阻力系数范围
         "ang_drag_coeff_range": [0.0, 0.05], # 角阻力系数范围
         
         # 恒定外力干扰 (Wind/Constant External Disturbance)
-        "randomize_external_disturbance": True,  # 启用恒定外力
+        "randomize_external_disturbance": False,  # 启用恒定外力
         "external_force_range": [0.0, 0.20], # 外力大小范围 (牛顿)
         "external_torque_range": [0.0, 0.0], # 外力矩范围 (牛顿·米)
     }
@@ -156,10 +156,11 @@ class task_config:
         
         # 基础观测控制 (Basic Obs Control) - 对 [observations] 向量进行屏蔽
         "include_base_rot": True,         # 索引 0-8: 旋转矩阵
-        "include_base_angvel": True,      # 索引 9-11: 机体角速度
-        "include_base_attached": True,    # 索引 12-15: 附着掩码
-        "include_base_warning": True,     # 索引 16: 预警标志
-        "include_base_prev_action": True, # 索引 17-19: 上一动作
+        "include_base_linvel": False,     # 索引 9-11: 线速度 (REVERTED)
+        "include_base_angvel": True,      # 索引 12-14: 机体角速度
+        "include_base_attached": True,    # 索引 15-18: 附着掩码 (REVERTED)
+        "include_base_warning": True,     # 索引 19: 预警标志 (REVERTED)
+        "include_base_prev_action": True, # 索引 20-22: 上一动作
     }
 
     curriculum_parameters = None
