@@ -1,16 +1,16 @@
 {
-  "Pure PD (Baseline)": {
+  "w/o Physics Randomization": {
     "Hard": {
-      "name": "Pure PD (Baseline)",
-      "description": "纯PD控制器，无RL补偿",
-      "success_rate": 0.92,
-      "position_rmse": 0.3600100953464688,
-      "avg_episode_length": 1442.02,
-      "avg_reward": 12991.605053710937,
+      "name": "w/o Physics Randomization",
+      "description": "关闭电机/阻力/外力随机化",
+      "success_rate": 0.98,
+      "position_rmse": 0.3685170772300161,
+      "avg_episode_length": 1486.16,
+      "avg_reward": 13910.141669921875,
       "num_episodes": 50,
-      "num_crashes": 4,
-      "max_tilt_angle_deg": 20.021757125854492,
-      "avg_max_tilt_deg": 7.711940370798111,
+      "num_crashes": 1,
+      "max_tilt_angle_deg": 18.9847354888916,
+      "avg_max_tilt_deg": 5.761741089820862,
       "recovery_time_steps": 0.0
     }
   }

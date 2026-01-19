@@ -38,15 +38,12 @@ params:
         scale: 2
 
   config:
-    # ============================================================
-    # ABLATION: NO PHYSICS RANDOMIZATION
-    # ============================================================
-    env_name: payload_compensation_task_no_phys_rand
+    env_name: payload_compensation_task_teacher
     env_config:
       num_envs: 2048
       headless: True
 
-    name: ablation_no_phys_rand  # Experiment name
+    name: ablation_full  # Experiment name
     reward_shaper:
       scale_value: 1.0
 
@@ -79,7 +76,7 @@ params:
     critic_coef: 0.5
     normalize_input: True
     bounds_loss_coef: 0.000
-    max_epochs: 300  # Shorter training for ablation
+    max_epochs: 500  # Limited epochs for ablation comparison
     normalize_value: True
     use_diagnostics: True
     value_bootstrap: True

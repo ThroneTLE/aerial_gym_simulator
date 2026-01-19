@@ -135,7 +135,7 @@ class task_config:
         "ang_drag_coeff_range": [0.0, 0.05], # 角阻力系数范围
         
         # 恒定外力干扰 (Wind/Constant External Disturbance)
-        "randomize_external_disturbance": False,  # 启用恒定外力
+        "randomize_external_disturbance": True,  # 启用恒定外力
         "external_force_range": [0.0, 0.20], # 外力大小范围 (牛顿)
         "external_torque_range": [0.0, 0.0], # 外力矩范围 (牛顿·米)
     }

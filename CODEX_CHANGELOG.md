@@ -190,3 +190,106 @@ python aerial_gym/examples/validate_cnn_stage2.py \
   - 为 log_std 增加上下限配置：`fixed_sigma: False`，`min_logstd/max_logstd`，限制噪声放大。
   - 保留初始 logstd=-2.0 并添加注释，说明噪声 clamp 目的。
 - 新增 `aerial_gym/examples/teacher_expert_demo.py`：使用教师残差直接作为动作跑若干步，打印位移漂移，用于快速 sanity check。
+
+---
+
+## 2025-01-18 消融实验 (Ablation Studies)
+
+### 实验目的
+验证物理参数随机化（电机、阻力、风扰动）对模型泛化能力的影响。
+
+### 配置文件
+
+1. **Full (完整随机化)**: `ppo_ablation_full_teacher.yaml`
+   - 包含载荷质量、电机参数、阻力系数、恒定风扰等全部物理参数随机化
+   - 任务配置: `payload_compensation_task_teacher_config.py`
+
+2. **No Phys Rand (无物理随机化)**: `ppo_ablation_no_phys_rand.yaml`
+   - 仅保留载荷质量随机化，关闭电机/阻力/风扰等其他物理参数随机化
+   - 任务配置: `payload_compensation_task_no_phys_rand_config.py`
+
+### 训练命令
+
+```bash
+# Full 模型训练 (新训练)
+python aerial_gym/rl_training/rl_games/runner.py \
+  --train \
+  --file aerial_gym/rl_training/rl_games/ppo_ablation_full_teacher.yaml \
+  --task payload_compensation_task_teacher \
+  --headless True
+
+# Full 模型继续训练 (从 checkpoint 恢复)
+python aerial_gym/rl_training/rl_games/runner.py \
+  --train \
+  --file aerial_gym/rl_training/rl_games/ppo_ablation_full_teacher.yaml \
+  --task payload_compensation_task_teacher \
+  --checkpoint runs/ablation_full_18-21-58-41/nn/last_ablation_full_ep_155_rew_14999.545.pth \
+  --headless True
+
+# NoPhysRand 模型训练
+python aerial_gym/rl_training/rl_games/runner.py \
+  --train \
+  --file aerial_gym/rl_training/rl_games/ppo_ablation_no_phys_rand.yaml \
+  --task payload_compensation_task_no_phys_rand \
+  --headless True
+```
+
+### 评估脚本
+
+评估脚本: `paper/eval_ablation.py`
+
+```bash
+# 评估命令示例
+python paper/eval_ablation.py \
+  --checkpoint "runs/ablation_full_18-23-00-23/nn/last_ablation_full_ep_256_rew_15001.956.pth" \
+  --name "Full_ep256" \
+  --test_mass 0.03 \
+  --test_wind 0.0 \
+  --num_steps 500
+
+# 参数说明:
+# --checkpoint: 模型 checkpoint 路径
+# --name: 实验名称（用于结果标识）
+# --test_mass: 测试载荷质量 (kg)
+# --test_wind: 测试风扰动 (N)
+# --num_steps: 评估步数
+# --num_envs: 并行环境数量 (默认 256)
+```
+
+### 实验结果 (2025-01-18)
+
+**测试条件**: 环境数量=256, 评估步数=500
+
+#### 不同载荷质量下的极限评估（无风条件）
+
+| 载荷质量 | Original | Full_ep256 | NoPhysRand |
+| :---: | :---: | :---: | :---: |
+| 0.01 kg | **100.00%** | 100.00% | 100.00% |
+| 0.03 kg | **99.61%** | 96.88% | 98.83% |
+| 0.05 kg (OOD) | **85.94%** | 81.25% | 38.67% |
+
+#### 风扰动下的消融对比 (Mass=0.03kg, Wind=0.1N)
+
+| 模型 | 成功率 | 崩溃率 |
+| :--- | :---: | :---: |
+| **Original** | **99.61%** | 0.39% |
+| Full_ep256 | 96.48% | 3.52% |
+| NoPhysRand | 94.92% | 5.08% |
+
+**崩溃判定条件**:
+- 位置误差 > 1.0 m
+- 姿态倾角 > 20°
+
+### 关键 Checkpoint
+
+| 模型 | Checkpoint 路径 | 说明 |
+| :--- | :--- | :--- |
+| **Original (推荐)** | `runs/teacher_aux_fixed_imitation_17-14-16-10/nn/teacher_aux_fixed_imitation.pth` | 无风训练，表现最佳 |
+| Full | `runs/ablation_full_18-23-00-23/nn/last_ablation_full_ep_256_rew_15001.956.pth` | 含风随机化 |
+| NoPhysRand | `runs/ablation_no_phys_rand_18-21-48-34/nn/last_ablation_no_phys_rand_ep_158_rew_15006.333.pth` | 无物理随机化 |
+
+### 结论
+
+1. **Original 模型表现最佳**：在所有测试条件下成功率均最高
+2. **电机/阻力随机化是关键**：Original 和 Full 在 OOD 条件下远超 NoPhysRand
+3. **风扰动随机化非必需**：Original 未经风训练但在有风测试中表现最好，说明电机/阻力随机化提供了足够的鲁棒性

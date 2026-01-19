@@ -1,0 +1,15 @@
+2026-01-18 22:20:40,081 Script started
+2026-01-18 22:20:41,830 Main function called
+2026-01-18 22:20:41,830 Args parsed: mass=0.0, wind=None, mode=teacher
+2026-01-18 22:21:52,743 Script started
+2026-01-18 22:21:54,590 Main function called
+2026-01-18 22:21:54,591 Reconstructed sys.argv: ['paper/eval_delta.py', '--sim_device', 'cuda:0', '--headless', 'True']
+2026-01-18 22:21:54,591 Args parsed: mass=0.0, wind=None, mode=teacher
+2026-01-18 22:24:52,291 Script started
+2026-01-18 22:24:54,043 Main function called
+2026-01-18 22:24:54,044 Reconstructed sys.argv: ['paper/eval_delta.py', '--sim_device', 'cuda:0']
+2026-01-18 22:24:54,044 Args parsed: mass=0.0, wind=None, mode=teacher
+2026-01-18 22:27:30,250 Script started
+2026-01-18 22:27:31,955 Main function called
+2026-01-18 22:27:31,956 Reconstructed sys.argv: ['paper/eval_delta.py', '--sim_device', 'cuda:0']
+2026-01-18 22:27:31,956 Args parsed: mass=0.01, wind=None, mode=teacher

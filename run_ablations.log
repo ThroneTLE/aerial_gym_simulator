@@ -1,0 +1,1652 @@
+Starting Ablation 1: No Physics Randomization (300 epochs)
+Importing module 'gym_38' (/home/throne/下载/isaacgym/python/isaacgym/_bindings/linux-x86_64/gym_38.so)
+Setting GYM_USD_PLUG_INFO_PATH to /home/throne/下载/isaacgym/python/isaacgym/_bindings/linux-x86_64/usd/plugInfo.json
+PyTorch version 1.13.1
+Device count 1
+/home/throne/下载/isaacgym/python/isaacgym/_bindings/src/gymtorch
+Using /home/throne/.cache/torch_extensions/py38_cu117 as PyTorch extensions root...
+Emitting ninja build file /home/throne/.cache/torch_extensions/py38_cu117/gymtorch/build.ninja...
+Building extension module gymtorch...
+Allowing ninja to set a default number of workers... (overridable by setting the environment variable MAX_JOBS=N)
+ninja: no work to do.
+Loading extension module gymtorch...
+Gym has been unmaintained since 2022 and does not support NumPy 2.0 amongst other critical functionality.
+Please upgrade to Gymnasium, the maintained drop-in replacement of Gym, or contact the authors of your software and request that they upgrade.
+See the migration guide at https://gymnasium.farama.org/introduction/migration_guide/ for additional information.
+/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/gymnasium/envs/registration.py:596: UserWarning: [33mWARN: plugin: shimmy.registration:register_gymnasium_envs raised Traceback (most recent call last):
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/gymnasium/envs/registration.py", line 594, in load_plugin_envs
+    fn()
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/shimmy/registration.py", line 304, in register_gymnasium_envs
+    _register_atari_envs()
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/shimmy/registration.py", line 205, in _register_atari_envs
+    import ale_py
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/ale_py/__init__.py", line 68, in <module>
+    register_v0_v4_envs()
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/ale_py/registration.py", line 178, in register_v0_v4_envs
+    _register_rom_configs(legacy_games, obs_types, versions)
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/ale_py/registration.py", line 63, in _register_rom_configs
+    gymnasium.register(
+AttributeError: partially initialized module 'gymnasium' has no attribute 'register' (most likely due to a circular import)
+[0m
+  logger.warn(f"plugin: {plugin.value} raised {traceback.format_exc()}")
+/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/torch/utils/tensorboard/__init__.py:4: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
+  if not hasattr(tensorboard, "__version__") or LooseVersion(
+[37m[2017 ms][base_task] - INFO : Setting seed: 8 (base_task.py:38)[0m
+[37m[2017 ms][payload_compensation_task] - INFO : Building environment for payload compensation task. (payload_compensation_task.py:567)[0m
+[37m[2017 ms][env_manager] - INFO : Populating environments. (env_manager.py:76)[0m
+[37m[2017 ms][env_manager] - INFO : Creating simulation instance. (env_manager.py:92)[0m
+[37m[2017 ms][env_manager] - INFO : Instantiating IGE object. (env_manager.py:93)[0m
+[37m[2017 ms][IsaacGymEnvManager] - INFO : Creating Isaac Gym Environment (IGE_env_manager.py:46)[0m
+[37m[2017 ms][IsaacGymEnvManager] - INFO : Acquiring gym object (IGE_env_manager.py:81)[0m
+[37m[2017 ms][IsaacGymEnvManager] - INFO : Acquired gym object (IGE_env_manager.py:83)[0m
+[37m[2018 ms][IsaacGymEnvManager] - INFO : Fixing devices (IGE_env_manager.py:95)[0m
+[37m[2018 ms][IsaacGymEnvManager] - INFO : Using GPU pipeline for simulation. (IGE_env_manager.py:112)[0m
+[37m[2018 ms][IsaacGymEnvManager] - INFO : Sim Device type: cuda, Sim Device ID: 0 (IGE_env_manager.py:115)[0m
+[31;1m[2018 ms][IsaacGymEnvManager] - CRITICAL : 
+ Setting graphics device to -1.
+ This is done because the simulation is run in headless mode and no Isaac Gym cameras are used.
+ No need to worry. The simulation and warp rendering will work as expected. (IGE_env_manager.py:125)[0m
+[37m[2018 ms][IsaacGymEnvManager] - INFO : Graphics Device ID: -1 (IGE_env_manager.py:133)[0m
+[37m[2018 ms][IsaacGymEnvManager] - INFO : Creating Isaac Gym Simulation Object (IGE_env_manager.py:135)[0m
+[33;20m[2018 ms][IsaacGymEnvManager] - WARNING : If you have set the CUDA_VISIBLE_DEVICES environment variable, please ensure that you set it
+to a particular one that works for your system to use the viewer or Isaac Gym cameras.
+If you want to run parallel simulations on multiple GPUs with camera sensors,
+please disable Isaac Gym and use warp (by setting use_warp=True), set the viewer to headless. (IGE_env_manager.py:143)[0m
+[33;20m[2018 ms][IsaacGymEnvManager] - WARNING : If you see a segfault in the next lines, it is because of the discrepancy between the CUDA device and the graphics device.
+Please ensure that the CUDA device and the graphics device are the same. (IGE_env_manager.py:148)[0m
+Not connected to PVD
++++ Using GPU PhysX
+Physics Engine: PhysX
+Physics Device: cuda:0
+GPU Pipeline: enabled
+[37m[2762 ms][IsaacGymEnvManager] - INFO : Created Isaac Gym Simulation Object (IGE_env_manager.py:154)[0m
+[37m[2762 ms][IsaacGymEnvManager] - INFO : Created Isaac Gym Environment (IGE_env_manager.py:49)[0m
+[37m[3005 ms][env_manager] - INFO : IGE object instantiated. (env_manager.py:115)[0m
+[37m[3005 ms][env_manager] - INFO : Creating warp environment. (env_manager.py:119)[0m
+[37m[3005 ms][env_manager] - INFO : Warp environment created. (env_manager.py:121)[0m
+[37m[3005 ms][env_manager] - INFO : Creating robot manager. (env_manager.py:126)[0m
+[37m[3005 ms][BaseRobot] - INFO : [DONE] Initializing controller (base_robot.py:26)[0m
+[37m[3005 ms][BaseRobot] - INFO : Initializing controller lee_position_control_with_compensation (base_robot.py:29)[0m
+[33;20m[3005 ms][base_multirotor] - WARNING : Creating 1024 multirotors. (base_multirotor.py:37)[0m
+[37m[3005 ms][env_manager] - INFO : [DONE] Creating robot manager. (env_manager.py:132)[0m
+[37m[3005 ms][env_manager] - INFO : [DONE] Creating simulation instance. (env_manager.py:134)[0m
+[37m[3005 ms][asset_loader] - INFO : Loading asset: quad.urdf for the first time. Next use of this asset will be via the asset buffer. (asset_loader.py:71)[0m
+[37m[3007 ms][env_manager] - INFO : Populating environment 0 (env_manager.py:194)[0m
+[33;20m[3399 ms][robot_manager] - WARNING : 
+Robot mass: 0.2500003944120692,
+Inertia: tensor([[8.4501e-04, 0.0000e+00, 3.3087e-24],
+        [0.0000e+00, 8.4501e-04, 3.3087e-24],
+        [3.3087e-24, 3.3087e-24, 1.6900e-03]], device='cuda:0'),
+Robot COM: tensor([[0.0000e+00, 0.0000e+00, 1.3411e-14, 1.0000e+00]], device='cuda:0') (robot_manager.py:427)[0m
+[33;20m[3399 ms][robot_manager] - WARNING : Calculated robot mass and inertia for this robot. This code assumes that your robot is the same across environments. (robot_manager.py:430)[0m
+[31;1m[3399 ms][robot_manager] - CRITICAL : If your robot differs across environments you need to perform this computation for each different robot here. (robot_manager.py:433)[0m
+[37m[3456 ms][env_manager] - INFO : Populating environment 1000 (env_manager.py:194)[0m
+[37m[3458 ms][env_manager] - INFO : [DONE] Populating environments. (env_manager.py:79)[0m
+[33;20m[3472 ms][IsaacGymEnvManager] - WARNING : Headless: True (IGE_env_manager.py:494)[0m
+[37m[3472 ms][IsaacGymEnvManager] - INFO : Headless mode. Viewer not created. (IGE_env_manager.py:505)[0m
+[33;20m[3473 ms][warp_env_manager] - WARNING : No assets have been added to the environment. Skipping preparation for simulation (warp_env_manager.py:101)[0m
+[33;20m[3519 ms][asset_manager] - WARNING : Number of obstacles to be kept in the environment: 0 (asset_manager.py:32)[0m
+/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/control/motor_model.py:53: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  torch.tensor(self.min_thrust, device=self.device, dtype=torch.float32).expand(
+/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/control/motor_model.py:56: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  torch.tensor(self.max_thrust, device=self.device, dtype=torch.float32).expand(
+[33;20m[3754 ms][control_allocation] - WARNING : Control allocation does not account for actuator limits. This leads to suboptimal allocation (control_allocation.py:67)[0m
+/home/throne/.local/lib/python3.8/site-packages/gym/spaces/box.py:84: UserWarning: [33mWARN: Box bound precision lowered by casting to float32[0m
+  logger.warn(f"Box bound precision lowered by casting to {self.dtype}")
+[37m[4555 ms][payload_compensation_task] - INFO : [DebugReset 0] env_ids=[0, 1, 2] targets=[[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]] release_info={0: {'order': [2, 1, 3, 0], 'next_release': 87}, 1: {'order': [1, 0, 2, 3], 'next_release': 81}, 2: {'order': [2, 1, 0, 3], 'next_release': 100}} (payload_compensation_task.py:1766)[0m
+[37m[8897 ms][payload_compensation_task] - INFO : [DebugReset 1] env_ids=[962] targets=[[0.0, 0.0, 0.0]] release_info={962: {'order': [1, 2, 0, 3], 'next_release': 103}} (payload_compensation_task.py:1766)[0m
+[37m[8911 ms][payload_compensation_task] - INFO : [DebugReset 2] env_ids=[446] targets=[[0.0, 0.0, 0.0]] release_info={446: {'order': [3, 2, 1, 0], 'next_release': 106}} (payload_compensation_task.py:1766)[0m
+[37m[8958 ms][payload_compensation_task] - INFO : [DebugReset 3] env_ids=[680] targets=[[0.0, 0.0, 0.0]] release_info={680: {'order': [3, 0, 1, 2], 'next_release': 82}} (payload_compensation_task.py:1766)[0m
+[37m[8981 ms][payload_compensation_task] - INFO : [DebugReset 4] env_ids=[274] targets=[[0.0, 0.0, 0.0]] release_info={274: {'order': [3, 2, 0, 1], 'next_release': 104}} (payload_compensation_task.py:1766)[0m
+Warp 1.0.0 initialized:
+   CUDA Toolkit 11.5, Driver 12.6
+   Devices:
+     "cpu"      : "x86_64"
+     "cuda:0"   : "NVIDIA GeForce RTX 4060 Laptop GPU" (8 GiB, sm_89, mempool enabled)
+   Kernel cache:
+     /home/throne/.cache/warp/1.0.0
+[isaacgym:gymutil.py] Unknown args:  []
+Loading config:  aerial_gym/rl_training/rl_games/ppo_ablation_no_phys_rand.yaml
+[Runner] Registered custom agent: a2c_continuous_aux
+self.seed = 8
+Started to train
+[isaacgym:gymutil.py] Unknown args:  ['--file', 'aerial_gym/rl_training/rl_games/ppo_ablation_no_phys_rand.yaml', '--task', 'payload_compensation_task_no_phys_rand', '--train']
+WARNING: allocation matrix is not full rank. Rank: 4
+Box(-1.0, 1.0, (3,), float32) Box(-inf, inf, (20,), float32)
+seq_length: 4
+current training device: cuda:0
+build mlp: 28
+[PrivilegedA2C] Actor mu.bias 已初始化为 0
+RunningMeanStd:  (1,)
+RunningMeanStd:  (20,)
+[A2CAgentWithAuxLoss] Auxiliary loss coefficient: 0.1
+[A2CAgentWithAuxLoss] BC loss: coef=10.0, alpha=0.99, min=0.5
+[A2CAgentWithAuxLoss] 分离BC权重: thrust=30.0, torque=20.0
+[A2CAgentWithAuxLoss] NaN防护: skip=True, reset=True, tolerance=5
+[A2CAgentWithAuxLoss] Registered teacher_actions in experience_buffer (shape: [horizon=256, actors=1024, action_dim=3])
+[A2CAgentWithAuxLoss] Registered privileged_obs in experience_buffer (shape: [horizon=256, actors=1024, priv_dim=18])
+fps step: 58 fps step and policy inference: 54158 fps total: 51482 epoch: 1/300 frames: 0
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_1_rew_786.81226.pth'
+saving next best rewards:  [786.81226]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 90 fps step and policy inference: 80295 fps total: 74551 epoch: 2/300 frames: 262144
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_2_rew_1806.4369.pth'
+saving next best rewards:  [1806.4369]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 95 fps step and policy inference: 84417 fps total: 78110 epoch: 3/300 frames: 524288
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_3_rew_2969.6892.pth'
+saving next best rewards:  [2969.6892]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 99 fps step and policy inference: 87850 fps total: 81076 epoch: 4/300 frames: 786432
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_4_rew_3616.5403.pth'
+saving next best rewards:  [3616.5403]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 96 fps step and policy inference: 84876 fps total: 78044 epoch: 5/300 frames: 1048576
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_5_rew_3823.78.pth'
+saving next best rewards:  [3823.78]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 99 fps step and policy inference: 88188 fps total: 81286 epoch: 6/300 frames: 1310720
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_6_rew_13989.806.pth'
+saving next best rewards:  [13989.806]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 93 fps step and policy inference: 83352 fps total: 77235 epoch: 7/300 frames: 1572864
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_7_rew_13275.282.pth'
+fps step: 92 fps step and policy inference: 81960 fps total: 75953 epoch: 8/300 frames: 1835008
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_8_rew_13342.116.pth'
+fps step: 91 fps step and policy inference: 81152 fps total: 75317 epoch: 9/300 frames: 2097152
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_9_rew_11553.894.pth'
+fps step: 101 fps step and policy inference: 88638 fps total: 80109 epoch: 10/300 frames: 2359296
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_10_rew_11606.254.pth'
+fps step: 88 fps step and policy inference: 78239 fps total: 72801 epoch: 11/300 frames: 2621440
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_11_rew_11414.625.pth'
+fps step: 76 fps step and policy inference: 67793 fps total: 63675 epoch: 12/300 frames: 2883584
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_12_rew_14247.121.pth'
+saving next best rewards:  [14247.121]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 93 fps step and policy inference: 83092 fps total: 76987 epoch: 13/300 frames: 3145728
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_13_rew_14387.608.pth'
+saving next best rewards:  [14387.608]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 95 fps step and policy inference: 84943 fps total: 78581 epoch: 14/300 frames: 3407872
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_14_rew_14515.141.pth'
+saving next best rewards:  [14515.141]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 92 fps step and policy inference: 81768 fps total: 75487 epoch: 15/300 frames: 3670016
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_15_rew_14254.759.pth'
+fps step: 94 fps step and policy inference: 83267 fps total: 77100 epoch: 16/300 frames: 3932160
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_16_rew_14260.009.pth'
+fps step: 104 fps step and policy inference: 92235 fps total: 84821 epoch: 17/300 frames: 4194304
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_17_rew_14106.089.pth'
+fps step: 94 fps step and policy inference: 84423 fps total: 78151 epoch: 18/300 frames: 4456448
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_18_rew_14793.377.pth'
+saving next best rewards:  [14793.377]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 97 fps step and policy inference: 85979 fps total: 79474 epoch: 19/300 frames: 4718592
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_19_rew_14800.578.pth'
+saving next best rewards:  [14800.578]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 90 fps step and policy inference: 79755 fps total: 73641 epoch: 20/300 frames: 4980736
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_20_rew_14352.17.pth'
+fps step: 90 fps step and policy inference: 80808 fps total: 75015 epoch: 21/300 frames: 5242880
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_21_rew_14046.871.pth'
+fps step: 95 fps step and policy inference: 83994 fps total: 77762 epoch: 22/300 frames: 5505024
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_22_rew_13930.967.pth'
+fps step: 101 fps step and policy inference: 89094 fps total: 82145 epoch: 23/300 frames: 5767168
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_23_rew_13503.614.pth'
+fps step: 90 fps step and policy inference: 80693 fps total: 74921 epoch: 24/300 frames: 6029312
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_24_rew_14915.607.pth'
+saving next best rewards:  [14915.607]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 101 fps step and policy inference: 89569 fps total: 81792 epoch: 25/300 frames: 6291456
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_25_rew_14770.858.pth'
+fps step: 90 fps step and policy inference: 80410 fps total: 74630 epoch: 26/300 frames: 6553600
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_26_rew_12266.342.pth'
+fps step: 91 fps step and policy inference: 81273 fps total: 75438 epoch: 27/300 frames: 6815744
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_27_rew_13337.556.pth'
+fps step: 97 fps step and policy inference: 85873 fps total: 79364 epoch: 28/300 frames: 7077888
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_28_rew_13306.042.pth'
+fps step: 100 fps step and policy inference: 88819 fps total: 81853 epoch: 29/300 frames: 7340032
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_29_rew_13159.233.pth'
+fps step: 88 fps step and policy inference: 78740 fps total: 72910 epoch: 30/300 frames: 7602176
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_30_rew_14770.136.pth'
+fps step: 97 fps step and policy inference: 86243 fps total: 79690 epoch: 31/300 frames: 7864320
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_31_rew_14593.438.pth'
+fps step: 93 fps step and policy inference: 82638 fps total: 76595 epoch: 32/300 frames: 8126464
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_32_rew_12947.234.pth'
+fps step: 93 fps step and policy inference: 83336 fps total: 77218 epoch: 33/300 frames: 8388608
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_33_rew_13604.764.pth'
+fps step: 93 fps step and policy inference: 82655 fps total: 76020 epoch: 34/300 frames: 8650752
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_34_rew_13443.059.pth'
+fps step: 82 fps step and policy inference: 72250 fps total: 67247 epoch: 35/300 frames: 8912896
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_35_rew_13663.967.pth'
+fps step: 92 fps step and policy inference: 82722 fps total: 76525 epoch: 36/300 frames: 9175040
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_36_rew_14945.363.pth'
+saving next best rewards:  [14945.363]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 96 fps step and policy inference: 85487 fps total: 79057 epoch: 37/300 frames: 9437184
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_37_rew_14702.761.pth'
+fps step: 94 fps step and policy inference: 83524 fps total: 77342 epoch: 38/300 frames: 9699328
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_38_rew_13689.425.pth'
+fps step: 93 fps step and policy inference: 83146 fps total: 77051 epoch: 39/300 frames: 9961472
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_39_rew_14205.719.pth'
+fps step: 85 fps step and policy inference: 75686 fps total: 69818 epoch: 40/300 frames: 10223616
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_40_rew_14237.736.pth'
+fps step: 99 fps step and policy inference: 87558 fps total: 80867 epoch: 41/300 frames: 10485760
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_41_rew_14275.681.pth'
+fps step: 90 fps step and policy inference: 80907 fps total: 75073 epoch: 42/300 frames: 10747904
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_42_rew_14948.897.pth'
+saving next best rewards:  [14948.897]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 93 fps step and policy inference: 82823 fps total: 76786 epoch: 43/300 frames: 11010048
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_43_rew_14964.706.pth'
+saving next best rewards:  [14964.706]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 91 fps step and policy inference: 80723 fps total: 74937 epoch: 44/300 frames: 11272192
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_44_rew_14613.336.pth'
+fps step: 95 fps step and policy inference: 84791 fps total: 78049 epoch: 45/300 frames: 11534336
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_45_rew_14633.339.pth'
+fps step: 94 fps step and policy inference: 83909 fps total: 77704 epoch: 46/300 frames: 11796480
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_46_rew_14481.207.pth'
+fps step: 95 fps step and policy inference: 84170 fps total: 77882 epoch: 47/300 frames: 12058624
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_47_rew_14968.092.pth'
+saving next best rewards:  [14968.092]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 96 fps step and policy inference: 85854 fps total: 79391 epoch: 48/300 frames: 12320768
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_48_rew_14857.092.pth'
+fps step: 96 fps step and policy inference: 85283 fps total: 78888 epoch: 49/300 frames: 12582912
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_49_rew_14870.839.pth'
+fps step: 89 fps step and policy inference: 79357 fps total: 73474 epoch: 50/300 frames: 12845056
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_50_rew_14475.777.pth'
+fps step: 98 fps step and policy inference: 86573 fps total: 79980 epoch: 51/300 frames: 13107200
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_51_rew_14268.582.pth'
+fps step: 95 fps step and policy inference: 84508 fps total: 78190 epoch: 52/300 frames: 13369344
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_52_rew_14159.029.pth'
+fps step: 98 fps step and policy inference: 87313 fps total: 80587 epoch: 53/300 frames: 13631488
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_53_rew_14906.989.pth'
+fps step: 96 fps step and policy inference: 85157 fps total: 78763 epoch: 54/300 frames: 13893632
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_54_rew_14875.353.pth'
+fps step: 96 fps step and policy inference: 85600 fps total: 78751 epoch: 55/300 frames: 14155776
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_55_rew_14852.39.pth'
+fps step: 88 fps step and policy inference: 78467 fps total: 73049 epoch: 56/300 frames: 14417920
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_56_rew_14501.439.pth'
+fps step: 99 fps step and policy inference: 88001 fps total: 81202 epoch: 57/300 frames: 14680064
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_57_rew_14537.6.pth'
+fps step: 99 fps step and policy inference: 88169 fps total: 81313 epoch: 58/300 frames: 14942208
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_58_rew_14451.121.pth'
+fps step: 86 fps step and policy inference: 76448 fps total: 70506 epoch: 59/300 frames: 15204352
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_59_rew_14973.955.pth'
+saving next best rewards:  [14973.955]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 91 fps step and policy inference: 81155 fps total: 74318 epoch: 60/300 frames: 15466496
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_60_rew_14827.168.pth'
+fps step: 83 fps step and policy inference: 74035 fps total: 69166 epoch: 61/300 frames: 15728640
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_61_rew_14165.757.pth'
+fps step: 69 fps step and policy inference: 62146 fps total: 58195 epoch: 62/300 frames: 15990784
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_62_rew_14377.772.pth'
+fps step: 76 fps step and policy inference: 67683 fps total: 63400 epoch: 63/300 frames: 16252928
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_63_rew_14435.373.pth'
+fps step: 93 fps step and policy inference: 82358 fps total: 76305 epoch: 64/300 frames: 16515072
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_64_rew_14595.591.pth'
+fps step: 85 fps step and policy inference: 75500 fps total: 69399 epoch: 65/300 frames: 16777216
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_65_rew_14988.819.pth'
+saving next best rewards:  [14988.819]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 91 fps step and policy inference: 80511 fps total: 74847 epoch: 66/300 frames: 17039360
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_66_rew_14988.046.pth'
+fps step: 90 fps step and policy inference: 80052 fps total: 74300 epoch: 67/300 frames: 17301504
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_67_rew_14988.835.pth'
+saving next best rewards:  [14988.835]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 67 fps step and policy inference: 59811 fps total: 55866 epoch: 68/300 frames: 17563648
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_68_rew_14832.677.pth'
+fps step: 91 fps step and policy inference: 80687 fps total: 74779 epoch: 69/300 frames: 17825792
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_69_rew_14872.649.pth'
+fps step: 74 fps step and policy inference: 65510 fps total: 60434 epoch: 70/300 frames: 18087936
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_70_rew_14922.293.pth'
+fps step: 69 fps step and policy inference: 61928 fps total: 57967 epoch: 71/300 frames: 18350080
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_71_rew_14992.781.pth'
+saving next best rewards:  [14992.781]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 84 fps step and policy inference: 73867 fps total: 67950 epoch: 72/300 frames: 18612224
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_72_rew_14992.29.pth'
+fps step: 78 fps step and policy inference: 69084 fps total: 64782 epoch: 73/300 frames: 18874368
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_73_rew_14986.095.pth'
+fps step: 79 fps step and policy inference: 70765 fps total: 66275 epoch: 74/300 frames: 19136512
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_74_rew_14984.158.pth'
+fps step: 95 fps step and policy inference: 84525 fps total: 77450 epoch: 75/300 frames: 19398656
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_75_rew_14984.627.pth'
+fps step: 97 fps step and policy inference: 85890 fps total: 79312 epoch: 76/300 frames: 19660800
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_76_rew_14985.907.pth'
+fps step: 91 fps step and policy inference: 81547 fps total: 75570 epoch: 77/300 frames: 19922944
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_77_rew_14990.939.pth'
+fps step: 91 fps step and policy inference: 81457 fps total: 75427 epoch: 78/300 frames: 20185088
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_78_rew_14992.29.pth'
+fps step: 83 fps step and policy inference: 73633 fps total: 68806 epoch: 79/300 frames: 20447232
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_79_rew_14992.658.pth'
+fps step: 83 fps step and policy inference: 74489 fps total: 69180 epoch: 80/300 frames: 20709376
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_80_rew_14917.975.pth'
+fps step: 95 fps step and policy inference: 84193 fps total: 77912 epoch: 81/300 frames: 20971520
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_81_rew_14938.891.pth'
+fps step: 99 fps step and policy inference: 87392 fps total: 80659 epoch: 82/300 frames: 21233664
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_82_rew_14956.523.pth'
+fps step: 92 fps step and policy inference: 82107 fps total: 76014 epoch: 83/300 frames: 21495808
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_83_rew_14986.022.pth'
+fps step: 71 fps step and policy inference: 62969 fps total: 58582 epoch: 84/300 frames: 21757952
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_84_rew_14988.308.pth'
+fps step: 63 fps step and policy inference: 56322 fps total: 52442 epoch: 85/300 frames: 22020096
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_85_rew_14860.757.pth'
+fps step: 66 fps step and policy inference: 58551 fps total: 54730 epoch: 86/300 frames: 22282240
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_86_rew_14936.036.pth'
+fps step: 69 fps step and policy inference: 61302 fps total: 57078 epoch: 87/300 frames: 22544384
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_87_rew_14956.677.pth'
+fps step: 68 fps step and policy inference: 60552 fps total: 56498 epoch: 88/300 frames: 22806528
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_88_rew_14999.019.pth'
+saving next best rewards:  [14999.019]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 66 fps step and policy inference: 58306 fps total: 54524 epoch: 89/300 frames: 23068672
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_89_rew_14999.322.pth'
+saving next best rewards:  [14999.322]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 65 fps step and policy inference: 57660 fps total: 53632 epoch: 90/300 frames: 23330816
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_90_rew_14998.741.pth'
+fps step: 61 fps step and policy inference: 54601 fps total: 51280 epoch: 91/300 frames: 23592960
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_91_rew_14998.538.pth'
+fps step: 69 fps step and policy inference: 61286 fps total: 57162 epoch: 92/300 frames: 23855104
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_92_rew_14998.238.pth'
+fps step: 64 fps step and policy inference: 57164 fps total: 53509 epoch: 93/300 frames: 24117248
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_93_rew_14998.229.pth'
+fps step: 67 fps step and policy inference: 59305 fps total: 55369 epoch: 94/300 frames: 24379392
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_94_rew_14997.79.pth'
+fps step: 66 fps step and policy inference: 59077 fps total: 54839 epoch: 95/300 frames: 24641536
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_95_rew_14998.135.pth'
+fps step: 64 fps step and policy inference: 56589 fps total: 52966 epoch: 96/300 frames: 24903680
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_96_rew_15000.496.pth'
+saving next best rewards:  [15000.496]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 59 fps step and policy inference: 52758 fps total: 49602 epoch: 97/300 frames: 25165824
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_97_rew_15001.6455.pth'
+saving next best rewards:  [15001.6455]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 69 fps step and policy inference: 61464 fps total: 57200 epoch: 98/300 frames: 25427968
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_98_rew_15001.54.pth'
+fps step: 72 fps step and policy inference: 63501 fps total: 59893 epoch: 99/300 frames: 25690112
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_99_rew_15001.759.pth'
+saving next best rewards:  [15001.759]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 97 fps step and policy inference: 86073 fps total: 79216 epoch: 100/300 frames: 25952256
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_100_rew_15003.436.pth'
+saving next best rewards:  [15003.436]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 93 fps step and policy inference: 82765 fps total: 76340 epoch: 101/300 frames: 26214400
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_101_rew_15003.644.pth'
+saving next best rewards:  [15003.644]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 85 fps step and policy inference: 76339 fps total: 71155 epoch: 102/300 frames: 26476544
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_102_rew_15004.242.pth'
+saving next best rewards:  [15004.242]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 84 fps step and policy inference: 75401 fps total: 70302 epoch: 103/300 frames: 26738688
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_103_rew_15004.466.pth'
+saving next best rewards:  [15004.466]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 93 fps step and policy inference: 82450 fps total: 76310 epoch: 104/300 frames: 27000832
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_104_rew_15004.354.pth'
+fps step: 97 fps step and policy inference: 85928 fps total: 78960 epoch: 105/300 frames: 27262976
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_105_rew_15004.331.pth'
+fps step: 89 fps step and policy inference: 79842 fps total: 74100 epoch: 106/300 frames: 27525120
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_106_rew_15004.515.pth'
+saving next best rewards:  [15004.515]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 93 fps step and policy inference: 82363 fps total: 76258 epoch: 107/300 frames: 27787264
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_107_rew_15004.651.pth'
+saving next best rewards:  [15004.651]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 81 fps step and policy inference: 72400 fps total: 67621 epoch: 108/300 frames: 28049408
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_108_rew_15005.157.pth'
+saving next best rewards:  [15005.157]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 81 fps step and policy inference: 71938 fps total: 67198 epoch: 109/300 frames: 28311552
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_109_rew_15005.6045.pth'
+saving next best rewards:  [15005.6045]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 85 fps step and policy inference: 75572 fps total: 68986 epoch: 110/300 frames: 28573696
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_110_rew_15005.462.pth'
+fps step: 70 fps step and policy inference: 61717 fps total: 57449 epoch: 111/300 frames: 28835840
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_111_rew_15005.55.pth'
+fps step: 65 fps step and policy inference: 57932 fps total: 54227 epoch: 112/300 frames: 29097984
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_112_rew_15005.784.pth'
+saving next best rewards:  [15005.784]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 70 fps step and policy inference: 61718 fps total: 57536 epoch: 113/300 frames: 29360128
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_113_rew_15005.824.pth'
+saving next best rewards:  [15005.824]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 62 fps step and policy inference: 55338 fps total: 52081 epoch: 114/300 frames: 29622272
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_114_rew_15005.297.pth'
+fps step: 61 fps step and policy inference: 54900 fps total: 51227 epoch: 115/300 frames: 29884416
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_115_rew_15005.59.pth'
+fps step: 70 fps step and policy inference: 62358 fps total: 58806 epoch: 116/300 frames: 30146560
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_116_rew_15005.855.pth'
+saving next best rewards:  [15005.855]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 88 fps step and policy inference: 78208 fps total: 72750 epoch: 117/300 frames: 30408704
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_117_rew_15005.837.pth'
+fps step: 83 fps step and policy inference: 74063 fps total: 69067 epoch: 118/300 frames: 30670848
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_118_rew_15006.056.pth'
+saving next best rewards:  [15006.056]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 92 fps step and policy inference: 82196 fps total: 76184 epoch: 119/300 frames: 30932992
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_119_rew_15005.996.pth'
+fps step: 91 fps step and policy inference: 81315 fps total: 74953 epoch: 120/300 frames: 31195136
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_120_rew_15006.101.pth'
+saving next best rewards:  [15006.101]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 90 fps step and policy inference: 79925 fps total: 74177 epoch: 121/300 frames: 31457280
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_121_rew_15006.111.pth'
+saving next best rewards:  [15006.111]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 92 fps step and policy inference: 81860 fps total: 75841 epoch: 122/300 frames: 31719424
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_122_rew_15006.144.pth'
+saving next best rewards:  [15006.144]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 72 fps step and policy inference: 63443 fps total: 58957 epoch: 123/300 frames: 31981568
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_123_rew_15006.067.pth'
+fps step: 67 fps step and policy inference: 60195 fps total: 56132 epoch: 124/300 frames: 32243712
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_124_rew_15006.716.pth'
+saving next best rewards:  [15006.716]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 67 fps step and policy inference: 59250 fps total: 55014 epoch: 125/300 frames: 32505856
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_125_rew_15006.486.pth'
+fps step: 64 fps step and policy inference: 56798 fps total: 53458 epoch: 126/300 frames: 32768000
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_126_rew_15006.533.pth'
+fps step: 66 fps step and policy inference: 58803 fps total: 54946 epoch: 127/300 frames: 33030144
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_127_rew_15006.243.pth'
+fps step: 68 fps step and policy inference: 60460 fps total: 56416 epoch: 128/300 frames: 33292288
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_128_rew_15006.358.pth'
+fps step: 66 fps step and policy inference: 58496 fps total: 54683 epoch: 129/300 frames: 33554432
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_129_rew_15006.311.pth'
+fps step: 64 fps step and policy inference: 56792 fps total: 52755 epoch: 130/300 frames: 33816576
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_130_rew_15006.381.pth'
+fps step: 81 fps step and policy inference: 71745 fps total: 66648 epoch: 131/300 frames: 34078720
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_131_rew_15006.496.pth'
+fps step: 88 fps step and policy inference: 79185 fps total: 73541 epoch: 132/300 frames: 34340864
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_132_rew_15006.635.pth'
+fps step: 96 fps step and policy inference: 85514 fps total: 79112 epoch: 133/300 frames: 34603008
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_133_rew_15006.79.pth'
+saving next best rewards:  [15006.79]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 98 fps step and policy inference: 87162 fps total: 80451 epoch: 134/300 frames: 34865152
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_134_rew_15006.753.pth'
+fps step: 94 fps step and policy inference: 83958 fps total: 77320 epoch: 135/300 frames: 35127296
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_135_rew_15006.027.pth'
+fps step: 91 fps step and policy inference: 81516 fps total: 75623 epoch: 136/300 frames: 35389440
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_136_rew_15006.141.pth'
+fps step: 93 fps step and policy inference: 83213 fps total: 77025 epoch: 137/300 frames: 35651584
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_137_rew_15006.125.pth'
+fps step: 86 fps step and policy inference: 77007 fps total: 71702 epoch: 138/300 frames: 35913728
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_138_rew_15006.311.pth'
+fps step: 98 fps step and policy inference: 86656 fps total: 79999 epoch: 139/300 frames: 36175872
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_139_rew_15006.269.pth'
+fps step: 96 fps step and policy inference: 85037 fps total: 78237 epoch: 140/300 frames: 36438016
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_140_rew_15006.567.pth'
+fps step: 97 fps step and policy inference: 86102 fps total: 79538 epoch: 141/300 frames: 36700160
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_141_rew_15007.064.pth'
+saving next best rewards:  [15007.064]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 93 fps step and policy inference: 82981 fps total: 76897 epoch: 142/300 frames: 36962304
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_142_rew_15007.033.pth'
+fps step: 94 fps step and policy inference: 83939 fps total: 77717 epoch: 143/300 frames: 37224448
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_143_rew_15006.902.pth'
+fps step: 89 fps step and policy inference: 79457 fps total: 73785 epoch: 144/300 frames: 37486592
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_144_rew_15006.729.pth'
+fps step: 97 fps step and policy inference: 86287 fps total: 79305 epoch: 145/300 frames: 37748736
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_145_rew_15006.677.pth'
+fps step: 101 fps step and policy inference: 89706 fps total: 82664 epoch: 146/300 frames: 38010880
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_146_rew_15006.483.pth'
+fps step: 90 fps step and policy inference: 80725 fps total: 74959 epoch: 147/300 frames: 38273024
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_147_rew_15005.659.pth'
+fps step: 100 fps step and policy inference: 88807 fps total: 81877 epoch: 148/300 frames: 38535168
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_148_rew_15005.774.pth'
+fps step: 91 fps step and policy inference: 81405 fps total: 75512 epoch: 149/300 frames: 38797312
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_149_rew_15006.08.pth'
+fps step: 90 fps step and policy inference: 80141 fps total: 74133 epoch: 150/300 frames: 39059456
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_150_rew_15006.166.pth'
+fps step: 96 fps step and policy inference: 85464 fps total: 78983 epoch: 151/300 frames: 39321600
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_151_rew_15006.189.pth'
+fps step: 103 fps step and policy inference: 91542 fps total: 84132 epoch: 152/300 frames: 39583744
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_152_rew_15006.0205.pth'
+fps step: 90 fps step and policy inference: 80865 fps total: 75069 epoch: 153/300 frames: 39845888
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_153_rew_15006.185.pth'
+fps step: 101 fps step and policy inference: 89040 fps total: 82074 epoch: 154/300 frames: 40108032
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_154_rew_15006.281.pth'
+fps step: 91 fps step and policy inference: 81513 fps total: 75054 epoch: 155/300 frames: 40370176
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_155_rew_15006.58.pth'
+fps step: 88 fps step and policy inference: 78341 fps total: 72864 epoch: 156/300 frames: 40632320
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_156_rew_15006.391.pth'
+fps step: 97 fps step and policy inference: 86320 fps total: 79706 epoch: 157/300 frames: 40894464
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_157_rew_15006.346.pth'
+fps step: 99 fps step and policy inference: 87791 fps total: 81011 epoch: 158/300 frames: 41156608
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_158_rew_15006.333.pth'
+fps step: 91 fps step and policy inference: 81410 fps total: 75525 epoch: 159/300 frames: 41418752
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_159_rew_15005.83.pth'
+fps step: 98 fps step and policy inference: 86948 fps total: 79740 epoch: 160/300 frames: 41680896
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_160_rew_15006.073.pth'
+fps step: 93 fps step and policy inference: 83005 fps total: 76941 epoch: 161/300 frames: 41943040
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_161_rew_15006.386.pth'
+fps step: 91 fps step and policy inference: 81171 fps total: 75274 epoch: 162/300 frames: 42205184
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_162_rew_15006.559.pth'
+fps step: 97 fps step and policy inference: 85968 fps total: 79410 epoch: 163/300 frames: 42467328
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_163_rew_15006.323.pth'
+fps step: 101 fps step and policy inference: 89886 fps total: 82589 epoch: 164/300 frames: 42729472
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_164_rew_15006.212.pth'
+fps step: 94 fps step and policy inference: 83697 fps total: 77135 epoch: 165/300 frames: 42991616
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_165_rew_15005.983.pth'
+fps step: 92 fps step and policy inference: 82179 fps total: 76180 epoch: 166/300 frames: 43253760
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_166_rew_15006.269.pth'
+fps step: 94 fps step and policy inference: 83576 fps total: 77413 epoch: 167/300 frames: 43515904
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_167_rew_15006.372.pth'
+fps step: 94 fps step and policy inference: 84123 fps total: 77813 epoch: 168/300 frames: 43778048
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_168_rew_15006.81.pth'
+fps step: 97 fps step and policy inference: 86247 fps total: 79667 epoch: 169/300 frames: 44040192
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_169_rew_15006.757.pth'
+fps step: 102 fps step and policy inference: 90183 fps total: 82707 epoch: 170/300 frames: 44302336
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_170_rew_15006.389.pth'
+fps step: 92 fps step and policy inference: 82511 fps total: 76301 epoch: 171/300 frames: 44564480
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_171_rew_15006.311.pth'
+fps step: 90 fps step and policy inference: 79951 fps total: 74268 epoch: 172/300 frames: 44826624
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_172_rew_15006.698.pth'
+fps step: 81 fps step and policy inference: 72017 fps total: 66677 epoch: 173/300 frames: 45088768
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_173_rew_15006.663.pth'
+fps step: 83 fps step and policy inference: 73387 fps total: 68564 epoch: 174/300 frames: 45350912
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_174_rew_15006.6875.pth'
+fps step: 95 fps step and policy inference: 84553 fps total: 77464 epoch: 175/300 frames: 45613056
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_175_rew_15006.518.pth'
+fps step: 94 fps step and policy inference: 84052 fps total: 77767 epoch: 176/300 frames: 45875200
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_176_rew_15006.058.pth'
+fps step: 93 fps step and policy inference: 82650 fps total: 76592 epoch: 177/300 frames: 46137344
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_177_rew_15006.576.pth'
+fps step: 91 fps step and policy inference: 81327 fps total: 75421 epoch: 178/300 frames: 46399488
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_178_rew_15006.817.pth'
+fps step: 75 fps step and policy inference: 67319 fps total: 63241 epoch: 179/300 frames: 46661632
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_179_rew_15006.858.pth'
+fps step: 96 fps step and policy inference: 85482 fps total: 78517 epoch: 180/300 frames: 46923776
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_180_rew_15007.028.pth'
+fps step: 96 fps step and policy inference: 85265 fps total: 78736 epoch: 181/300 frames: 47185920
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_181_rew_15007.152.pth'
+saving next best rewards:  [15007.152]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 86 fps step and policy inference: 76774 fps total: 70360 epoch: 182/300 frames: 47448064
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_182_rew_15007.611.pth'
+saving next best rewards:  [15007.611]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 67 fps step and policy inference: 59168 fps total: 55335 epoch: 183/300 frames: 47710208
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_183_rew_15007.597.pth'
+fps step: 64 fps step and policy inference: 56733 fps total: 53159 epoch: 184/300 frames: 47972352
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_184_rew_15007.472.pth'
+fps step: 59 fps step and policy inference: 53080 fps total: 49652 epoch: 185/300 frames: 48234496
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_185_rew_15007.184.pth'
+fps step: 65 fps step and policy inference: 57782 fps total: 54028 epoch: 186/300 frames: 48496640
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_186_rew_15007.077.pth'
+fps step: 66 fps step and policy inference: 58965 fps total: 55059 epoch: 187/300 frames: 48758784
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_187_rew_15006.765.pth'
+fps step: 77 fps step and policy inference: 68291 fps total: 64060 epoch: 188/300 frames: 49020928
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_188_rew_15006.576.pth'
+fps step: 73 fps step and policy inference: 64737 fps total: 60653 epoch: 189/300 frames: 49283072
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_189_rew_15006.572.pth'
+fps step: 77 fps step and policy inference: 68482 fps total: 63986 epoch: 190/300 frames: 49545216
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_190_rew_15006.884.pth'
+fps step: 87 fps step and policy inference: 77394 fps total: 71345 epoch: 191/300 frames: 49807360
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_191_rew_15006.989.pth'
+fps step: 80 fps step and policy inference: 71241 fps total: 66667 epoch: 192/300 frames: 50069504
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_192_rew_15006.993.pth'
+fps step: 81 fps step and policy inference: 71520 fps total: 66973 epoch: 193/300 frames: 50331648
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_193_rew_15006.98.pth'
+fps step: 91 fps step and policy inference: 81124 fps total: 75307 epoch: 194/300 frames: 50593792
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_194_rew_15006.791.pth'
+fps step: 105 fps step and policy inference: 92605 fps total: 84620 epoch: 195/300 frames: 50855936
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_195_rew_15006.926.pth'
+fps step: 83 fps step and policy inference: 73725 fps total: 68186 epoch: 196/300 frames: 51118080
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_196_rew_15007.139.pth'
+fps step: 79 fps step and policy inference: 70351 fps total: 65948 epoch: 197/300 frames: 51380224
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_197_rew_15007.215.pth'
+fps step: 91 fps step and policy inference: 80592 fps total: 74848 epoch: 198/300 frames: 51642368
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_198_rew_15007.167.pth'
+fps step: 98 fps step and policy inference: 87104 fps total: 80078 epoch: 199/300 frames: 51904512
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_199_rew_15006.621.pth'
+fps step: 90 fps step and policy inference: 80739 fps total: 74542 epoch: 200/300 frames: 52166656
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_200_rew_15005.434.pth'
+fps step: 97 fps step and policy inference: 86111 fps total: 79508 epoch: 201/300 frames: 52428800
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_201_rew_15005.486.pth'
+fps step: 90 fps step and policy inference: 79925 fps total: 74232 epoch: 202/300 frames: 52690944
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_202_rew_15006.086.pth'
+fps step: 86 fps step and policy inference: 77101 fps total: 71792 epoch: 203/300 frames: 52953088
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_203_rew_15006.4795.pth'
+fps step: 67 fps step and policy inference: 59592 fps total: 55670 epoch: 204/300 frames: 53215232
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_204_rew_15006.641.pth'
+fps step: 70 fps step and policy inference: 61568 fps total: 57023 epoch: 205/300 frames: 53477376
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_205_rew_15006.569.pth'
+fps step: 64 fps step and policy inference: 57057 fps total: 53405 epoch: 206/300 frames: 53739520
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_206_rew_15006.841.pth'
+fps step: 65 fps step and policy inference: 57649 fps total: 53969 epoch: 207/300 frames: 54001664
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_207_rew_15007.011.pth'
+fps step: 63 fps step and policy inference: 56222 fps total: 52690 epoch: 208/300 frames: 54263808
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_208_rew_15007.137.pth'
+fps step: 62 fps step and policy inference: 55542 fps total: 52090 epoch: 209/300 frames: 54525952
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_209_rew_15007.214.pth'
+fps step: 63 fps step and policy inference: 56081 fps total: 52223 epoch: 210/300 frames: 54788096
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_210_rew_15007.322.pth'
+fps step: 71 fps step and policy inference: 63120 fps total: 58651 epoch: 211/300 frames: 55050240
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_211_rew_15007.34.pth'
+fps step: 65 fps step and policy inference: 58128 fps total: 54301 epoch: 212/300 frames: 55312384
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_212_rew_15006.917.pth'
+fps step: 61 fps step and policy inference: 54567 fps total: 51209 epoch: 213/300 frames: 55574528
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_213_rew_15007.174.pth'
+fps step: 61 fps step and policy inference: 54037 fps total: 50752 epoch: 214/300 frames: 55836672
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_214_rew_15007.154.pth'
+fps step: 62 fps step and policy inference: 55198 fps total: 51519 epoch: 215/300 frames: 56098816
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_215_rew_15006.943.pth'
+fps step: 63 fps step and policy inference: 55699 fps total: 52238 epoch: 216/300 frames: 56360960
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_216_rew_15007.225.pth'
+fps step: 66 fps step and policy inference: 58888 fps total: 54996 epoch: 217/300 frames: 56623104
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_217_rew_15007.4375.pth'
+fps step: 67 fps step and policy inference: 60003 fps total: 55954 epoch: 218/300 frames: 56885248
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_218_rew_15007.474.pth'
+fps step: 64 fps step and policy inference: 57135 fps total: 53497 epoch: 219/300 frames: 57147392
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_219_rew_15007.471.pth'
+fps step: 59 fps step and policy inference: 52908 fps total: 49357 epoch: 220/300 frames: 57409536
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_220_rew_15007.512.pth'
+fps step: 78 fps step and policy inference: 69475 fps total: 64793 epoch: 221/300 frames: 57671680
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_221_rew_15007.368.pth'
+fps step: 97 fps step and policy inference: 86612 fps total: 80062 epoch: 222/300 frames: 57933824
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_222_rew_15007.068.pth'
+fps step: 96 fps step and policy inference: 85699 fps total: 79224 epoch: 223/300 frames: 58195968
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_223_rew_15006.078.pth'
+fps step: 95 fps step and policy inference: 84987 fps total: 78559 epoch: 224/300 frames: 58458112
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_224_rew_15006.317.pth'
+fps step: 94 fps step and policy inference: 83192 fps total: 76785 epoch: 225/300 frames: 58720256
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_225_rew_15006.788.pth'
+fps step: 86 fps step and policy inference: 77350 fps total: 72015 epoch: 226/300 frames: 58982400
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_226_rew_15006.916.pth'
+fps step: 100 fps step and policy inference: 89168 fps total: 82194 epoch: 227/300 frames: 59244544
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_227_rew_15006.702.pth'
+fps step: 98 fps step and policy inference: 86872 fps total: 80259 epoch: 228/300 frames: 59506688
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_228_rew_15006.639.pth'
+fps step: 97 fps step and policy inference: 86430 fps total: 79844 epoch: 229/300 frames: 59768832
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_229_rew_15007.109.pth'
+fps step: 95 fps step and policy inference: 84939 fps total: 78210 epoch: 230/300 frames: 60030976
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_230_rew_15007.137.pth'
+fps step: 93 fps step and policy inference: 82714 fps total: 76669 epoch: 231/300 frames: 60293120
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_231_rew_15007.422.pth'
+fps step: 87 fps step and policy inference: 78145 fps total: 72717 epoch: 232/300 frames: 60555264
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_232_rew_15007.4375.pth'
+fps step: 98 fps step and policy inference: 87552 fps total: 80844 epoch: 233/300 frames: 60817408
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_233_rew_15007.446.pth'
+fps step: 98 fps step and policy inference: 86718 fps total: 80037 epoch: 234/300 frames: 61079552
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_234_rew_15007.442.pth'
+fps step: 92 fps step and policy inference: 82540 fps total: 75971 epoch: 235/300 frames: 61341696
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_235_rew_15007.071.pth'
+fps step: 100 fps step and policy inference: 88822 fps total: 81942 epoch: 236/300 frames: 61603840
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_236_rew_15007.17.pth'
+fps step: 91 fps step and policy inference: 81376 fps total: 75512 epoch: 237/300 frames: 61865984
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_237_rew_15007.401.pth'
+fps step: 89 fps step and policy inference: 79527 fps total: 73967 epoch: 238/300 frames: 62128128
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_238_rew_15007.246.pth'
+fps step: 97 fps step and policy inference: 86506 fps total: 79886 epoch: 239/300 frames: 62390272
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_239_rew_15007.211.pth'
+fps step: 101 fps step and policy inference: 89486 fps total: 81984 epoch: 240/300 frames: 62652416
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_240_rew_15007.143.pth'
+fps step: 92 fps step and policy inference: 81944 fps total: 76053 epoch: 241/300 frames: 62914560
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_241_rew_15006.705.pth'
+fps step: 101 fps step and policy inference: 89522 fps total: 82457 epoch: 242/300 frames: 63176704
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_242_rew_15006.8955.pth'
+fps step: 92 fps step and policy inference: 81614 fps total: 75701 epoch: 243/300 frames: 63438848
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_243_rew_15007.533.pth'
+fps step: 90 fps step and policy inference: 80534 fps total: 74779 epoch: 244/300 frames: 63700992
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_244_rew_15007.444.pth'
+fps step: 94 fps step and policy inference: 83980 fps total: 77220 epoch: 245/300 frames: 63963136
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_245_rew_15007.384.pth'
+fps step: 99 fps step and policy inference: 88013 fps total: 81173 epoch: 246/300 frames: 64225280
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_246_rew_15007.387.pth'
+fps step: 93 fps step and policy inference: 83648 fps total: 77423 epoch: 247/300 frames: 64487424
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_247_rew_15007.277.pth'
+fps step: 94 fps step and policy inference: 83925 fps total: 77732 epoch: 248/300 frames: 64749568
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_248_rew_15007.375.pth'
+fps step: 94 fps step and policy inference: 83468 fps total: 77354 epoch: 249/300 frames: 65011712
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_249_rew_15007.58.pth'
+fps step: 89 fps step and policy inference: 80007 fps total: 73981 epoch: 250/300 frames: 65273856
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_250_rew_15007.62.pth'
+saving next best rewards:  [15007.62]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 96 fps step and policy inference: 85584 fps total: 79125 epoch: 251/300 frames: 65536000
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_251_rew_15007.474.pth'
+fps step: 99 fps step and policy inference: 87839 fps total: 81059 epoch: 252/300 frames: 65798144
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_252_rew_15007.26.pth'
+fps step: 94 fps step and policy inference: 83630 fps total: 77441 epoch: 253/300 frames: 66060288
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_253_rew_15007.461.pth'
+fps step: 94 fps step and policy inference: 83835 fps total: 77644 epoch: 254/300 frames: 66322432
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_254_rew_15007.549.pth'
+fps step: 94 fps step and policy inference: 83913 fps total: 77223 epoch: 255/300 frames: 66584576
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_255_rew_15007.623.pth'
+saving next best rewards:  [15007.623]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 94 fps step and policy inference: 83631 fps total: 77461 epoch: 256/300 frames: 66846720
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_256_rew_15007.637.pth'
+saving next best rewards:  [15007.637]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+fps step: 96 fps step and policy inference: 85796 fps total: 79373 epoch: 257/300 frames: 67108864
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_257_rew_15007.537.pth'
+fps step: 94 fps step and policy inference: 83501 fps total: 77299 epoch: 258/300 frames: 67371008
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_258_rew_15006.611.pth'
+fps step: 89 fps step and policy inference: 79419 fps total: 73798 epoch: 259/300 frames: 67633152
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_259_rew_15006.632.pth'
+fps step: 85 fps step and policy inference: 75924 fps total: 70506 epoch: 260/300 frames: 67895296
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_260_rew_15006.788.pth'
+fps step: 88 fps step and policy inference: 78582 fps total: 73109 epoch: 261/300 frames: 68157440
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_261_rew_15007.322.pth'
+fps step: 96 fps step and policy inference: 85078 fps total: 78650 epoch: 262/300 frames: 68419584
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_262_rew_15007.43.pth'
+fps step: 96 fps step and policy inference: 85229 fps total: 78866 epoch: 263/300 frames: 68681728
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_263_rew_15007.394.pth'
+fps step: 96 fps step and policy inference: 85846 fps total: 79350 epoch: 264/300 frames: 68943872
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_264_rew_15007.409.pth'
+fps step: 96 fps step and policy inference: 85786 fps total: 78747 epoch: 265/300 frames: 69206016
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_265_rew_15007.616.pth'
+fps step: 94 fps step and policy inference: 83282 fps total: 77206 epoch: 266/300 frames: 69468160
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_266_rew_15007.621.pth'
+fps step: 82 fps step and policy inference: 73164 fps total: 68424 epoch: 267/300 frames: 69730304
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_267_rew_15007.594.pth'
+fps step: 98 fps step and policy inference: 86746 fps total: 80146 epoch: 268/300 frames: 69992448
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_268_rew_15007.488.pth'
+fps step: 93 fps step and policy inference: 82648 fps total: 76622 epoch: 269/300 frames: 70254592
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_269_rew_15007.444.pth'
+fps step: 89 fps step and policy inference: 78803 fps total: 72771 epoch: 270/300 frames: 70516736
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_270_rew_15007.078.pth'
+fps step: 87 fps step and policy inference: 77155 fps total: 71873 epoch: 271/300 frames: 70778880
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_271_rew_15007.036.pth'
+fps step: 86 fps step and policy inference: 76642 fps total: 71400 epoch: 272/300 frames: 71041024
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_272_rew_15007.21.pth'
+fps step: 84 fps step and policy inference: 75498 fps total: 70319 epoch: 273/300 frames: 71303168
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_273_rew_15007.064.pth'
+fps step: 92 fps step and policy inference: 82099 fps total: 76021 epoch: 274/300 frames: 71565312
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_274_rew_15006.997.pth'
+fps step: 88 fps step and policy inference: 77583 fps total: 70396 epoch: 275/300 frames: 71827456
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_275_rew_15006.889.pth'
+fps step: 63 fps step and policy inference: 56251 fps total: 52722 epoch: 276/300 frames: 72089600
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_276_rew_15006.605.pth'
+fps step: 71 fps step and policy inference: 62794 fps total: 58426 epoch: 277/300 frames: 72351744
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_277_rew_15006.659.pth'
+fps step: 64 fps step and policy inference: 56977 fps total: 53358 epoch: 278/300 frames: 72613888
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_278_rew_15005.408.pth'
+fps step: 60 fps step and policy inference: 53486 fps total: 50242 epoch: 279/300 frames: 72876032
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_279_rew_15006.224.pth'
+fps step: 66 fps step and policy inference: 58538 fps total: 54242 epoch: 280/300 frames: 73138176
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_280_rew_15006.371.pth'
+fps step: 69 fps step and policy inference: 60787 fps total: 56633 epoch: 281/300 frames: 73400320
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_281_rew_15006.716.pth'
+fps step: 62 fps step and policy inference: 54976 fps total: 51565 epoch: 282/300 frames: 73662464
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_282_rew_15007.35.pth'
+fps step: 90 fps step and policy inference: 79674 fps total: 74046 epoch: 283/300 frames: 73924608
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_283_rew_15007.345.pth'
+fps step: 87 fps step and policy inference: 77921 fps total: 72282 epoch: 284/300 frames: 74186752
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_284_rew_15007.545.pth'
+fps step: 86 fps step and policy inference: 76471 fps total: 70771 epoch: 285/300 frames: 74448896
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_285_rew_15007.488.pth'
+fps step: 93 fps step and policy inference: 82565 fps total: 76503 epoch: 286/300 frames: 74711040
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_286_rew_15007.313.pth'
+fps step: 98 fps step and policy inference: 86738 fps total: 80009 epoch: 287/300 frames: 74973184
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_287_rew_15007.198.pth'
+fps step: 90 fps step and policy inference: 80854 fps total: 74980 epoch: 288/300 frames: 75235328
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_288_rew_15007.099.pth'
+fps step: 96 fps step and policy inference: 85364 fps total: 78822 epoch: 289/300 frames: 75497472
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_289_rew_15007.167.pth'
+fps step: 89 fps step and policy inference: 79399 fps total: 73372 epoch: 290/300 frames: 75759616
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_290_rew_15006.551.pth'
+fps step: 91 fps step and policy inference: 81500 fps total: 75596 epoch: 291/300 frames: 76021760
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_291_rew_15006.764.pth'
+fps step: 94 fps step and policy inference: 83848 fps total: 77595 epoch: 292/300 frames: 76283904
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_292_rew_15006.777.pth'
+fps step: 100 fps step and policy inference: 88651 fps total: 81650 epoch: 293/300 frames: 76546048
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_293_rew_15006.935.pth'
+fps step: 89 fps step and policy inference: 79729 fps total: 74054 epoch: 294/300 frames: 76808192
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_294_rew_15007.425.pth'
+fps step: 94 fps step and policy inference: 83428 fps total: 76773 epoch: 295/300 frames: 77070336
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_295_rew_15007.628.pth'
+fps step: 86 fps step and policy inference: 76329 fps total: 69892 epoch: 296/300 frames: 77332480
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_296_rew_15007.607.pth'
+fps step: 62 fps step and policy inference: 55375 fps total: 51922 epoch: 297/300 frames: 77594624
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_297_rew_15007.605.pth'
+fps step: 66 fps step and policy inference: 58506 fps total: 54689 epoch: 298/300 frames: 77856768
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_298_rew_15007.493.pth'
+fps step: 71 fps step and policy inference: 62605 fps total: 58239 epoch: 299/300 frames: 78118912
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_299_rew_15007.636.pth'
+fps step: 63 fps step and policy inference: 56599 fps total: 52747 epoch: 300/300 frames: 78381056
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_300_rew_15007.788.pth'
+saving next best rewards:  [15007.788]
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/ablation_no_phys_rand.pth'
+=> saving checkpoint 'runs/ablation_no_phys_rand_18-21-09-09/nn/last_ablation_no_phys_rand_ep_300_rew__15007.788_.pth'
+MAX EPOCHS NUM!
+*** Can't create empty tensor
+Starting Ablation 2: Full Physics Randomization (500 epochs)
+Importing module 'gym_38' (/home/throne/下载/isaacgym/python/isaacgym/_bindings/linux-x86_64/gym_38.so)
+Setting GYM_USD_PLUG_INFO_PATH to /home/throne/下载/isaacgym/python/isaacgym/_bindings/linux-x86_64/usd/plugInfo.json
+PyTorch version 1.13.1
+Device count 1
+/home/throne/下载/isaacgym/python/isaacgym/_bindings/src/gymtorch
+Using /home/throne/.cache/torch_extensions/py38_cu117 as PyTorch extensions root...
+Emitting ninja build file /home/throne/.cache/torch_extensions/py38_cu117/gymtorch/build.ninja...
+Building extension module gymtorch...
+Allowing ninja to set a default number of workers... (overridable by setting the environment variable MAX_JOBS=N)
+ninja: no work to do.
+Loading extension module gymtorch...
+Gym has been unmaintained since 2022 and does not support NumPy 2.0 amongst other critical functionality.
+Please upgrade to Gymnasium, the maintained drop-in replacement of Gym, or contact the authors of your software and request that they upgrade.
+See the migration guide at https://gymnasium.farama.org/introduction/migration_guide/ for additional information.
+/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/gymnasium/envs/registration.py:596: UserWarning: [33mWARN: plugin: shimmy.registration:register_gymnasium_envs raised Traceback (most recent call last):
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/gymnasium/envs/registration.py", line 594, in load_plugin_envs
+    fn()
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/shimmy/registration.py", line 304, in register_gymnasium_envs
+    _register_atari_envs()
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/shimmy/registration.py", line 205, in _register_atari_envs
+    import ale_py
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/ale_py/__init__.py", line 68, in <module>
+    register_v0_v4_envs()
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/ale_py/registration.py", line 178, in register_v0_v4_envs
+    _register_rom_configs(legacy_games, obs_types, versions)
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/ale_py/registration.py", line 63, in _register_rom_configs
+    gymnasium.register(
+AttributeError: partially initialized module 'gymnasium' has no attribute 'register' (most likely due to a circular import)
+[0m
+  logger.warn(f"plugin: {plugin.value} raised {traceback.format_exc()}")
+/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/torch/utils/tensorboard/__init__.py:4: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
+  if not hasattr(tensorboard, "__version__") or LooseVersion(
+[37m[2129 ms][base_task] - INFO : Setting seed: 8 (base_task.py:38)[0m
+[37m[2130 ms][payload_compensation_task] - INFO : Building environment for payload compensation task. (payload_compensation_task.py:567)[0m
+[37m[2137 ms][env_manager] - INFO : Populating environments. (env_manager.py:76)[0m
+[37m[2137 ms][env_manager] - INFO : Creating simulation instance. (env_manager.py:92)[0m
+[37m[2137 ms][env_manager] - INFO : Instantiating IGE object. (env_manager.py:93)[0m
+[37m[2137 ms][IsaacGymEnvManager] - INFO : Creating Isaac Gym Environment (IGE_env_manager.py:46)[0m
+[37m[2137 ms][IsaacGymEnvManager] - INFO : Acquiring gym object (IGE_env_manager.py:81)[0m
+[37m[2137 ms][IsaacGymEnvManager] - INFO : Acquired gym object (IGE_env_manager.py:83)[0m
+[37m[2138 ms][IsaacGymEnvManager] - INFO : Fixing devices (IGE_env_manager.py:95)[0m
+[37m[2138 ms][IsaacGymEnvManager] - INFO : Using GPU pipeline for simulation. (IGE_env_manager.py:112)[0m
+[37m[2138 ms][IsaacGymEnvManager] - INFO : Sim Device type: cuda, Sim Device ID: 0 (IGE_env_manager.py:115)[0m
+[31;1m[2138 ms][IsaacGymEnvManager] - CRITICAL : 
+ Setting graphics device to -1.
+ This is done because the simulation is run in headless mode and no Isaac Gym cameras are used.
+ No need to worry. The simulation and warp rendering will work as expected. (IGE_env_manager.py:125)[0m
+[37m[2138 ms][IsaacGymEnvManager] - INFO : Graphics Device ID: -1 (IGE_env_manager.py:133)[0m
+[37m[2138 ms][IsaacGymEnvManager] - INFO : Creating Isaac Gym Simulation Object (IGE_env_manager.py:135)[0m
+[33;20m[2138 ms][IsaacGymEnvManager] - WARNING : If you have set the CUDA_VISIBLE_DEVICES environment variable, please ensure that you set it
+to a particular one that works for your system to use the viewer or Isaac Gym cameras.
+If you want to run parallel simulations on multiple GPUs with camera sensors,
+please disable Isaac Gym and use warp (by setting use_warp=True), set the viewer to headless. (IGE_env_manager.py:143)[0m
+[33;20m[2138 ms][IsaacGymEnvManager] - WARNING : If you see a segfault in the next lines, it is because of the discrepancy between the CUDA device and the graphics device.
+Please ensure that the CUDA device and the graphics device are the same. (IGE_env_manager.py:148)[0m
+Not connected to PVD
++++ Using GPU PhysX
+Physics Engine: PhysX
+Physics Device: cuda:0
+GPU Pipeline: enabled
+[37m[3011 ms][IsaacGymEnvManager] - INFO : Created Isaac Gym Simulation Object (IGE_env_manager.py:154)[0m
+[37m[3011 ms][IsaacGymEnvManager] - INFO : Created Isaac Gym Environment (IGE_env_manager.py:49)[0m
+[37m[3294 ms][env_manager] - INFO : IGE object instantiated. (env_manager.py:115)[0m
+[37m[3294 ms][env_manager] - INFO : Creating warp environment. (env_manager.py:119)[0m
+[37m[3294 ms][env_manager] - INFO : Warp environment created. (env_manager.py:121)[0m
+[37m[3294 ms][env_manager] - INFO : Creating robot manager. (env_manager.py:126)[0m
+[37m[3294 ms][BaseRobot] - INFO : [DONE] Initializing controller (base_robot.py:26)[0m
+[37m[3294 ms][BaseRobot] - INFO : Initializing controller lee_position_control_with_compensation (base_robot.py:29)[0m
+[33;20m[3294 ms][base_multirotor] - WARNING : Creating 1024 multirotors. (base_multirotor.py:37)[0m
+[37m[3295 ms][env_manager] - INFO : [DONE] Creating robot manager. (env_manager.py:132)[0m
+[37m[3295 ms][env_manager] - INFO : [DONE] Creating simulation instance. (env_manager.py:134)[0m
+[37m[3295 ms][asset_loader] - INFO : Loading asset: quad.urdf for the first time. Next use of this asset will be via the asset buffer. (asset_loader.py:71)[0m
+[37m[3296 ms][env_manager] - INFO : Populating environment 0 (env_manager.py:194)[0m
+[33;20m[3775 ms][robot_manager] - WARNING : 
+Robot mass: 0.2500003944120692,
+Inertia: tensor([[8.4501e-04, 0.0000e+00, 3.3087e-24],
+        [0.0000e+00, 8.4501e-04, 3.3087e-24],
+        [3.3087e-24, 3.3087e-24, 1.6900e-03]], device='cuda:0'),
+Robot COM: tensor([[0.0000e+00, 0.0000e+00, 1.3411e-14, 1.0000e+00]], device='cuda:0') (robot_manager.py:427)[0m
+[33;20m[3775 ms][robot_manager] - WARNING : Calculated robot mass and inertia for this robot. This code assumes that your robot is the same across environments. (robot_manager.py:430)[0m
+[31;1m[3775 ms][robot_manager] - CRITICAL : If your robot differs across environments you need to perform this computation for each different robot here. (robot_manager.py:433)[0m
+[37m[3869 ms][env_manager] - INFO : Populating environment 1000 (env_manager.py:194)[0m
+[37m[3873 ms][env_manager] - INFO : [DONE] Populating environments. (env_manager.py:79)[0m
+[33;20m[3892 ms][IsaacGymEnvManager] - WARNING : Headless: True (IGE_env_manager.py:494)[0m
+[37m[3892 ms][IsaacGymEnvManager] - INFO : Headless mode. Viewer not created. (IGE_env_manager.py:505)[0m
+[33;20m[3893 ms][warp_env_manager] - WARNING : No assets have been added to the environment. Skipping preparation for simulation (warp_env_manager.py:101)[0m
+[33;20m[3924 ms][asset_manager] - WARNING : Number of obstacles to be kept in the environment: 0 (asset_manager.py:32)[0m
+/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/control/motor_model.py:53: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  torch.tensor(self.min_thrust, device=self.device, dtype=torch.float32).expand(
+/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/control/motor_model.py:56: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  torch.tensor(self.max_thrust, device=self.device, dtype=torch.float32).expand(
+[33;20m[4194 ms][control_allocation] - WARNING : Control allocation does not account for actuator limits. This leads to suboptimal allocation (control_allocation.py:67)[0m
+/home/throne/.local/lib/python3.8/site-packages/gym/spaces/box.py:84: UserWarning: [33mWARN: Box bound precision lowered by casting to float32[0m
+  logger.warn(f"Box bound precision lowered by casting to {self.dtype}")
+[37m[5231 ms][payload_compensation_task] - INFO : [DebugReset 0] env_ids=[0, 1, 2] targets=[[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]] release_info={0: {'order': [2, 1, 3, 0], 'next_release': 87}, 1: {'order': [1, 0, 2, 3], 'next_release': 81}, 2: {'order': [2, 1, 0, 3], 'next_release': 100}} (payload_compensation_task.py:1766)[0m
+[37m[10135 ms][payload_compensation_task] - INFO : [DebugReset 1] env_ids=[542] targets=[[0.0, 0.0, 0.0]] release_info={542: {'order': [3, 0, 2, 1], 'next_release': 119}} (payload_compensation_task.py:1766)[0m
+[37m[10513 ms][payload_compensation_task] - INFO : [DebugReset 2] env_ids=[206] targets=[[0.0, 0.0, 0.0]] release_info={206: {'order': [0, 1, 3, 2], 'next_release': 82}} (payload_compensation_task.py:1766)[0m
+[37m[10607 ms][payload_compensation_task] - INFO : [DebugReset 3] env_ids=[330] targets=[[0.0, 0.0, 0.0]] release_info={330: {'order': [1, 0, 3, 2], 'next_release': 110}} (payload_compensation_task.py:1766)[0m
+[37m[10744 ms][payload_compensation_task] - INFO : [DebugReset 4] env_ids=[446] targets=[[0.0, 0.0, 0.0]] release_info={446: {'order': [1, 0, 3, 2], 'next_release': 114}} (payload_compensation_task.py:1766)[0m
+Warp 1.0.0 initialized:
+   CUDA Toolkit 11.5, Driver 12.6
+   Devices:
+     "cpu"      : "x86_64"
+     "cuda:0"   : "NVIDIA GeForce RTX 4060 Laptop GPU" (8 GiB, sm_89, mempool enabled)
+   Kernel cache:
+     /home/throne/.cache/warp/1.0.0
+[isaacgym:gymutil.py] Unknown args:  []
+Loading config:  aerial_gym/rl_training/rl_games/ppo_ablation_full_teacher.yaml
+[Runner] Registered custom agent: a2c_continuous_aux
+self.seed = 8
+Started to train
+[isaacgym:gymutil.py] Unknown args:  ['--file', 'aerial_gym/rl_training/rl_games/ppo_ablation_full_teacher.yaml', '--task', 'payload_compensation_task_teacher', '--train']
+WARNING: allocation matrix is not full rank. Rank: 4
+Box(-1.0, 1.0, (3,), float32) Box(-inf, inf, (20,), float32)
+seq_length: 4
+current training device: cuda:0
+build mlp: 28
+[PrivilegedA2C] Actor mu.bias 已初始化为 0
+RunningMeanStd:  (1,)
+RunningMeanStd:  (20,)
+[A2CAgentWithAuxLoss] Auxiliary loss coefficient: 0.1
+[A2CAgentWithAuxLoss] BC loss: coef=10.0, alpha=0.99, min=0.5
+[A2CAgentWithAuxLoss] 分离BC权重: thrust=30.0, torque=20.0
+[A2CAgentWithAuxLoss] NaN防护: skip=True, reset=True, tolerance=5
+[A2CAgentWithAuxLoss] Registered teacher_actions in experience_buffer (shape: [horizon=256, actors=1024, action_dim=3])
+[A2CAgentWithAuxLoss] Registered privileged_obs in experience_buffer (shape: [horizon=256, actors=1024, priv_dim=18])
+fps step: 47 fps step and policy inference: 42879 fps total: 40798 epoch: 1/500 frames: 0
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_1_rew_871.4919.pth'
+saving next best rewards:  [871.4919]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 63 fps step and policy inference: 55891 fps total: 52442 epoch: 2/500 frames: 262144
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_2_rew_1770.648.pth'
+saving next best rewards:  [1770.648]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 67 fps step and policy inference: 59522 fps total: 55567 epoch: 3/500 frames: 524288
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_3_rew_2552.255.pth'
+saving next best rewards:  [2552.255]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 71 fps step and policy inference: 62737 fps total: 58372 epoch: 4/500 frames: 786432
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_4_rew_3181.8606.pth'
+saving next best rewards:  [3181.8606]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 69 fps step and policy inference: 61504 fps total: 56981 epoch: 5/500 frames: 1048576
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_5_rew_3530.977.pth'
+saving next best rewards:  [3530.977]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 64 fps step and policy inference: 56600 fps total: 53022 epoch: 6/500 frames: 1310720
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_6_rew_13864.647.pth'
+saving next best rewards:  [13864.647]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 67 fps step and policy inference: 59278 fps total: 55360 epoch: 7/500 frames: 1572864
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_7_rew_12975.281.pth'
+fps step: 76 fps step and policy inference: 68031 fps total: 63850 epoch: 8/500 frames: 1835008
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_8_rew_12790.265.pth'
+fps step: 64 fps step and policy inference: 57219 fps total: 53537 epoch: 9/500 frames: 2097152
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_9_rew_11913.743.pth'
+fps step: 69 fps step and policy inference: 60761 fps total: 56271 epoch: 10/500 frames: 2359296
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_10_rew_11972.583.pth'
+fps step: 67 fps step and policy inference: 59049 fps total: 55096 epoch: 11/500 frames: 2621440
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_11_rew_11835.342.pth'
+fps step: 70 fps step and policy inference: 61859 fps total: 57571 epoch: 12/500 frames: 2883584
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_12_rew_14331.5.pth'
+saving next best rewards:  [14331.5]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 64 fps step and policy inference: 57072 fps total: 53431 epoch: 13/500 frames: 3145728
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_13_rew_13885.616.pth'
+fps step: 62 fps step and policy inference: 55012 fps total: 51748 epoch: 14/500 frames: 3407872
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_14_rew_13847.238.pth'
+fps step: 64 fps step and policy inference: 56873 fps total: 52902 epoch: 15/500 frames: 3670016
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_15_rew_13461.872.pth'
+fps step: 68 fps step and policy inference: 60725 fps total: 56624 epoch: 16/500 frames: 3932160
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_16_rew_13629.83.pth'
+fps step: 70 fps step and policy inference: 61649 fps total: 57420 epoch: 17/500 frames: 4194304
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_17_rew_13507.313.pth'
+fps step: 62 fps step and policy inference: 55308 fps total: 51841 epoch: 18/500 frames: 4456448
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_18_rew_14756.986.pth'
+saving next best rewards:  [14756.986]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 66 fps step and policy inference: 58255 fps total: 54415 epoch: 19/500 frames: 4718592
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_19_rew_14709.532.pth'
+fps step: 62 fps step and policy inference: 55395 fps total: 51551 epoch: 20/500 frames: 4980736
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_20_rew_13610.163.pth'
+fps step: 60 fps step and policy inference: 53414 fps total: 50173 epoch: 21/500 frames: 5242880
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_21_rew_13525.024.pth'
+fps step: 64 fps step and policy inference: 57309 fps total: 53525 epoch: 22/500 frames: 5505024
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_22_rew_13515.953.pth'
+fps step: 101 fps step and policy inference: 88790 fps total: 81902 epoch: 23/500 frames: 5767168
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_23_rew_13395.915.pth'
+fps step: 81 fps step and policy inference: 72950 fps total: 67231 epoch: 24/500 frames: 6029312
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_24_rew_14735.549.pth'
+fps step: 71 fps step and policy inference: 62750 fps total: 57992 epoch: 25/500 frames: 6291456
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_25_rew_14688.736.pth'
+fps step: 67 fps step and policy inference: 59638 fps total: 55726 epoch: 26/500 frames: 6553600
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_26_rew_14044.166.pth'
+fps step: 66 fps step and policy inference: 58698 fps total: 54904 epoch: 27/500 frames: 6815744
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_27_rew_14162.684.pth'
+fps step: 65 fps step and policy inference: 58053 fps total: 54406 epoch: 28/500 frames: 7077888
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_28_rew_14141.475.pth'
+fps step: 90 fps step and policy inference: 79423 fps total: 73837 epoch: 29/500 frames: 7340032
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_29_rew_14178.376.pth'
+fps step: 90 fps step and policy inference: 80630 fps total: 74569 epoch: 30/500 frames: 7602176
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_30_rew_14839.183.pth'
+saving next best rewards:  [14839.183]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 94 fps step and policy inference: 83891 fps total: 77629 epoch: 31/500 frames: 7864320
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_31_rew_14816.391.pth'
+fps step: 96 fps step and policy inference: 85181 fps total: 78770 epoch: 32/500 frames: 8126464
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_32_rew_14868.105.pth'
+saving next best rewards:  [14868.105]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 93 fps step and policy inference: 83029 fps total: 76973 epoch: 33/500 frames: 8388608
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_33_rew_14821.095.pth'
+fps step: 100 fps step and policy inference: 88492 fps total: 81564 epoch: 34/500 frames: 8650752
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_34_rew_14810.426.pth'
+fps step: 110 fps step and policy inference: 96713 fps total: 87670 epoch: 35/500 frames: 8912896
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_35_rew_14814.736.pth'
+fps step: 88 fps step and policy inference: 79017 fps total: 73530 epoch: 36/500 frames: 9175040
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_36_rew_14947.732.pth'
+saving next best rewards:  [14947.732]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 93 fps step and policy inference: 83061 fps total: 76956 epoch: 37/500 frames: 9437184
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_37_rew_14937.279.pth'
+fps step: 98 fps step and policy inference: 86493 fps total: 79892 epoch: 38/500 frames: 9699328
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_38_rew_14827.22.pth'
+fps step: 95 fps step and policy inference: 84535 fps total: 78283 epoch: 39/500 frames: 9961472
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_39_rew_14725.797.pth'
+fps step: 95 fps step and policy inference: 84193 fps total: 77505 epoch: 40/500 frames: 10223616
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_40_rew_14675.96.pth'
+fps step: 105 fps step and policy inference: 92478 fps total: 84923 epoch: 41/500 frames: 10485760
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_41_rew_14685.984.pth'
+fps step: 81 fps step and policy inference: 72333 fps total: 67541 epoch: 42/500 frames: 10747904
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_42_rew_14952.949.pth'
+saving next best rewards:  [14952.949]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 92 fps step and policy inference: 81787 fps total: 75850 epoch: 43/500 frames: 11010048
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_43_rew_14954.474.pth'
+saving next best rewards:  [14954.474]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 92 fps step and policy inference: 81630 fps total: 75654 epoch: 44/500 frames: 11272192
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_44_rew_14960.451.pth'
+saving next best rewards:  [14960.451]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 96 fps step and policy inference: 84841 fps total: 78022 epoch: 45/500 frames: 11534336
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_45_rew_14877.519.pth'
+fps step: 98 fps step and policy inference: 87278 fps total: 80478 epoch: 46/500 frames: 11796480
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_46_rew_14771.848.pth'
+fps step: 97 fps step and policy inference: 86036 fps total: 79452 epoch: 47/500 frames: 12058624
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_47_rew_14965.402.pth'
+saving next best rewards:  [14965.402]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 95 fps step and policy inference: 84748 fps total: 78146 epoch: 48/500 frames: 12320768
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_48_rew_14964.536.pth'
+fps step: 92 fps step and policy inference: 82460 fps total: 76456 epoch: 49/500 frames: 12582912
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_49_rew_14964.89.pth'
+fps step: 82 fps step and policy inference: 72929 fps total: 67001 epoch: 50/500 frames: 12845056
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_50_rew_14821.036.pth'
+fps step: 97 fps step and policy inference: 85621 fps total: 79096 epoch: 51/500 frames: 13107200
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_51_rew_14693.015.pth'
+fps step: 92 fps step and policy inference: 82165 fps total: 76150 epoch: 52/500 frames: 13369344
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_52_rew_14230.277.pth'
+fps step: 94 fps step and policy inference: 83437 fps total: 77204 epoch: 53/500 frames: 13631488
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_53_rew_14972.238.pth'
+saving next best rewards:  [14972.238]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 72 fps step and policy inference: 64378 fps total: 60226 epoch: 54/500 frames: 13893632
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_54_rew_14798.406.pth'
+fps step: 74 fps step and policy inference: 65706 fps total: 60210 epoch: 55/500 frames: 14155776
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_55_rew_14093.733.pth'
+fps step: 71 fps step and policy inference: 63441 fps total: 59393 epoch: 56/500 frames: 14417920
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_56_rew_14359.022.pth'
+fps step: 75 fps step and policy inference: 66396 fps total: 61507 epoch: 57/500 frames: 14680064
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_57_rew_14231.221.pth'
+fps step: 99 fps step and policy inference: 87981 fps total: 81168 epoch: 58/500 frames: 14942208
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_58_rew_14216.415.pth'
+fps step: 96 fps step and policy inference: 85574 fps total: 78566 epoch: 59/500 frames: 15204352
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_59_rew_14956.241.pth'
+fps step: 85 fps step and policy inference: 75439 fps total: 70153 epoch: 60/500 frames: 15466496
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_60_rew_14683.93.pth'
+fps step: 78 fps step and policy inference: 69086 fps total: 64730 epoch: 61/500 frames: 15728640
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_61_rew_14487.897.pth'
+fps step: 89 fps step and policy inference: 79637 fps total: 73951 epoch: 62/500 frames: 15990784
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_62_rew_14545.72.pth'
+fps step: 87 fps step and policy inference: 77331 fps total: 70866 epoch: 63/500 frames: 16252928
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_63_rew_14449.202.pth'
+fps step: 73 fps step and policy inference: 63822 fps total: 59300 epoch: 64/500 frames: 16515072
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_64_rew_14456.723.pth'
+fps step: 65 fps step and policy inference: 57722 fps total: 53718 epoch: 65/500 frames: 16777216
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_65_rew_14963.462.pth'
+fps step: 71 fps step and policy inference: 62315 fps total: 58043 epoch: 66/500 frames: 17039360
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_66_rew_14915.217.pth'
+fps step: 62 fps step and policy inference: 54933 fps total: 51506 epoch: 67/500 frames: 17301504
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_67_rew_14863.111.pth'
+fps step: 61 fps step and policy inference: 54399 fps total: 51028 epoch: 68/500 frames: 17563648
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_68_rew_14757.371.pth'
+fps step: 66 fps step and policy inference: 58987 fps total: 55104 epoch: 69/500 frames: 17825792
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_69_rew_14638.446.pth'
+fps step: 68 fps step and policy inference: 59563 fps total: 55283 epoch: 70/500 frames: 18087936
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_70_rew_14576.141.pth'
+fps step: 84 fps step and policy inference: 75638 fps total: 70521 epoch: 71/500 frames: 18350080
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_71_rew_14973.949.pth'
+saving next best rewards:  [14973.949]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 97 fps step and policy inference: 86116 fps total: 79615 epoch: 72/500 frames: 18612224
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_72_rew_14973.751.pth'
+fps step: 88 fps step and policy inference: 77774 fps total: 71323 epoch: 73/500 frames: 18874368
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_73_rew_14972.595.pth'
+fps step: 86 fps step and policy inference: 77110 fps total: 71829 epoch: 74/500 frames: 19136512
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_74_rew_14972.451.pth'
+fps step: 96 fps step and policy inference: 85429 fps total: 78549 epoch: 75/500 frames: 19398656
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_75_rew_14972.56.pth'
+fps step: 100 fps step and policy inference: 88069 fps total: 81266 epoch: 76/500 frames: 19660800
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_76_rew_14971.846.pth'
+fps step: 88 fps step and policy inference: 78561 fps total: 73086 epoch: 77/500 frames: 19922944
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_77_rew_14966.609.pth'
+fps step: 89 fps step and policy inference: 79687 fps total: 74093 epoch: 78/500 frames: 20185088
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_78_rew_14972.257.pth'
+fps step: 93 fps step and policy inference: 82567 fps total: 76520 epoch: 79/500 frames: 20447232
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_79_rew_14920.799.pth'
+fps step: 78 fps step and policy inference: 69240 fps total: 64582 epoch: 80/500 frames: 20709376
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_80_rew_14950.899.pth'
+fps step: 94 fps step and policy inference: 83214 fps total: 77104 epoch: 81/500 frames: 20971520
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_81_rew_14959.0625.pth'
+fps step: 101 fps step and policy inference: 89131 fps total: 82040 epoch: 82/500 frames: 21233664
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_82_rew_14823.822.pth'
+fps step: 91 fps step and policy inference: 81897 fps total: 75930 epoch: 83/500 frames: 21495808
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_83_rew_14974.094.pth'
+saving next best rewards:  [14974.094]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 90 fps step and policy inference: 80616 fps total: 74856 epoch: 84/500 frames: 21757952
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_84_rew_14976.003.pth'
+saving next best rewards:  [14976.003]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 91 fps step and policy inference: 80574 fps total: 74427 epoch: 85/500 frames: 22020096
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_85_rew_14982.024.pth'
+saving next best rewards:  [14982.024]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 80 fps step and policy inference: 71263 fps total: 66722 epoch: 86/500 frames: 22282240
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_86_rew_14981.777.pth'
+fps step: 88 fps step and policy inference: 78697 fps total: 73101 epoch: 87/500 frames: 22544384
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_87_rew_14983.233.pth'
+saving next best rewards:  [14983.233]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 97 fps step and policy inference: 86415 fps total: 79808 epoch: 88/500 frames: 22806528
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_88_rew_14990.167.pth'
+saving next best rewards:  [14990.167]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 82 fps step and policy inference: 72864 fps total: 67533 epoch: 89/500 frames: 23068672
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_89_rew_14874.528.pth'
+fps step: 87 fps step and policy inference: 77814 fps total: 71967 epoch: 90/500 frames: 23330816
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_90_rew_14895.875.pth'
+fps step: 87 fps step and policy inference: 77167 fps total: 71706 epoch: 91/500 frames: 23592960
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_91_rew_14957.189.pth'
+fps step: 93 fps step and policy inference: 82200 fps total: 76171 epoch: 92/500 frames: 23855104
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_92_rew_14968.211.pth'
+fps step: 74 fps step and policy inference: 65524 fps total: 60785 epoch: 93/500 frames: 24117248
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_93_rew_14973.045.pth'
+fps step: 68 fps step and policy inference: 60107 fps total: 56092 epoch: 94/500 frames: 24379392
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_94_rew_14989.162.pth'
+fps step: 66 fps step and policy inference: 58933 fps total: 54709 epoch: 95/500 frames: 24641536
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_95_rew_14987.901.pth'
+fps step: 67 fps step and policy inference: 59363 fps total: 55472 epoch: 96/500 frames: 24903680
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_96_rew_14988.353.pth'
+fps step: 63 fps step and policy inference: 56204 fps total: 52686 epoch: 97/500 frames: 25165824
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_97_rew_14987.746.pth'
+fps step: 69 fps step and policy inference: 61197 fps total: 57020 epoch: 98/500 frames: 25427968
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_98_rew_14987.349.pth'
+fps step: 72 fps step and policy inference: 63647 fps total: 59022 epoch: 99/500 frames: 25690112
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_99_rew_14988.471.pth'
+fps step: 73 fps step and policy inference: 64971 fps total: 59914 epoch: 100/500 frames: 25952256
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_100_rew_14991.327.pth'
+saving next best rewards:  [14991.327]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 63 fps step and policy inference: 56513 fps total: 52967 epoch: 101/500 frames: 26214400
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_101_rew_14988.345.pth'
+fps step: 63 fps step and policy inference: 56352 fps total: 52756 epoch: 102/500 frames: 26476544
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_102_rew_14988.001.pth'
+fps step: 77 fps step and policy inference: 68763 fps total: 64546 epoch: 103/500 frames: 26738688
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_103_rew_14988.884.pth'
+fps step: 96 fps step and policy inference: 85826 fps total: 79326 epoch: 104/500 frames: 27000832
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_104_rew_14989.014.pth'
+fps step: 103 fps step and policy inference: 90703 fps total: 83020 epoch: 105/500 frames: 27262976
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_105_rew_14988.305.pth'
+fps step: 92 fps step and policy inference: 82089 fps total: 76159 epoch: 106/500 frames: 27525120
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_106_rew_14975.514.pth'
+fps step: 101 fps step and policy inference: 89061 fps total: 82028 epoch: 107/500 frames: 27787264
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_107_rew_14975.658.pth'
+fps step: 91 fps step and policy inference: 81546 fps total: 75635 epoch: 108/500 frames: 28049408
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_108_rew_14981.51.pth'
+fps step: 91 fps step and policy inference: 81107 fps total: 75299 epoch: 109/500 frames: 28311552
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_109_rew_14986.341.pth'
+fps step: 96 fps step and policy inference: 85292 fps total: 78272 epoch: 110/500 frames: 28573696
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_110_rew_14987.163.pth'
+fps step: 104 fps step and policy inference: 91977 fps total: 84500 epoch: 111/500 frames: 28835840
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_111_rew_14987.488.pth'
+fps step: 91 fps step and policy inference: 81705 fps total: 75824 epoch: 112/500 frames: 29097984
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_112_rew_14991.751.pth'
+saving next best rewards:  [14991.751]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 100 fps step and policy inference: 88357 fps total: 81427 epoch: 113/500 frames: 29360128
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_113_rew_14991.851.pth'
+saving next best rewards:  [14991.851]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 91 fps step and policy inference: 81356 fps total: 75485 epoch: 114/500 frames: 29622272
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_114_rew_14992.882.pth'
+saving next best rewards:  [14992.882]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 93 fps step and policy inference: 82877 fps total: 76360 epoch: 115/500 frames: 29884416
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_115_rew_14993.241.pth'
+saving next best rewards:  [14993.241]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 96 fps step and policy inference: 85553 fps total: 79086 epoch: 116/500 frames: 30146560
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_116_rew_14993.628.pth'
+saving next best rewards:  [14993.628]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 103 fps step and policy inference: 91413 fps total: 84085 epoch: 117/500 frames: 30408704
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_117_rew_14993.364.pth'
+fps step: 90 fps step and policy inference: 80539 fps total: 74821 epoch: 118/500 frames: 30670848
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_118_rew_14992.107.pth'
+fps step: 95 fps step and policy inference: 84379 fps total: 78053 epoch: 119/500 frames: 30932992
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_119_rew_14993.599.pth'
+fps step: 96 fps step and policy inference: 85533 fps total: 78800 epoch: 120/500 frames: 31195136
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_120_rew_14994.885.pth'
+saving next best rewards:  [14994.885]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 95 fps step and policy inference: 84774 fps total: 78390 epoch: 121/500 frames: 31457280
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_121_rew_14995.688.pth'
+saving next best rewards:  [14995.688]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 95 fps step and policy inference: 84798 fps total: 78471 epoch: 122/500 frames: 31719424
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_122_rew_14893.096.pth'
+fps step: 105 fps step and policy inference: 92574 fps total: 85002 epoch: 123/500 frames: 31981568
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_123_rew_14907.364.pth'
+fps step: 92 fps step and policy inference: 82857 fps total: 76807 epoch: 124/500 frames: 32243712
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_124_rew_14997.077.pth'
+saving next best rewards:  [14997.077]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 93 fps step and policy inference: 82918 fps total: 76479 epoch: 125/500 frames: 32505856
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_125_rew_14996.041.pth'
+fps step: 98 fps step and policy inference: 86747 fps total: 80145 epoch: 126/500 frames: 32768000
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_126_rew_14996.322.pth'
+fps step: 96 fps step and policy inference: 85071 fps total: 78723 epoch: 127/500 frames: 33030144
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_127_rew_14996.6.pth'
+fps step: 95 fps step and policy inference: 84339 fps total: 77843 epoch: 128/500 frames: 33292288
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_128_rew_14996.7705.pth'
+fps step: 99 fps step and policy inference: 87937 fps total: 81147 epoch: 129/500 frames: 33554432
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_129_rew_14996.045.pth'
+fps step: 96 fps step and policy inference: 85121 fps total: 78305 epoch: 130/500 frames: 33816576
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_130_rew_14996.965.pth'
+fps step: 93 fps step and policy inference: 83269 fps total: 77137 epoch: 131/500 frames: 34078720
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_131_rew_14997.76.pth'
+saving next best rewards:  [14997.76]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 92 fps step and policy inference: 81776 fps total: 75885 epoch: 132/500 frames: 34340864
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_132_rew_14998.217.pth'
+saving next best rewards:  [14998.217]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 99 fps step and policy inference: 87814 fps total: 81011 epoch: 133/500 frames: 34603008
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_133_rew_14999.045.pth'
+saving next best rewards:  [14999.045]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 98 fps step and policy inference: 87381 fps total: 80659 epoch: 134/500 frames: 34865152
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_134_rew_14999.149.pth'
+saving next best rewards:  [14999.149]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 97 fps step and policy inference: 85838 fps total: 79059 epoch: 135/500 frames: 35127296
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_135_rew_14998.88.pth'
+fps step: 95 fps step and policy inference: 84562 fps total: 78241 epoch: 136/500 frames: 35389440
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_136_rew_14998.975.pth'
+fps step: 92 fps step and policy inference: 82152 fps total: 76143 epoch: 137/500 frames: 35651584
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_137_rew_14999.027.pth'
+fps step: 91 fps step and policy inference: 81216 fps total: 75352 epoch: 138/500 frames: 35913728
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_138_rew_14999.39.pth'
+saving next best rewards:  [14999.39]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 101 fps step and policy inference: 89022 fps total: 82012 epoch: 139/500 frames: 36175872
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_139_rew_14999.322.pth'
+fps step: 98 fps step and policy inference: 86696 fps total: 79624 epoch: 140/500 frames: 36438016
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_140_rew_14999.397.pth'
+saving next best rewards:  [14999.397]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 96 fps step and policy inference: 85784 fps total: 79341 epoch: 141/500 frames: 36700160
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_141_rew_14998.54.pth'
+fps step: 94 fps step and policy inference: 83445 fps total: 77247 epoch: 142/500 frames: 36962304
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_142_rew_14998.43.pth'
+fps step: 94 fps step and policy inference: 83960 fps total: 77709 epoch: 143/500 frames: 37224448
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_143_rew_14999.003.pth'
+fps step: 90 fps step and policy inference: 80743 fps total: 74952 epoch: 144/500 frames: 37486592
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_144_rew_14998.822.pth'
+fps step: 99 fps step and policy inference: 87861 fps total: 80527 epoch: 145/500 frames: 37748736
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_145_rew_14998.797.pth'
+fps step: 101 fps step and policy inference: 89795 fps total: 82662 epoch: 146/500 frames: 38010880
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_146_rew_14998.943.pth'
+fps step: 93 fps step and policy inference: 83404 fps total: 77224 epoch: 147/500 frames: 38273024
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_147_rew_14999.358.pth'
+fps step: 97 fps step and policy inference: 86030 fps total: 79483 epoch: 148/500 frames: 38535168
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_148_rew_14999.215.pth'
+fps step: 94 fps step and policy inference: 84174 fps total: 77929 epoch: 149/500 frames: 38797312
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_149_rew_14999.42.pth'
+saving next best rewards:  [14999.42]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 92 fps step and policy inference: 81907 fps total: 75598 epoch: 150/500 frames: 39059456
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_150_rew_14999.192.pth'
+fps step: 97 fps step and policy inference: 86389 fps total: 79825 epoch: 151/500 frames: 39321600
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_151_rew_14999.397.pth'
+fps step: 107 fps step and policy inference: 94625 fps total: 86814 epoch: 152/500 frames: 39583744
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_152_rew_14999.601.pth'
+saving next best rewards:  [14999.601]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 91 fps step and policy inference: 81587 fps total: 75685 epoch: 153/500 frames: 39845888
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_153_rew_14999.342.pth'
+fps step: 100 fps step and policy inference: 88245 fps total: 81381 epoch: 154/500 frames: 40108032
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_154_rew_14999.248.pth'
+fps step: 91 fps step and policy inference: 81489 fps total: 75253 epoch: 155/500 frames: 40370176
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_155_rew_14999.545.pth'
+fps step: 92 fps step and policy inference: 82353 fps total: 76329 epoch: 156/500 frames: 40632320
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_156_rew_14998.685.pth'
+fps step: 95 fps step and policy inference: 84889 fps total: 78504 epoch: 157/500 frames: 40894464
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_157_rew_14998.537.pth'
+fps step: 105 fps step and policy inference: 92973 fps total: 85402 epoch: 158/500 frames: 41156608
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_158_rew_14998.5205.pth'
+fps step: 91 fps step and policy inference: 81604 fps total: 75724 epoch: 159/500 frames: 41418752
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_159_rew_14999.936.pth'
+saving next best rewards:  [14999.936]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 95 fps step and policy inference: 84840 fps total: 77931 epoch: 160/500 frames: 41680896
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_160_rew_15000.283.pth'
+saving next best rewards:  [15000.283]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 96 fps step and policy inference: 85433 fps total: 78968 epoch: 161/500 frames: 41943040
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_161_rew_15000.786.pth'
+saving next best rewards:  [15000.786]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 92 fps step and policy inference: 82107 fps total: 76139 epoch: 162/500 frames: 42205184
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_162_rew_15000.884.pth'
+saving next best rewards:  [15000.884]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 94 fps step and policy inference: 83733 fps total: 77420 epoch: 163/500 frames: 42467328
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_163_rew_15000.821.pth'
+fps step: 105 fps step and policy inference: 92335 fps total: 84886 epoch: 164/500 frames: 42729472
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_164_rew_15000.558.pth'
+fps step: 90 fps step and policy inference: 80998 fps total: 74782 epoch: 165/500 frames: 42991616
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_165_rew_15000.397.pth'
+fps step: 92 fps step and policy inference: 81721 fps total: 75792 epoch: 166/500 frames: 43253760
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_166_rew_15000.5625.pth'
+fps step: 98 fps step and policy inference: 86934 fps total: 80329 epoch: 167/500 frames: 43515904
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_167_rew_15000.574.pth'
+fps step: 92 fps step and policy inference: 82269 fps total: 76252 epoch: 168/500 frames: 43778048
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_168_rew_15000.083.pth'
+fps step: 98 fps step and policy inference: 87423 fps total: 80672 epoch: 169/500 frames: 44040192
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_169_rew_15000.141.pth'
+fps step: 105 fps step and policy inference: 92442 fps total: 84485 epoch: 170/500 frames: 44302336
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_170_rew_15000.35.pth'
+fps step: 91 fps step and policy inference: 82000 fps total: 76038 epoch: 171/500 frames: 44564480
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_171_rew_15000.255.pth'
+fps step: 91 fps step and policy inference: 81602 fps total: 75682 epoch: 172/500 frames: 44826624
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_172_rew_15000.612.pth'
+fps step: 92 fps step and policy inference: 82014 fps total: 76009 epoch: 173/500 frames: 45088768
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_173_rew_15000.156.pth'
+fps step: 99 fps step and policy inference: 88181 fps total: 81329 epoch: 174/500 frames: 45350912
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_174_rew_15000.293.pth'
+fps step: 92 fps step and policy inference: 82146 fps total: 75416 epoch: 175/500 frames: 45613056
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_175_rew_15000.64.pth'
+fps step: 92 fps step and policy inference: 81284 fps total: 75441 epoch: 176/500 frames: 45875200
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_176_rew_15001.972.pth'
+saving next best rewards:  [15001.972]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 88 fps step and policy inference: 78269 fps total: 72419 epoch: 177/500 frames: 46137344
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_177_rew_15002.236.pth'
+saving next best rewards:  [15002.236]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 89 fps step and policy inference: 79608 fps total: 73962 epoch: 178/500 frames: 46399488
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_178_rew_15002.628.pth'
+saving next best rewards:  [15002.628]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 91 fps step and policy inference: 81716 fps total: 75819 epoch: 179/500 frames: 46661632
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_179_rew_15002.467.pth'
+fps step: 97 fps step and policy inference: 85931 fps total: 78219 epoch: 180/500 frames: 46923776
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_180_rew_15002.262.pth'
+fps step: 90 fps step and policy inference: 79829 fps total: 74195 epoch: 181/500 frames: 47185920
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_181_rew_15002.174.pth'
+fps step: 91 fps step and policy inference: 80531 fps total: 74683 epoch: 182/500 frames: 47448064
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_182_rew_15002.086.pth'
+fps step: 85 fps step and policy inference: 76101 fps total: 70879 epoch: 183/500 frames: 47710208
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_183_rew_15001.452.pth'
+fps step: 88 fps step and policy inference: 78488 fps total: 73009 epoch: 184/500 frames: 47972352
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_184_rew_15001.747.pth'
+fps step: 92 fps step and policy inference: 81743 fps total: 75354 epoch: 185/500 frames: 48234496
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_185_rew_15001.759.pth'
+fps step: 94 fps step and policy inference: 83691 fps total: 77519 epoch: 186/500 frames: 48496640
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_186_rew_15001.784.pth'
+fps step: 97 fps step and policy inference: 86173 fps total: 79576 epoch: 187/500 frames: 48758784
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_187_rew_15001.693.pth'
+fps step: 90 fps step and policy inference: 80600 fps total: 74774 epoch: 188/500 frames: 49020928
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_188_rew_15002.839.pth'
+saving next best rewards:  [15002.839]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 74 fps step and policy inference: 65246 fps total: 60602 epoch: 189/500 frames: 49283072
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_189_rew_15003.083.pth'
+saving next best rewards:  [15003.083]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 65 fps step and policy inference: 57805 fps total: 53784 epoch: 190/500 frames: 49545216
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_190_rew_15002.358.pth'
+fps step: 64 fps step and policy inference: 57358 fps total: 53708 epoch: 191/500 frames: 49807360
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_191_rew_15002.056.pth'
+fps step: 67 fps step and policy inference: 59095 fps total: 55194 epoch: 192/500 frames: 50069504
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_192_rew_15001.802.pth'
+fps step: 71 fps step and policy inference: 62347 fps total: 58050 epoch: 193/500 frames: 50331648
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_193_rew_15001.786.pth'
+fps step: 65 fps step and policy inference: 57730 fps total: 54032 epoch: 194/500 frames: 50593792
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_194_rew_15002.746.pth'
+fps step: 70 fps step and policy inference: 61879 fps total: 57328 epoch: 195/500 frames: 50855936
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_195_rew_15002.295.pth'
+fps step: 62 fps step and policy inference: 55661 fps total: 52170 epoch: 196/500 frames: 51118080
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_196_rew_15002.601.pth'
+fps step: 65 fps step and policy inference: 58221 fps total: 54502 epoch: 197/500 frames: 51380224
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_197_rew_15002.894.pth'
+fps step: 68 fps step and policy inference: 60143 fps total: 56169 epoch: 198/500 frames: 51642368
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_198_rew_15002.741.pth'
+fps step: 71 fps step and policy inference: 62696 fps total: 58364 epoch: 199/500 frames: 51904512
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_199_rew_15002.98.pth'
+fps step: 64 fps step and policy inference: 57161 fps total: 53549 epoch: 200/500 frames: 52166656
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_200_rew_15003.7295.pth'
+saving next best rewards:  [15003.7295]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 64 fps step and policy inference: 57077 fps total: 53398 epoch: 201/500 frames: 52428800
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_201_rew_15003.202.pth'
+fps step: 66 fps step and policy inference: 58481 fps total: 54693 epoch: 202/500 frames: 52690944
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_202_rew_15003.458.pth'
+fps step: 79 fps step and policy inference: 69915 fps total: 65463 epoch: 203/500 frames: 52953088
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_203_rew_15003.091.pth'
+fps step: 98 fps step and policy inference: 86996 fps total: 80165 epoch: 204/500 frames: 53215232
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_204_rew_15003.377.pth'
+fps step: 107 fps step and policy inference: 94429 fps total: 85872 epoch: 205/500 frames: 53477376
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_205_rew_15003.536.pth'
+fps step: 85 fps step and policy inference: 76143 fps total: 70607 epoch: 206/500 frames: 53739520
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_206_rew_15004.135.pth'
+saving next best rewards:  [15004.135]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 89 fps step and policy inference: 79181 fps total: 73604 epoch: 207/500 frames: 54001664
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_207_rew_15003.746.pth'
+fps step: 95 fps step and policy inference: 84580 fps total: 78270 epoch: 208/500 frames: 54263808
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_208_rew_15003.634.pth'
+fps step: 95 fps step and policy inference: 84323 fps total: 78010 epoch: 209/500 frames: 54525952
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_209_rew_15003.188.pth'
+fps step: 87 fps step and policy inference: 77493 fps total: 71764 epoch: 210/500 frames: 54788096
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_210_rew_15003.561.pth'
+fps step: 91 fps step and policy inference: 80253 fps total: 73663 epoch: 211/500 frames: 55050240
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_211_rew_15003.546.pth'
+fps step: 88 fps step and policy inference: 78885 fps total: 73360 epoch: 212/500 frames: 55312384
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_212_rew_15004.549.pth'
+saving next best rewards:  [15004.549]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 87 fps step and policy inference: 77298 fps total: 71859 epoch: 213/500 frames: 55574528
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_213_rew_15004.364.pth'
+fps step: 90 fps step and policy inference: 80279 fps total: 74521 epoch: 214/500 frames: 55836672
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_214_rew_15003.958.pth'
+fps step: 97 fps step and policy inference: 86325 fps total: 79412 epoch: 215/500 frames: 56098816
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_215_rew_15003.814.pth'
+fps step: 93 fps step and policy inference: 83168 fps total: 77026 epoch: 216/500 frames: 56360960
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_216_rew_15003.811.pth'
+fps step: 98 fps step and policy inference: 86649 fps total: 79995 epoch: 217/500 frames: 56623104
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_217_rew_15004.175.pth'
+fps step: 92 fps step and policy inference: 82130 fps total: 76170 epoch: 218/500 frames: 56885248
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_218_rew_15004.095.pth'
+fps step: 90 fps step and policy inference: 80054 fps total: 73935 epoch: 219/500 frames: 57147392
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_219_rew_15003.492.pth'
+fps step: 83 fps step and policy inference: 74346 fps total: 69138 epoch: 220/500 frames: 57409536
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_220_rew_15003.9375.pth'
+fps step: 98 fps step and policy inference: 86414 fps total: 79795 epoch: 221/500 frames: 57671680
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_221_rew_15004.18.pth'
+fps step: 92 fps step and policy inference: 82102 fps total: 76079 epoch: 222/500 frames: 57933824
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_222_rew_15004.512.pth'
+fps step: 99 fps step and policy inference: 87794 fps total: 80991 epoch: 223/500 frames: 58195968
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_223_rew_15004.354.pth'
+fps step: 93 fps step and policy inference: 82502 fps total: 76419 epoch: 224/500 frames: 58458112
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_224_rew_15004.125.pth'
+fps step: 90 fps step and policy inference: 80121 fps total: 73900 epoch: 225/500 frames: 58720256
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_225_rew_15003.542.pth'
+fps step: 86 fps step and policy inference: 76628 fps total: 71396 epoch: 226/500 frames: 58982400
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_226_rew_15003.147.pth'
+fps step: 98 fps step and policy inference: 86649 fps total: 79949 epoch: 227/500 frames: 59244544
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_227_rew_15002.925.pth'
+fps step: 85 fps step and policy inference: 75283 fps total: 69128 epoch: 228/500 frames: 59506688
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_228_rew_15002.88.pth'
+fps step: 67 fps step and policy inference: 60047 fps total: 56007 epoch: 229/500 frames: 59768832
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_229_rew_15004.273.pth'
+fps step: 69 fps step and policy inference: 61557 fps total: 57009 epoch: 230/500 frames: 60030976
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_230_rew_15003.986.pth'
+fps step: 66 fps step and policy inference: 58509 fps total: 54743 epoch: 231/500 frames: 60293120
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_231_rew_15004.22.pth'
+fps step: 62 fps step and policy inference: 55039 fps total: 51633 epoch: 232/500 frames: 60555264
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_232_rew_15004.526.pth'
+fps step: 67 fps step and policy inference: 59090 fps total: 55180 epoch: 233/500 frames: 60817408
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_233_rew_15004.069.pth'
+fps step: 74 fps step and policy inference: 65637 fps total: 61766 epoch: 234/500 frames: 61079552
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_234_rew_15003.967.pth'
+fps step: 89 fps step and policy inference: 79329 fps total: 73380 epoch: 235/500 frames: 61341696
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_235_rew_15004.917.pth'
+saving next best rewards:  [15004.917]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 105 fps step and policy inference: 92466 fps total: 85015 epoch: 236/500 frames: 61603840
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_236_rew_15004.64.pth'
+fps step: 93 fps step and policy inference: 83215 fps total: 77075 epoch: 237/500 frames: 61865984
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_237_rew_15004.662.pth'
+fps step: 92 fps step and policy inference: 81793 fps total: 75835 epoch: 238/500 frames: 62128128
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_238_rew_15004.444.pth'
+fps step: 96 fps step and policy inference: 85516 fps total: 79085 epoch: 239/500 frames: 62390272
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_239_rew_15004.407.pth'
+fps step: 102 fps step and policy inference: 90458 fps total: 82772 epoch: 240/500 frames: 62652416
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_240_rew_15004.186.pth'
+fps step: 92 fps step and policy inference: 82163 fps total: 76110 epoch: 241/500 frames: 62914560
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_241_rew_15003.897.pth'
+fps step: 100 fps step and policy inference: 88625 fps total: 81745 epoch: 242/500 frames: 63176704
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_242_rew_15003.671.pth'
+fps step: 97 fps step and policy inference: 85951 fps total: 79436 epoch: 243/500 frames: 63438848
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_243_rew_15003.97.pth'
+fps step: 92 fps step and policy inference: 82399 fps total: 76321 epoch: 244/500 frames: 63700992
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_244_rew_15003.746.pth'
+fps step: 95 fps step and policy inference: 84433 fps total: 77757 epoch: 245/500 frames: 63963136
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_245_rew_15003.639.pth'
+fps step: 105 fps step and policy inference: 92351 fps total: 84758 epoch: 246/500 frames: 64225280
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_246_rew_15003.533.pth'
+fps step: 92 fps step and policy inference: 82100 fps total: 76103 epoch: 247/500 frames: 64487424
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_247_rew_15002.393.pth'
+fps step: 94 fps step and policy inference: 83987 fps total: 77784 epoch: 248/500 frames: 64749568
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_248_rew_15002.465.pth'
+fps step: 96 fps step and policy inference: 85489 fps total: 79025 epoch: 249/500 frames: 65011712
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_249_rew_15003.427.pth'
+fps step: 96 fps step and policy inference: 85184 fps total: 78176 epoch: 250/500 frames: 65273856
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_250_rew_15003.766.pth'
+fps step: 95 fps step and policy inference: 84429 fps total: 78104 epoch: 251/500 frames: 65536000
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_251_rew_15003.5625.pth'
+fps step: 106 fps step and policy inference: 93289 fps total: 85627 epoch: 252/500 frames: 65798144
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_252_rew_15003.583.pth'
+fps step: 91 fps step and policy inference: 80979 fps total: 75148 epoch: 253/500 frames: 66060288
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_253_rew_15004.01.pth'
+fps step: 93 fps step and policy inference: 82905 fps total: 76833 epoch: 254/500 frames: 66322432
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_254_rew_15003.1455.pth'
+fps step: 97 fps step and policy inference: 86273 fps total: 79259 epoch: 255/500 frames: 66584576
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_255_rew_15002.819.pth'
+fps step: 95 fps step and policy inference: 84747 fps total: 78356 epoch: 256/500 frames: 66846720
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_256_rew_15002.465.pth'
+fps step: 97 fps step and policy inference: 86421 fps total: 79882 epoch: 257/500 frames: 67108864
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_257_rew_15001.926.pth'
+fps step: 97 fps step and policy inference: 86122 fps total: 79562 epoch: 258/500 frames: 67371008
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_258_rew_15002.707.pth'
+fps step: 94 fps step and policy inference: 84027 fps total: 77681 epoch: 259/500 frames: 67633152
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_259_rew_15002.871.pth'
+fps step: 93 fps step and policy inference: 82510 fps total: 76076 epoch: 260/500 frames: 67895296
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_260_rew_15003.058.pth'
+fps step: 94 fps step and policy inference: 83465 fps total: 77252 epoch: 261/500 frames: 68157440
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_261_rew_15003.531.pth'
+fps step: 92 fps step and policy inference: 81700 fps total: 75703 epoch: 262/500 frames: 68419584
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_262_rew_15003.72.pth'
+fps step: 96 fps step and policy inference: 85235 fps total: 78803 epoch: 263/500 frames: 68681728
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_263_rew_15003.496.pth'
+fps step: 94 fps step and policy inference: 82994 fps total: 76872 epoch: 264/500 frames: 68943872
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_264_rew_15005.058.pth'
+saving next best rewards:  [15005.058]
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/ablation_full.pth'
+fps step: 93 fps step and policy inference: 82736 fps total: 76244 epoch: 265/500 frames: 69206016
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_265_rew_15004.679.pth'
+fps step: 92 fps step and policy inference: 81403 fps total: 75517 epoch: 266/500 frames: 69468160
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_266_rew_15004.866.pth'
+fps step: 86 fps step and policy inference: 76625 fps total: 71353 epoch: 267/500 frames: 69730304
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_267_rew_15004.434.pth'
+fps step: 92 fps step and policy inference: 81164 fps total: 75382 epoch: 268/500 frames: 69992448
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_268_rew_15004.206.pth'
+fps step: 96 fps step and policy inference: 84899 fps total: 78307 epoch: 269/500 frames: 70254592
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_269_rew_15003.55.pth'
+fps step: 83 fps step and policy inference: 73798 fps total: 67452 epoch: 270/500 frames: 70516736
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_270_rew_15002.866.pth'
+fps step: 84 fps step and policy inference: 75111 fps total: 70076 epoch: 271/500 frames: 70778880
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_271_rew_15003.159.pth'
+fps step: 81 fps step and policy inference: 71916 fps total: 67231 epoch: 272/500 frames: 71041024
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_272_rew_15003.327.pth'
+fps step: 81 fps step and policy inference: 71896 fps total: 67109 epoch: 273/500 frames: 71303168
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_273_rew_15002.962.pth'
+fps step: 91 fps step and policy inference: 80661 fps total: 74894 epoch: 274/500 frames: 71565312
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_274_rew_15001.991.pth'
+fps step: 100 fps step and policy inference: 88564 fps total: 80968 epoch: 275/500 frames: 71827456
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_275_rew_15001.96.pth'
+fps step: 88 fps step and policy inference: 78878 fps total: 73375 epoch: 276/500 frames: 72089600
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_276_rew_15002.034.pth'
+fps step: 96 fps step and policy inference: 84574 fps total: 77922 epoch: 277/500 frames: 72351744
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_277_rew_15002.081.pth'
+fps step: 88 fps step and policy inference: 78818 fps total: 73191 epoch: 278/500 frames: 72613888
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_278_rew_15002.922.pth'
+fps step: 85 fps step and policy inference: 75321 fps total: 70324 epoch: 279/500 frames: 72876032
+=> saving checkpoint 'runs/ablation_full_18-21-28-11/nn/last_ablation_full_ep_279_rew_15002.729.pth'
+*** Can't create empty tensor
+Traceback (most recent call last):
+  File "aerial_gym/rl_training/rl_games/runner.py", line 392, in <module>
+    runner.run(args)
+  File "/home/throne/.local/lib/python3.8/site-packages/rl_games/torch_runner.py", line 133, in run
+    self.run_train(args)
+  File "/home/throne/.local/lib/python3.8/site-packages/rl_games/torch_runner.py", line 116, in run_train
+    agent.train()
+  File "/home/throne/.local/lib/python3.8/site-packages/rl_games/common/a2c_common.py", line 1381, in train
+    step_time, play_time, update_time, sum_time, a_losses, c_losses, b_losses, entropies, kls, last_lr, lr_mul = self.train_epoch()
+  File "/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/rl_training/rl_games/a2c_aux_loss.py", line 600, in train_epoch
+    result = super().train_epoch()
+  File "/home/throne/.local/lib/python3.8/site-packages/rl_games/common/a2c_common.py", line 1232, in train_epoch
+    batch_dict = self.play_steps()
+  File "/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/rl_training/rl_games/a2c_aux_loss.py", line 213, in play_steps
+    self.obs, rewards, self.dones, infos = self.env_step(res_dict['actions'])
+  File "/home/throne/.local/lib/python3.8/site-packages/rl_games/common/a2c_common.py", line 541, in env_step
+    obs, rewards, dones, infos = self.vec_env.step(actions)
+  File "aerial_gym/rl_training/rl_games/runner.py", line 71, in step
+    return self.env.step(actions)
+  File "aerial_gym/rl_training/rl_games/runner.py", line 40, in step
+    observations, rewards, terminated, truncated, infos = super().step(action)
+  File "/home/throne/.local/lib/python3.8/site-packages/gym/core.py", line 280, in step
+    return self.env.step(action)
+  File "/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/task/payload_compensation_task/payload_compensation_task.py", line 882, in step
+    self.sim_env.step(actions=self.controller_actions)
+  File "/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/env_manager/env_manager.py", line 471, in step
+    self.simulate(actions, env_actions)
+  File "/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/env_manager/env_manager.py", line 372, in simulate
+    self.IGE_env.physics_step()
+  File "/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/aerial_gym/env_manager/IGE_env_manager.py", line 554, in physics_step
+    self.gym.simulate(self.sim)
+KeyboardInterrupt

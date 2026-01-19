@@ -1,0 +1,105 @@
+Importing module 'gym_38' (/home/throne/下载/isaacgym/python/isaacgym/_bindings/linux-x86_64/gym_38.so)
+Setting GYM_USD_PLUG_INFO_PATH to /home/throne/下载/isaacgym/python/isaacgym/_bindings/linux-x86_64/usd/plugInfo.json
+PyTorch version 1.13.1
+Device count 1
+/home/throne/下载/isaacgym/python/isaacgym/_bindings/src/gymtorch
+Using /home/throne/.cache/torch_extensions/py38_cu117 as PyTorch extensions root...
+Emitting ninja build file /home/throne/.cache/torch_extensions/py38_cu117/gymtorch/build.ninja...
+Building extension module gymtorch...
+Allowing ninja to set a default number of workers... (overridable by setting the environment variable MAX_JOBS=N)
+ninja: no work to do.
+Loading extension module gymtorch...
+Gym has been unmaintained since 2022 and does not support NumPy 2.0 amongst other critical functionality.
+Please upgrade to Gymnasium, the maintained drop-in replacement of Gym, or contact the authors of your software and request that they upgrade.
+See the migration guide at https://gymnasium.farama.org/introduction/migration_guide/ for additional information.
+/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/gymnasium/envs/registration.py:596: UserWarning: [33mWARN: plugin: shimmy.registration:register_gymnasium_envs raised Traceback (most recent call last):
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/gymnasium/envs/registration.py", line 594, in load_plugin_envs
+    fn()
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/shimmy/registration.py", line 304, in register_gymnasium_envs
+    _register_atari_envs()
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/shimmy/registration.py", line 205, in _register_atari_envs
+    import ale_py
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/ale_py/__init__.py", line 68, in <module>
+    register_v0_v4_envs()
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/ale_py/registration.py", line 178, in register_v0_v4_envs
+    _register_rom_configs(legacy_games, obs_types, versions)
+  File "/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/ale_py/registration.py", line 63, in _register_rom_configs
+    gymnasium.register(
+AttributeError: partially initialized module 'gymnasium' has no attribute 'register' (most likely due to a circular import)
+[0m
+  logger.warn(f"plugin: {plugin.value} raised {traceback.format_exc()}")
+/home/throne/miniconda3/envs/aerialgym/lib/python3.8/site-packages/torch/utils/tensorboard/__init__.py:4: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
+  if not hasattr(tensorboard, "__version__") or LooseVersion(
+[37m[1979 ms][base_task] - INFO : Setting seed: 42 (base_task.py:38)[0m
+[37m[1979 ms][payload_compensation_task] - INFO : Building environment for payload compensation task. (payload_compensation_task.py:567)[0m
+[37m[1979 ms][env_manager] - INFO : Populating environments. (env_manager.py:76)[0m
+[37m[1979 ms][env_manager] - INFO : Creating simulation instance. (env_manager.py:92)[0m
+[37m[1979 ms][env_manager] - INFO : Instantiating IGE object. (env_manager.py:93)[0m
+[37m[1979 ms][IsaacGymEnvManager] - INFO : Creating Isaac Gym Environment (IGE_env_manager.py:46)[0m
+[37m[1979 ms][IsaacGymEnvManager] - INFO : Acquiring gym object (IGE_env_manager.py:81)[0m
+[37m[1979 ms][IsaacGymEnvManager] - INFO : Acquired gym object (IGE_env_manager.py:83)[0m
+[37m[1980 ms][IsaacGymEnvManager] - INFO : Fixing devices (IGE_env_manager.py:95)[0m
+[37m[1980 ms][IsaacGymEnvManager] - INFO : Using GPU pipeline for simulation. (IGE_env_manager.py:112)[0m
+[37m[1980 ms][IsaacGymEnvManager] - INFO : Sim Device type: cuda, Sim Device ID: 0 (IGE_env_manager.py:115)[0m
+[31;1m[1980 ms][IsaacGymEnvManager] - CRITICAL : 
+ Setting graphics device to -1.
+ This is done because the simulation is run in headless mode and no Isaac Gym cameras are used.
+ No need to worry. The simulation and warp rendering will work as expected. (IGE_env_manager.py:125)[0m
+[37m[1980 ms][IsaacGymEnvManager] - INFO : Graphics Device ID: -1 (IGE_env_manager.py:133)[0m
+[37m[1980 ms][IsaacGymEnvManager] - INFO : Creating Isaac Gym Simulation Object (IGE_env_manager.py:135)[0m
+[33;20m[1980 ms][IsaacGymEnvManager] - WARNING : If you have set the CUDA_VISIBLE_DEVICES environment variable, please ensure that you set it
+to a particular one that works for your system to use the viewer or Isaac Gym cameras.
+If you want to run parallel simulations on multiple GPUs with camera sensors,
+please disable Isaac Gym and use warp (by setting use_warp=True), set the viewer to headless. (IGE_env_manager.py:143)[0m
+[33;20m[1980 ms][IsaacGymEnvManager] - WARNING : If you see a segfault in the next lines, it is because of the discrepancy between the CUDA device and the graphics device.
+Please ensure that the CUDA device and the graphics device are the same. (IGE_env_manager.py:148)[0m
+Not connected to PVD
++++ Using GPU PhysX
+Physics Engine: PhysX
+Physics Device: cuda:0
+GPU Pipeline: enabled
+[37m[2727 ms][IsaacGymEnvManager] - INFO : Created Isaac Gym Simulation Object (IGE_env_manager.py:154)[0m
+[37m[2727 ms][IsaacGymEnvManager] - INFO : Created Isaac Gym Environment (IGE_env_manager.py:49)[0m
+[37m[2933 ms][env_manager] - INFO : IGE object instantiated. (env_manager.py:115)[0m
+[37m[2933 ms][env_manager] - INFO : Creating robot manager. (env_manager.py:126)[0m
+[37m[2933 ms][BaseRobot] - INFO : [DONE] Initializing controller (base_robot.py:26)[0m
+[37m[2933 ms][BaseRobot] - INFO : Initializing controller lee_position_control_with_compensation (base_robot.py:29)[0m
+[33;20m[2933 ms][base_multirotor] - WARNING : Creating 2 multirotors. (base_multirotor.py:37)[0m
+[37m[2934 ms][env_manager] - INFO : [DONE] Creating robot manager. (env_manager.py:132)[0m
+[37m[2934 ms][env_manager] - INFO : [DONE] Creating simulation instance. (env_manager.py:134)[0m
+[37m[2934 ms][asset_loader] - INFO : Loading asset: quad.urdf for the first time. Next use of this asset will be via the asset buffer. (asset_loader.py:71)[0m
+[37m[2934 ms][env_manager] - INFO : Populating environment 0 (env_manager.py:194)[0m
+[33;20m[3316 ms][robot_manager] - WARNING : 
+Robot mass: 0.2500003944120692,
+Inertia: tensor([[8.4501e-04, 0.0000e+00, 3.3087e-24],
+        [0.0000e+00, 8.4501e-04, 3.3087e-24],
+        [3.3087e-24, 3.3087e-24, 1.6900e-03]], device='cuda:0'),
+Robot COM: tensor([[0.0000e+00, 0.0000e+00, 1.3411e-14, 1.0000e+00]], device='cuda:0') (robot_manager.py:427)[0m
+[33;20m[3317 ms][robot_manager] - WARNING : Calculated robot mass and inertia for this robot. This code assumes that your robot is the same across environments. (robot_manager.py:430)[0m
+[31;1m[3317 ms][robot_manager] - CRITICAL : If your robot differs across environments you need to perform this computation for each different robot here. (robot_manager.py:433)[0m
+[37m[3317 ms][env_manager] - INFO : [DONE] Populating environments. (env_manager.py:79)[0m
+[33;20m[3324 ms][IsaacGymEnvManager] - WARNING : Headless: True (IGE_env_manager.py:494)[0m
+[37m[3324 ms][IsaacGymEnvManager] - INFO : Headless mode. Viewer not created. (IGE_env_manager.py:505)[0m
+[33;20m[3370 ms][asset_manager] - WARNING : Number of obstacles to be kept in the environment: 0 (asset_manager.py:32)[0m
+/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/paper/../aerial_gym/control/motor_model.py:53: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  torch.tensor(self.min_thrust, device=self.device, dtype=torch.float32).expand(
+/home/throne/workspaces/aerial_gym_ws/src/aerial_gym_simulator/paper/../aerial_gym/control/motor_model.py:56: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  torch.tensor(self.max_thrust, device=self.device, dtype=torch.float32).expand(
+[33;20m[3450 ms][control_allocation] - WARNING : Control allocation does not account for actuator limits. This leads to suboptimal allocation (control_allocation.py:67)[0m
+[31;20m[3450 ms][robot_manager] - ERROR : Not using warp. Initializing sensors (robot_manager.py:131)[0m
+[37m[3751 ms][payload_compensation_task] - INFO : [DebugReset 0] env_ids=[0, 1] targets=[[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]] release_info={0: {'order': [1, 0, 2, 3], 'next_release': 115}, 1: {'order': [0, 1, 2, 3], 'next_release': 110}} (payload_compensation_task.py:1766)[0m
+Warp 1.0.0 initialized:
+   CUDA Toolkit 11.5, Driver 12.6
+   Devices:
+     "cpu"      : "x86_64"
+     "cuda:0"   : "NVIDIA GeForce RTX 4060 Laptop GPU" (8 GiB, sm_89, mempool enabled)
+   Kernel cache:
+     /home/throne/.cache/warp/1.0.0
+Starting minimal test
+Init Task...
+[isaacgym:gymutil.py] Unknown args:  []
+WARNING: allocation matrix is not full rank. Rank: 4
+Task Initialized!
+Reset done
+End minimal test
+*** Can't create empty tensor
