@@ -377,7 +377,7 @@ def main():
         help="Path to teacher checkpoint",
     )
     parser.add_argument("--num_envs", type=int, default=1024, help="Number of parallel envs")
-    parser.add_argument("--history_len", type=int, default=100, help="Observation history length (Shortened for faster reaction)")
+    parser.add_argument("--history_len", type=int, default=200, help="Observation history length (Shortened for faster reaction)")
     parser.add_argument("--latent_dim", type=int, default=8, help="Latent dimension")
     parser.add_argument("--epochs", type=int, default=1000, help="Number of training epochs")
     parser.add_argument("--steps_per_epoch", type=int, default=1500, help="Steps per epoch (match or exceed release timeline)")

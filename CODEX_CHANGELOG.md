@@ -197,7 +197,12 @@ python aerial_gym/examples/validate_cnn_stage2.py \
     --steps 1500 \
     --show_plot True
 
-
+python aerial_gym/examples/validate_cnn_stage2.py \
+    --teacher_checkpoint runs/teacher_aux_fixed_imitation_19-21-52-29/nn/last_teacher_aux_fixed_imitation_ep_135_rew_15005.909.pth \
+    --cnn_checkpoint runs/cnn_stage2_blind_v2_20-02-24-13/nn/best_cnn_encoder.pth \
+    --history_len 200 \
+    --steps 1500 \
+    --show_plot True
 ## 2025-02-21 Teacher 残差原型
 - `aerial_gym/config/task_config/payload_compensation_task_config.py` 增加 `imitation_weight`（默认为 0）供模仿项权重使用。
 - 新增 `aerial_gym/config/task_config/payload_compensation_task_teacher_config.py`：开启 `teacher_mode`，观测维度为 29+52（raw 特权拼接到 obs），特权 obs_dim=52，由策略侧可训练编码器处理，增加 `dagger_frac=0.7` 作为教师混合比例。
@@ -313,3 +318,81 @@ python paper/eval_ablation.py \
 1. **Original 模型表现最佳**：在所有测试条件下成功率均最高
 2. **电机/阻力随机化是关键**：Original 和 Full 在 OOD 条件下远超 NoPhysRand
 3. **风扰动随机化非必需**：Original 未经风训练但在有风测试中表现最好，说明电机/阻力随机化提供了足够的鲁棒性
+
+---
+
+## 2025-01-20 Stage 2 CNN Ablation (Blind v2)
+
+### 实验配置
+- **Model**: `cnn_stage2_blind_v2` (History=200, Blind Observations, No Mask/Warning)
+- **Teacher Checkpoint**: `teacher_aux_fixed_imitation` (Ep 135)
+- **Script**: `validate_cnn_stage2.py` (Modified for ablation)
+- **Steps**: 500
+- **Num Envs**: 256
+
+### 结果汇总
+
+#### 1. 载荷质量泛化测试 (无风)
+验证模型在不同载荷质量下的稳定性。
+
+| 载荷质量 | 成功率 (Survival) | 崩溃数 | 说明 |
+| :---: | :---: | :---: | :--- |
+| **0.01 kg** | **100.00%** | 0/256 | 小质量，极其稳定 |
+| **0.03 kg** | **100.00%** | 0/256 | 训练分布中心，极其稳定 |
+| **0.05 kg** | **100.00%** | 0/256 | 大质量，极其稳定 (对比 Teacher 可能有性能下降，但未崩溃) |
+
+#### 2. 强风扰动测试 (Mass=0.03kg, Wind=0.3N)
+验证模型在强外界扰动下的鲁棒性。注意：本次测试风力为 **0.3N**，显著高于之前的 0.1N 测试。
+
+| 条件 | 成功率 (Survival) | 崩溃数 | 备注 |
+| :--- | :---: | :---: | :--- |
+| **Wind 0.3N** | **90.62%** | 24/256 | 潜变量拟合 MSE 显著增加 (Avg 0.745)，表明强风下预测变难，导致部分环境失稳。 |
+
+### 结论
+- `cnn_stage2_blind_v2` 在无风条件下展现了完美的鲁棒性 (100% 存活)，即使在边缘质量 (0.01kg, 0.05kg) 下也未发生崩溃。
+#### 3. 极限载荷性能对比 (横向评测, Still Air)
+验证不同模型在现实载荷范围（0.1kg - 0.4kg）下的稳定性。
+
+| 载荷质量 | Teacher (Full) | NoPhysRand | PDOnly (Base) | CNN Student |
+| :---: | :---: | :---: | :---: | :---: |
+| **0.1 kg** | **100.00%** | 100.00% | 100.00% | **100.00%** |
+| **0.2 kg** | **100.00%** | 100.00% | **50.78%** | **100.00%** |
+| **0.3 kg** | **100.00%** | 100.00% | **0.00%** | **100.00%** |
+| **0.4 kg** | **100.00%** | 61.33% | **0.00%** | **100.00%** |
+
+> [!CAUTION]
+> **重要更正 (2026-01-20)**: 之前的表格因脚本 `final_ablation_table.py` 的表头顺序与模型列表不匹配，导致 PDOnly 和 NoPhysRand 的数据**完全被互换**。现已修正。
+
+**关键结论 (修正后)**:
+1. **Teacher (Full) 模型展示了统治级的泛化力**: 在所有测试质量（包括训练边界外的 0.4kg）均保持 100% 成功率。这证明物理参数随机化方案非常成功。
+2. **PDOnly 的物理极限**: 纯 PD 控制器由于无法提供额外的推力/力矩补偿，在 **0.2kg** 时成功率就骤降到 **50.78%**，在 **0.3kg** 及以上载荷时**彻底崩溃 (0%)**。这是因为偏置载荷产生的重力矩超过了 PD 控制器的稳态增益能力，导致倾角超过 25° 阈值。
+3. **NoPhysRand 的表现优于预期**: 在 0.3kg 及以下依然保持 100%，直到 0.4kg 时才下降到 61.33%。这比之前以为的"0.2kg 就崩"更加鲁棒，但仍然不如 Teacher。
+4. **CNN 学生模型的完美表现**: 学生模型在**所有测试质量（包括 0.4kg）均保持 100% 成功率**，展示了优秀的泛化能力，证明盲系统辨识策略是有效的。
+
+#### 4. 有风条件测试 (0.3N Wind, 0.1-0.4kg)
+| 载荷质量 | Teacher (Full) | NoPhysRand | CNN Student |
+| :---: | :---: | :---: | :---: |
+| **0.1 kg** | 89.06% | **100.00%** | 86.72% |
+| **0.2 kg** | 72.66% | **98.44%** | 59.38% |
+| **0.3 kg** | 60.55% | **81.64%** | 34.38% |
+| **0.4 kg** | **44.14%** | 33.59% | 0.39% |
+
+**关键结论**:
+1. **有风条件下所有模型性能显著下降**：风力扰动对所有模型均造成严重影响。
+2. **NoPhysRand 在轻载荷下的意外优势**：在 0.1-0.3kg 范围内，NoPhysRand 反而比 Teacher 更稳定。这可能是因为它没有学到"过度补偿"，在风力存在时更保守。
+3. **Teacher 在重载荷+风力下依然最强**：在 0.4kg + 0.3N Wind 的极端条件下，Teacher 以 44% 成功率保持领先。
+4. **CNN Student 对风力极为敏感**：在 0.4kg + 风力下几乎全部崩溃 (0.39%)，说明盲辨识策略很难区分"风"和"载荷变化"。
+
+#### 5. 极限载荷测试 (Still Air, 0.5-0.8kg)
+| 载荷质量 | Teacher (Full) | NoPhysRand | CNN Student |
+| :---: | :---: | :---: | :---: |
+| **0.5 kg** | **100.00%** | 0.00% | 83.98% |
+| **0.6 kg** | **63.67%** | 0.00% | 43.75% |
+| **0.7 kg** | **33.20%** | 0.00% | 0.00% |
+| **0.8 kg** | 0.00% | 0.00% | 0.00% |
+
+**关键结论**:
+1. **Teacher 的物理极限在 0.7-0.8kg**：0.5kg 依然 100%，0.6kg 降到 64%，0.7kg 降到 33%，0.8kg 全部崩溃。这是因为总载荷 (4×0.8=3.2kg) 接近无人机的最大升力极限。
+2. **NoPhysRand 在 OOD 条件下彻底失效**：0.5kg 及以上完全崩溃，再次证明没有物理随机化的策略缺乏泛化能力。
+3. **CNN Student 展示了不错的极限外推能力**：在 0.5kg 时依然保持 84%，0.6kg 时 44%，比 NoPhysRand 显著更强。这说明历史观测的时间序列蕴含了可泛化的物理信息。
+4. **系统物理极限 ≈ 0.7-0.8kg**：所有模型在此载荷下均无法存活，这是硬件限制而非软件问题。

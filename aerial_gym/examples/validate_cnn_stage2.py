@@ -22,14 +22,22 @@ import sys
 from typing import Any, Dict, List, Optional, Tuple
 import importlib.util
 
+import copy
+import json
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 
 import yaml
 
 from aerial_gym.registry.task_registry import task_registry
+from aerial_gym.utils.logging import CustomLogger
 from aerial_gym.utils.math import get_euler_xyz_tensor
+
+# Import Task and Config for Ablation Overrides
+from aerial_gym.task.payload_compensation_task.payload_compensation_task import PayloadCompensationTask
+from aerial_gym.config.task_config.payload_compensation_task_teacher_config import task_config as default_task_config_xyz_tensor
 
 # Ensure privileged network is registered before building the model.
 from aerial_gym.rl_training.rl_games.nn import privileged_actor_critic  # noqa: F401
@@ -147,6 +155,10 @@ def parse_args() -> argparse.Namespace:
         default=100,
         help="Steps between waypoint changes during preflight.",
     )
+    # Ablation Arguments
+    parser.add_argument("--test_mass", type=float, default=None, help="Fixed test payload mass for ablation")
+    parser.add_argument("--test_wind", type=float, default=None, help="Fixed test wind disturbance for ablation")
+    
     return parser.parse_args()
 
 
@@ -542,12 +554,64 @@ def main() -> None:
     cfg = load_training_config(args.config) or {}
     env_name = args.env_name or cfg.get("params", {}).get("config", {}).get("env_name", DEFAULT_ENV_NAME)
 
-    original_argv = sys.argv
-    sys.argv = [sys.argv[0]]
-    try:
-        task = task_registry.make_task(env_name, num_envs=args.num_envs, headless=args.headless)
-    finally:
-        sys.argv = original_argv
+    # === Task Initialization (Standard vs Ablation) ===
+    # === Task Initialization (Standard vs Ablation) ===
+    if args.test_mass is not None or args.test_wind is not None:
+        print(f"=== Ablation Mode: Mass={args.test_mass}, Wind={args.test_wind} ===")
+        args.show_plot = False # Force disable plotting in ablation mode
+        
+        # Create Dynamic Config Class
+        class TestTaskConfig(default_task_config_xyz_tensor):
+            pass
+            
+        TestTaskConfig.num_envs = args.num_envs
+        TestTaskConfig.headless = args.headless
+        
+        # Determine device from config or default
+        config_device = cfg.get("params", {}).get("config", {}).get("sim_device", "cuda:0")
+        if "cuda" in config_device and not torch.cuda.is_available():
+            config_device = "cpu"
+            print(f"  [Warning] CUDA not available, falling back to CPU for sim_device.")
+        TestTaskConfig.device = config_device
+        
+        # Override Payload Params
+        TestTaskConfig.payload_parameters = copy.deepcopy(default_task_config_xyz_tensor.payload_parameters)
+        TestTaskConfig.payload_parameters["randomize_payload_mass"] = True
+        if args.test_mass is not None:
+             TestTaskConfig.payload_parameters["payload_mass_range"] = [args.test_mass, args.test_mass]
+             print(f"  -> Fixed Payload Mass: {args.test_mass} kg")
+        
+        # Ensure fast release for testing
+        TestTaskConfig.payload_parameters["release_start"] = 100
+        TestTaskConfig.payload_parameters["release_start_range"] = [100, 100]
+        TestTaskConfig.payload_parameters["randomize_release"] = True 
+
+        # Override Randomization (Wind)
+        TestTaskConfig.randomization_parameters = copy.deepcopy(default_task_config_xyz_tensor.randomization_parameters)
+        if args.test_wind is not None:
+            TestTaskConfig.randomization_parameters["randomize_external_disturbance"] = True
+            TestTaskConfig.randomization_parameters["external_force_range"] = [args.test_wind, args.test_wind]
+            print(f"  -> Fixed Wind Force: {args.test_wind} N")
+        else:
+            # Ensure wind is OFF for mass sweep if not specified (or follow default? Assuming OFF for mass sweep)
+            TestTaskConfig.randomization_parameters["randomize_external_disturbance"] = False
+            
+        # Instantiate directly
+        task = PayloadCompensationTask(
+            task_config=TestTaskConfig, 
+            seed=42, 
+            num_envs=args.num_envs, 
+            headless=args.headless, 
+            device=TestTaskConfig.device # Use the device determined for TestTaskConfig
+        )
+    else:
+        # Standard Registration
+        original_argv = sys.argv
+        sys.argv = [sys.argv[0]]
+        try:
+            task = task_registry.make_task(env_name, num_envs=args.num_envs, headless=args.headless)
+        finally:
+            sys.argv = original_argv
 
     obs_dim = task.task_config.observation_space_dim
     priv_dim = task.task_config.privileged_observation_space_dim
@@ -574,10 +638,14 @@ def main() -> None:
         model.running_mean_std.load_state_dict(checkpoint["running_mean_std"])
 
     teacher_encoder = load_teacher_encoder(args.teacher_checkpoint, str(device), priv_dim)
+    
+    # Student uses custom 18-dim observation (Rot+LinVel+AngVel+Action)
+    student_obs_dim = 18
     cnn_encoder, history_buffer, ObsHistoryBuffer = load_cnn_encoder(
-        args.cnn_checkpoint, obs_dim, args.history_len, latent_dim, str(device)
+        args.cnn_checkpoint, student_obs_dim, args.history_len, latent_dim, str(device)
     )
-    history_buffer = ObsHistoryBuffer(num_envs=args.num_envs, obs_dim=obs_dim, 
+    # Ensure buffer is re-created with correct dim if load_cnn_encoder returns a default one
+    history_buffer = ObsHistoryBuffer(num_envs=args.num_envs, obs_dim=student_obs_dim, 
                                       history_len=args.history_len, device=str(device))
 
     print("=" * 60)
@@ -601,7 +669,16 @@ def main() -> None:
     print(f"Warming up history buffer ({args.history_len} steps)...")
     with torch.no_grad():
         for _ in range(args.history_len):
-            obs = torch.as_tensor(task.task_obs["observations"], device=device, dtype=torch.float32)
+            teacher_obs = torch.as_tensor(task.task_obs["observations"], device=device, dtype=torch.float32)
+            linvel_obs = task.obs_dict["robot_linvel"].to(device)
+            student_obs = torch.cat([
+                teacher_obs[:, 0:9],   # Rot
+                linvel_obs,           # LinVel
+                teacher_obs[:, 9:12],  # AngVel
+                teacher_obs[:, 17:20]  # Action
+            ], dim=1)
+            
+            obs = teacher_obs # Teacher uses 20-dim original obs
             priv = task.task_obs.get("privileged_obs", None)
             if priv is not None:
                 priv = torch.as_tensor(priv, device=device, dtype=torch.float32)
@@ -618,14 +695,45 @@ def main() -> None:
             actions = result["mus"] if args.deterministic else result["actions"]
             actions = torch.clamp(actions, -1.0, 1.0)
             
-            history_buffer.push(obs)
+            history_buffer.push(student_obs)
             task.step(actions)
 
     print(f"Running validation for {args.steps} steps...")
+    
+    
+    # Stats for Ablation
+    total_rewards = torch.zeros(args.num_envs, device=device)
+    max_tilt_envs = torch.zeros(args.num_envs, device=device)
+    sum_angle_error_envs = torch.zeros(args.num_envs, device=device)
+    steps_per_env = torch.zeros(args.num_envs, device=device)
+    
+    crash_count = 0
+    success_count = 0
+    
     preflight_step = 0
     with torch.no_grad():
         for step in range(args.steps):
-            obs = torch.as_tensor(task.task_obs["observations"], device=device, dtype=torch.float32)
+            teacher_obs = torch.as_tensor(task.task_obs["observations"], device=device, dtype=torch.float32)
+            linvel_obs = task.obs_dict["robot_linvel"].to(device)
+            student_obs = torch.cat([
+                teacher_obs[:, 0:9],   # Rot
+                linvel_obs,           # LinVel
+                teacher_obs[:, 9:12],  # AngVel
+                teacher_obs[:, 17:20]  # Action
+            ], dim=1)
+            obs = teacher_obs
+            
+            # Check for crashes (Terminations that are not Truncations)
+            # In BaseTask: resets = terminations | truncations
+            # We can check task.reset_buf
+            # Check for crashes using terminations (since PayloadCompensationTask stores them)
+            if hasattr(task, 'terminations'):
+                # In PayloadTask, terminations ARE crashes (truncations are timeouts)
+                crashes = (task.terminations > 0)
+                if hasattr(task, 'truncations'):
+                     crashes = crashes & (task.truncations == 0)
+                crash_count += crashes.sum().item()
+            
             priv = task.task_obs.get("privileged_obs", None)
             if priv is not None:
                 priv = torch.as_tensor(priv, device=device, dtype=torch.float32)
@@ -644,7 +752,7 @@ def main() -> None:
             
             # Get latents
             teacher_z = teacher_encoder(priv) if priv is not None else torch.zeros((args.num_envs, latent_dim), device=device)
-            history_buffer.push(obs)
+            history_buffer.push(student_obs)
             cnn_z = cnn_encoder(history_buffer.get())
             
             teacher_latents_list.append(teacher_z.cpu().numpy())  # (num_envs, latent_dim)
@@ -661,9 +769,60 @@ def main() -> None:
                 action = torch.zeros_like(action)
             
             task_obs, rewards, terms, truncs, infos = task.step(action)
-            rnn_states = _to_device(result.get("rnn_states"), device)
+            
+            # --- Result Tracking (Ablation) ---
+            # 1. Compute Tilt (Z-axis deviation)
+            # Obs logic: robot_orientation is quat.
+            # We can use gravity projection or z-axis of rotation matrix.
+            # Rot matrix R is in obs[0:9]. task.task_obs["observations"]
+            # R[2, 2] is the dot product of Body Z and World Z (assuming typical frame).
+            # Pitch/Roll error norm is also good.
+            # Let's use exact tilt angle: acos(R_22).
+            # obs is flattened rotation matrix (3x3). indices: 0,1,2 (row1), 3,4,5 (row2), 6,7,8 (row3)
+            # Actually, check payload_compensation_task.py to see how rot is flattened. usually row-major.
+            # If so, index 8 is R_33 (z_body dot z_world).
+            # Tilt = acos(clamp(R_33, -1, 1)) * 180/PI
+            
+            # 2. Compute Angle Error (Norm of Roll/Pitch error)
+            # Or just use the tilt as the error metric if target is flat.
+            # The prompt asks for "Avg Angle Error". If hovering, Angle Error = Tilt.
+            # If tracking waypoints, target might be flat.
+            # Let's assume target is flat (hover/preflight).
+            
+            # Implementation:
+            if hasattr(task, 'obs_dict') and 'robot_euler_angles' in task.obs_dict:
+                # Use Euler angles directly if available (Roll, Pitch, Yaw)
+                euler = task.obs_dict['robot_euler_angles']
+                # Tilt is roughly sqrt(roll^2 + pitch^2) for small angles, or use exact vector math.
+                # Let's use the error norm from reward function logic: norm(euler[:, 0:2])
+                angle_error = torch.norm(euler[:, 0:2], dim=1) * (180.0 / np.pi) # Degrees
+                sum_angle_error_envs += angle_error
+                steps_per_env += 1.0
+                
+                # Max Tilt: use the same angle error (magnitude of tilt).
+                # Wait, tilt is the angle from vertical.
+                # Norm(roll, pitch) is a good approximation.
+                # Let's strictly use the Z-axis projection for Max Tilt.
+                # R_33 = 1 - 2(x^2 + y^2) from quat (w, x, y, z)
+                quat = task.obs_dict['robot_orientation']
+                # q = [x, y, z, w] usually in IsaacGym? Or [w, x, y, z]? Check code.
+                # Standard IsaacGym is [x, y, z, w].
+                # z-axis of body in world:
+                # z_w = [2(xz + yw), 2(yz - xw), 1 - 2(x^2 + y^2)]
+                # dot(z_w, [0,0,1]) = 1 - 2(x^2 + y^2).
+                # Tilt = acos(...)
+                
+                # Simpler: use the 'angle_error' (roll/pitch norm) which the user probably equates to stability error.
+                max_tilt_envs = torch.max(max_tilt_envs, angle_error)
+            
+            total_rewards += task.rewards.to(device)
+            if hasattr(result, "get"):
+                 rnn_states = _to_device(result.get("rnn_states"), device)
+            
             done_envs = torch.nonzero(terms | truncs, as_tuple=False).squeeze(-1)
-            rnn_states = _reset_rnn_states(rnn_states, done_envs)
+            # But wait, PayloadTask resets internally.
+            
+
             if done_envs.numel() > 0:
                 history_buffer.reset(done_envs)
                 preflight_step = 0  # Reset preflight counter on env reset
@@ -686,7 +845,30 @@ def main() -> None:
                 payload_idx = int(task.payload_manager.last_release_index[env_id].item())
                 release_history.append((step, payload_idx))
 
+            
+
+         
+     
+    # === Post-Loop Stats Reporting ===
+    if args.test_mass is not None or args.test_wind is not None:
+         # Calculate Stats
+         crash_rate = crash_count / args.num_envs
+         survival_rate = 1.0 - crash_rate
+         
+         avg_angle_error = (sum_angle_error_envs / torch.clamp(steps_per_env, min=1.0)).mean().item()
+         max_tilt_overall = max_tilt_envs.max().item()
+         
+         print(f"\n========================================")
+         print(f"ABLATION RESULT: M={args.test_mass}, W={args.test_wind}")
+         print(f"Total Crashes: {crash_count}")
+         print(f"Crash Rate (Crashes/Envs): {crash_rate:.2f}")
+         print(f"Survival Rate: {survival_rate*100:.2f}%")
+         print(f"Max Tilt: {max_tilt_overall:.2f} deg")
+         print(f"Avg Angle Error: {avg_angle_error:.2f} deg")
+         print(f"========================================\n")
+    
     # Stack all envs: (steps, num_envs, latent_dim) -> (steps*num_envs, latent_dim)
+
     teacher_latents = np.concatenate(teacher_latents_list, axis=0)
     cnn_latents = np.concatenate(cnn_latents_list, axis=0)
 
@@ -700,7 +882,24 @@ def main() -> None:
         num_envs=args.num_envs
     )
 
-    if args.show_plot:
+    if args.test_mass is not None or args.test_wind is not None:
+        # Final Stats for Ablation
+        # Note: crash_count might count multiple crashes per env.
+        # But for rate, we usually care if ANY crash happened? 
+        # Or Total Crashes / Total Episodes.
+        # Simple metric: Crash Rate = Total Crashes / (Num Envs * Episodes per Env)
+        # Here we run for fixed steps. Maybe just Total Crashes is enough.
+        # Normalize by Num Envs.
+        crash_rate_stat = crash_count / args.num_envs
+        print(f"\n========================================")
+        print(f"ABLATION RESULT: M={args.test_mass}, W={args.test_wind}")
+        print(f"Total Crashes: {crash_count}")
+        print(f"Crash Rate (Crashes/Envs): {crash_rate_stat:.2f}")
+        # Assuming survival implies success if not crashed
+        print(f"Survival Rate: {1.0 - min(1.0, crash_rate_stat):.2%}")
+        print(f"========================================\n")
+
+    if args.show_plot and not (args.test_mass is not None or args.test_wind is not None):
         plt.show()
     else:
         plt.close("all")

@@ -1,8 +1,0 @@
-Dimension, Name, R2, MAE
-0, Payload Mass, 0.991095, 0.064710
-1, COM X, 0.981923, 0.092824
-2, COM Y, 0.986866, 0.079926
-3, COM Z, 0.993562, 0.065701
-4, Release Mass, 0.953027, 0.153506
-5, Warning Flag, 0.947349, 0.159973
-6, Just Released, 0.992507, 0.060791

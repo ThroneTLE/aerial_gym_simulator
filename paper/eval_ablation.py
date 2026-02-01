@@ -65,12 +65,14 @@ def build_teacher_policy(cfg, obs_dim, action_dim, num_envs, device):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--checkpoint", type=str, required=True)
+    parser.add_argument("--checkpoint", type=str, default=None, help="Path to policy checkpoint")
+    parser.add_argument("--pd_only", action="store_true", help="Run with zero compensation (Pure PD baseline)")
     parser.add_argument("--name", type=str, default="Model")
     parser.add_argument("--num_envs", type=int, default=256)
     parser.add_argument("--num_steps", type=int, default=500)
     parser.add_argument("--device", type=str, default="cuda:0")
     parser.add_argument("--config", type=str, default="aerial_gym/rl_training/rl_games/ppo_aerial_quad_aux.yaml")
+    parser.add_argument("--headless", type=str, default="True", help="Run with or without GUI (True/False)")
     # Test environment parameters
     parser.add_argument("--test_mass", type=float, default=0.03, help="Fixed test payload mass")
     parser.add_argument("--test_wind", type=float, default=0.3, help="Fixed test wind disturbance")
@@ -79,14 +81,19 @@ def parse_args():
 def main():
     args = parse_args()
     device = args.device
+    headless = args.headless.lower() == "true"
     
+    if not args.pd_only and args.checkpoint is None:
+        print("Error: --checkpoint is required unless --pd_only is specified.")
+        sys.exit(1)
+
     # 1. Create a modified config class dynamically
     class TestTaskConfig(task_config):
         pass
     
     # Set test environment parameters
     TestTaskConfig.num_envs = args.num_envs
-    TestTaskConfig.headless = True
+    TestTaskConfig.headless = headless
     TestTaskConfig.device = device
     
     # Override payload parameters - Copy dict first to avoid mutation
@@ -102,42 +109,33 @@ def main():
     TestTaskConfig.randomization_parameters["external_force_range"] = [args.test_wind, args.test_wind]
     
     print(f"=== Evaluating: {args.name} ===")
-    print(f"Checkpoint: {args.checkpoint}")
+    if args.pd_only:
+        print("Mode: Pure PD (Zero RL Compensation)")
+    else:
+        print(f"Checkpoint: {args.checkpoint}")
     print(f"Test Conditions: Mass={args.test_mass}kg, Wind={args.test_wind}N")
     print(f"Num Envs: {args.num_envs}, Steps: {args.num_steps}")
     
     task = PayloadCompensationTask(
-        task_config=TestTaskConfig, seed=42, num_envs=args.num_envs, headless=True, device=device
+        task_config=TestTaskConfig, seed=42, num_envs=args.num_envs, headless=headless, device=device
     )
     
     obs_dim = task.task_config.observation_space_dim
     priv_dim = task.task_config.privileged_observation_space_dim
     action_dim = task.task_config.action_space_dim
     
-    # 2. Load Policy
-    rl_config = yaml.safe_load(open(args.config, 'r', encoding='utf-8'))
-    ckpt = torch.load(args.checkpoint, map_location=device)
-    policy = build_teacher_policy(rl_config, obs_dim, action_dim, args.num_envs, device)
-    policy.load_state_dict(ckpt["model"], strict=True)
-    
-    # Load running stats if available
-    normalize_obs = lambda x: x
-    rms_state = ckpt.get("running_mean_std", None)
-    if rms_state:
-        # Check both possible key formats
-        if "running_mean" in rms_state:
-            rms_mean = rms_state["running_mean"].to(device).float()
-            rms_var = rms_state["running_var"].to(device).float()
-        elif "running_mean_std.running_mean" in rms_state:
-            rms_mean = rms_state["running_mean_std.running_mean"].to(device).float()
-            rms_var = rms_state["running_mean_std.running_var"].to(device).float()
-        else:
-            rms_mean = None
-            rms_var = None
+    # 2. Load Policy (if not PDOnly)
+    policy = None
+    if not args.pd_only:
+        rl_config = yaml.safe_load(open(args.config, 'r', encoding='utf-8'))
+        ckpt = torch.load(args.checkpoint, map_location=device)
+        policy = build_teacher_policy(rl_config, obs_dim, action_dim, args.num_envs, device)
+        policy.load_state_dict(ckpt["model"], strict=True)
         
-        if rms_mean is not None:
-            def normalize_obs(obs):
-                return torch.clamp((obs - rms_mean) / torch.sqrt(rms_var + 1e-8), -5.0, 5.0)
+        # Load running stats properly into the model if normalize_input is True
+        if getattr(policy, "normalize_input", False) and "running_mean_std" in ckpt:
+            print("Loading running_mean_std into policy...")
+            policy.running_mean_std.load_state_dict(ckpt["running_mean_std"])
 
     # 3. Evaluation Loop
     task.reset()
@@ -147,47 +145,108 @@ def main():
     success_count = 0
     episode_lengths = []
     
+    max_tilt_envs = torch.zeros(args.num_envs, device=device)
+    sum_angle_error_envs = torch.zeros(args.num_envs, device=device)
+    steps_per_env = torch.zeros(args.num_envs, device=device)
+    
     obs_dict = task.get_task_observations()
     
+    # Track which envs have finished to avoid double counting
+    env_finished = torch.zeros(args.num_envs, dtype=torch.bool, device=device)
+    
+    # Helper for quat to euler
+    def get_euler_xyz(q):
+        qx, qy, qz, qw = 0, 1, 2, 3
+        # roll (x-axis rotation)
+        sinr_cosp = 2 * (q[:, qw] * q[:, qx] + q[:, qy] * q[:, qz])
+        cosr_cosp = 1 - 2 * (q[:, qx] * q[:, qx] + q[:, qy] * q[:, qy])
+        roll = torch.atan2(sinr_cosp, cosr_cosp)
+        # pitch (y-axis rotation)
+        sinp = 2 * (q[:, qw] * q[:, qy] - q[:, qz] * q[:, qx])
+        pitch = torch.where(torch.abs(sinp) >= 1, torch.sign(sinp) * np.pi / 2, torch.asin(sinp))
+        # yaw (z-axis rotation)
+        siny_cosp = 2 * (q[:, qw] * q[:, qz] + q[:, qx] * q[:, qy])
+        cosy_cosp = 1 - 2 * (q[:, qy] * q[:, qy] + q[:, qz] * q[:, qz])
+        yaw = torch.atan2(siny_cosp, cosy_cosp)
+        return torch.stack([roll, pitch, yaw], dim=1)
+
     for step in range(args.num_steps):
-        obs = torch.as_tensor(obs_dict["observations"], device=device, dtype=torch.float32)
-        priv_obs = obs_dict.get("privileged_obs", None)
+        # Get policy inputs
+        task_obs = task.get_task_observations()
+        obs = torch.as_tensor(task_obs["observations"], device=device, dtype=torch.float32)
+        priv_obs = task_obs.get("privileged_obs", None)
         if priv_obs is not None:
              priv_obs = torch.as_tensor(priv_obs, device=device, dtype=torch.float32)
 
         with torch.no_grad():
-            norm_obs = normalize_obs(obs)
-            input_dict = {"obs": norm_obs, "privileged_obs": priv_obs, "is_train": False}
-            result = policy(input_dict)
-            actions = torch.clamp(result["mus"], -1.0, 1.0)
+            if args.pd_only:
+                # Zero compensation: Lee controller only
+                actions = torch.zeros((args.num_envs, action_dim), device=device)
+            else:
+                # RL Policy compensation
+                input_dict = {"obs": obs, "privileged_obs": priv_obs, "is_train": False}
+                result = policy(input_dict)
+                actions = torch.clamp(result["mus"], -1.0, 1.0)
         
         task.step(actions)
-        obs_dict = task.get_task_observations()
         
-        # Get rewards
-        rewards = obs_dict.get("rewards", torch.zeros(args.num_envs, device=device))
+        # Refresh observations
+        task_obs = task.get_task_observations() # For next step/rewards/terms
+        
+        # Access RAW state for metrics from task.obs_dict
+        raw_obs = task.obs_dict 
+        
+        # Get rewards from task_obs (processed)
+        rewards = task_obs.get("rewards", torch.zeros(args.num_envs, device=device))
         if isinstance(rewards, np.ndarray):
             rewards = torch.as_tensor(rewards, device=device)
         total_rewards += rewards
         
-        # Check termination
-        truncs = obs_dict.get("truncations")
-        terms = obs_dict.get("terminations")
+        # --- Metrics Calculation ---
+        # Try to get euler from raw_obs
+        if 'robot_euler_angles' in raw_obs:
+            euler = raw_obs['robot_euler_angles']
+        elif 'robot_orientation' in raw_obs:
+            quat = raw_obs['robot_orientation']
+            euler = get_euler_xyz(quat)
+        else:
+            euler = torch.zeros((args.num_envs, 3), device=device)
+            
+        angle_error = torch.norm(euler[:, 0:2], dim=1) * (180.0 / np.pi) # Degrees
+        
+        # Only update stats for active envs
+        active_mask = ~env_finished
+        if active_mask.any():
+            sum_angle_error_envs[active_mask] += angle_error[active_mask]
+            steps_per_env[active_mask] += 1.0
+            max_tilt_envs[active_mask] = torch.max(max_tilt_envs[active_mask], angle_error[active_mask])
+        # ---------------------------
+        
+        # Check termination (from task_obs)
+        truncs = task_obs.get("truncations")
+        terms = task_obs.get("terminations")
         
         if truncs is not None and terms is not None:
-            finished = (truncs > 0) | (terms > 0)
-            finished_ids = torch.where(finished)[0]
+            # Identify newly finished envs
+            finished_now = ((truncs > 0) | (terms > 0)) & (~env_finished)
+            finished_ids = torch.where(finished_now)[0]
             
-            for env_id in finished_ids:
-                if truncs[env_id] > 0:
-                    success_count += 1
-                else:
-                    crash_count += 1
-                episode_lengths.append(step + 1)
+            if len(finished_ids) > 0:
+                env_finished[finished_ids] = True
+                for env_id in finished_ids:
+                    if truncs[env_id] > 0:
+                        success_count += 1
+                    else:
+                        crash_count += 1
+                    episode_lengths.append(step + 1)
 
     # Remaining active envs are considered successful
-    remaining = args.num_envs - crash_count - success_count
-    success_count += remaining
+    # But wait, if they didn't finish, are they successful? Yes, surviving 500 steps is success.
+    # We already count them? No, we count finished_ids. 
+    # If using 'terms' usually implies crash. 'truncs' implies timeout (success).
+    # If neither happened, they are still running -> survival -> success.
+    remaining_ids = torch.where(~env_finished)[0]
+    success_count += len(remaining_ids)
 
     # Results
     avg_reward = total_rewards.mean().item()
@@ -200,6 +259,12 @@ def main():
     print(f"Crash Rate: {crash_rate:.2%}")
     print(f"Crash Count: {crash_count} / {args.num_envs}")
     
+    # Calculate detailed stats
+    avg_angle_error = (sum_angle_error_envs / torch.clamp(steps_per_env, min=1.0)).mean().item()
+    max_tilt_overall = max_tilt_envs.max().item()
+    print(f"Max Tilt: {max_tilt_overall:.2f} deg")
+    print(f"Avg Angle Error: {avg_angle_error:.2f} deg")
+    
     # Save result JSON
     result = {
         "name": args.name,
@@ -210,7 +275,9 @@ def main():
         "success_rate": success_rate,
         "crash_rate": crash_rate,
         "crash_count": crash_count,
-        "total_envs": args.num_envs
+        "total_envs": args.num_envs,
+        "max_tilt": max_tilt_overall,
+        "avg_angle_error": avg_angle_error
     }
     print(f"RESULT_JSON:{json.dumps(result)}")
     

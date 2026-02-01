@@ -17,7 +17,7 @@ class task_config:
     controller_action_dim = 8  # 保持与 Lee 控制器兼容，yaw 补偿位置设为 0
 
 
-    episode_len_steps = 1500  # 主要用于释放任务训练
+    episode_len_steps = 1500 # 主要用于释放任务训练
     return_state_before_reset = False
     teacher_mode = True  # 启用特权/模仿
 
@@ -94,7 +94,7 @@ class task_config:
     payload_parameters = {
         "payload_mass": 0.2,  # 默认单载荷质量 (kg)
         "payload_mass_range": [0.0, 0.35],  # 随机化范围 0-0.4kg
-        "randomize_payload_mass": True,
+        "randomize_payload_mass": False,
         "randomize_offsets_on_plane": False,
         "offset_plane_radial_jitter": 0.2,  # 沿机臂方向的半径扰动 (450mm轴距)
         "offset_plane_z_jitter": 0.4,  #垂直方向的“高度扰动”，均匀分布 [-jitter, +jitter]
@@ -107,9 +107,9 @@ class task_config:
             [-0.2, 0.0, -0.1],
             [0.0, 0.2, -0.1],
         ],
-        "release_start": 400,  # 第一阶段：尽早开始释放任务 
+        "release_start": 200,  # 第一阶段：尽早开始释放任务 
         "release_interval": 300,
-        "release_start_range": [80, 120],  # 随机化释放开始时间
+        "release_start_range": [250, 350],  # 随机化释放开始时间
         "release_interval_range": [300, 350],
         "warning_steps": 0,
         "randomize_release":   True,  # 初始验证先固定
@@ -156,7 +156,7 @@ class task_config:
         
         # 基础观测控制 (Basic Obs Control) - 对 [observations] 向量进行屏蔽
         "include_base_rot": True,         # 索引 0-8: 旋转矩阵
-        "include_base_linvel": False,     # 索引 9-11: 线速度 (REVERTED)
+        "include_base_linvel": True,     # 索引 9-11: 线速度 (REVERTED)
         "include_base_angvel": True,      # 索引 12-14: 机体角速度
         "include_base_attached": True,    # 索引 15-18: 附着掩码 (REVERTED)
         "include_base_warning": True,     # 索引 19: 预警标志 (REVERTED)

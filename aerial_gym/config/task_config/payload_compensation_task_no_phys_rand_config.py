@@ -23,22 +23,22 @@ class task_config:
     # Same as teacher config
     observation_space_dim = 20
     privileged_observation_space_dim = 18
-    action_space_dim = 3
-    controller_action_dim = 8
+    action_space_dim = 3  # thrust + roll torque + pitch torque (无 yaw)
+    controller_action_dim = 8  # 保持与 Lee 控制器兼容，yaw 补偿位置设为 0
 
     episode_len_steps = 1500
     return_state_before_reset = False
     teacher_mode = True
 
-    # Same reward parameters as teacher
+    # Same reward parameters as teacher (Aligned with 19-21-52-29)
     reward_parameters = {
-        "position_weight": 0.0,
+        "position_weight": 0.0, 
         "survive_bonus": 10.0,
         "crash_penalty": -10.0,
-        "attitude_penalty_coef": 1.00,
+        "attitude_penalty_coef": 0.900,
         "release_attitude_boost": 1.0,
         "velocity_penalty_coef": 0.0,
-        "angvel_penalty_coef": 1.00,
+        "angvel_penalty_coef": 0.200,
         "action_smoothness_coef": 2.0,
         "position_error_penalty_coef": 0.0,
         "z_error_penalty_coef": 0.0,
@@ -50,32 +50,32 @@ class task_config:
         "physics_imitation_weight": 0.0,
     }
 
-    crash_distance_threshold = 1.0
-    crash_tilt_threshold_deg = 20.0
+    crash_distance_threshold = 2.0
+    crash_tilt_threshold_deg = 25.0
 
     compensation_thrust_limit = 20.0
-    compensation_torque_limits = [8.0, 8.0, 1.0]
+    compensation_torque_limits = [12.0, 12.0, 1.0]
 
-    # Payload randomization (kept for task requirement)
+    # Payload randomization (kept for task requirement, aligned with teacher)
     payload_parameters = {
         "payload_mass": 0.2,
-        "payload_mass_range": [0.0, 0.4],
-        "randomize_payload_mass": True,
+        "payload_mass_range": [0.0, 0.35],
+        "randomize_payload_mass": False, # ALIGNED: Teacher is now False
         "randomize_offsets_on_plane": False,
-        "offset_plane_radial_jitter": 0.4,
+        "offset_plane_radial_jitter": 0.2,
         "offset_plane_z_jitter": 0.4,
-        "offset_plane_r_max": 0.4,
+        "offset_plane_r_max": 0.2,
         "offset_plane_z_max": 0.4,
         "force_offset_torque_scale": 0.00,
         "offsets": [
-            [0.4, 0.0, -0.4],
-            [0.0, -0.4, -0.4],
-            [-0.4, 0.0, -0.4],
-            [0.0, 0.4, -0.4],
+            [0.2, 0.0, -0.1],
+            [0.0, -0.2, -0.1],
+            [-0.2, 0.0, -0.1],
+            [0.0, 0.2, -0.1],
         ],
-        "release_start": 400,
+        "release_start": 200,
         "release_interval": 300,
-        "release_start_range": [80, 120],
+        "release_start_range": [250, 350],
         "release_interval_range": [300, 350],
         "warning_steps": 0,
         "randomize_release": True,
@@ -89,19 +89,16 @@ class task_config:
         "initial_position_noise": [0.0, 0.0, 0.0],
         "initial_orientation_noise_deg": [0.0, 0.0, 0.0],
         
-        # DISABLED: Motor params randomization
-        "randomize_motor_thrust_constant": False,  # <-- ABLATION
-        "motor_thrust_constant_range_scale": [1.0, 1.0],  # Fixed to nominal
+        "randomize_motor_thrust_constant": False,
+        "motor_thrust_constant_range_scale": [1.0, 1.0],
         
-        "randomize_motor_time_constant": False,  # <-- ABLATION
-        "motor_time_constant_range": [0.05, 0.05],  # Fixed to nominal
+        "randomize_motor_time_constant": False,
+        "motor_time_constant_range": [0.05, 0.05],
         
-        # DISABLED: Drag coefficients randomization
-        "randomize_drag_coefficients": False,  # <-- ABLATION
-        "lin_drag_coeff_range": [0.0, 0.0],  # No drag
+        "randomize_drag_coefficients": False,
+        "lin_drag_coeff_range": [0.0, 0.0],
         "ang_drag_coeff_range": [0.0, 0.0],
         
-        # DISABLED: External disturbance
         "randomize_external_disturbance": False,
         "external_force_range": [0.0, 0.0],
         "external_torque_range": [0.0, 0.0],
@@ -117,6 +114,7 @@ class task_config:
         "include_priv_drag_ang": True,
         "include_priv_disturbance": True,
         "include_base_rot": True,
+        "include_base_linvel": False, # ALIGNED: Teacher is False
         "include_base_angvel": True,
         "include_base_attached": True,
         "include_base_warning": True,
@@ -124,3 +122,4 @@ class task_config:
     }
 
     curriculum_parameters = None
+
